@@ -18,7 +18,19 @@ Android Studio's bundled JDK is enough; there is no other tooling to install.
 ./gradlew :app:lintDebug
 ```
 
-You don't need a Garmin key. Run `tools/fake_garmin.py` and build with `-PgarminBaseUrl=…` as described in the [README](README.md#build-and-run).
+You need Android Studio (or a JDK 17) and an emulator or an Android 10+ device. `./gradlew :app:installDebug` installs on whatever is connected.
+
+### Try it without a Garmin key
+
+You don't need one. `tools/fake_garmin.py` serves anonymized sample data:
+
+```bash
+uv run --python 3.12 --no-project python -I tools/fake_garmin.py
+adb reverse tcp:8080 tcp:8080
+./gradlew :app:installDebug -PgarminBaseUrl=http://127.0.0.1:8080
+```
+
+Then enter `fake-garmin-key` during onboarding. Builds made with `-PgarminBaseUrl` allow cleartext traffic and are named `…-fake`; never ship one. Uninstall or clear data before going back to the real API. More recipes (time-zone changes, R8 smoke tests) are in [CLAUDE.md](CLAUDE.md#testing-on-an-emulator).
 
 ## Pull requests
 
