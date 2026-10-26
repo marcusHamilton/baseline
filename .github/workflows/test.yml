@@ -23,6 +23,8 @@ jobs:
       # The build targets SDK 37; let Gradle fetch it once the licences are accepted.
       - name: Accept Android SDK licences
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+      - name: Android lint
+        run: ./gradlew :app:lintDebug --stacktrace
       - name: Unit and Compose UI tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace
       - name: Upload test reports on failure

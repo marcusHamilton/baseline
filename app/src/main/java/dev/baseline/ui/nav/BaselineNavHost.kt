@@ -208,10 +208,11 @@ fun BaselineNavHost(container: AppContainer) {
                 )
             }
             composable(Routes.SLEEP) { entry ->
-                val today = container.today.value
-                val date = entry.arguments?.getString("date")?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: today
                 SleepScreen(
                     viewModel {
+                        // Read once, when the ViewModel is made: the screen is for one fixed day, so nothing here should recompose.
+                        val today = container.today.value
+                        val date = entry.arguments?.getString("date")?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: today
                         SleepViewModel(
                             container.repository, container.db.taskDao(), container.scheduler, date, today,
                             ZoneId.systemDefault(),

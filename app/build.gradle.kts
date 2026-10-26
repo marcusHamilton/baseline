@@ -65,6 +65,14 @@ android {
         buildConfig = true
     }
 
+    lint {
+        // The tree is lint-clean: any new finding fails `lintDebug`. Fix it, or disable it here with a reason.
+        warningsAsErrors = true
+        // No Timber dependency: android.util.Log is the logger, and none of the messages carry the key.
+        // No core-ktx dependency, so the KTX extension suggestions have nothing to point at.
+        disable += setOf("LogNotTimber", "UseKtx")
+    }
+
     testOptions {
         unitTests.isIncludeAndroidResources = true
         unitTests.isReturnDefaultValues = true
