@@ -1,9 +1,9 @@
 package dev.baseline.ui.format
 
 import dev.baseline.data.SportFamily
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
-import java.time.Duration
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
@@ -20,7 +20,9 @@ class Formatters(val imperial: Boolean) {
     fun duration(seconds: Double?): String? {
         if (seconds == null || !seconds.isFinite() || seconds <= 0) return null
         val total = seconds.roundToInt()
-        val h = total / 3600; val m = total % 3600 / 60; val s = total % 60
+        val h = total / 3600
+        val m = total % 3600 / 60
+        val s = total % 60
         return if (h > 0) "%d:%02d:%02d".format(Locale.US, h, m, s) else "%d:%02d".format(Locale.US, m, s)
     }
 
@@ -39,29 +41,45 @@ class Formatters(val imperial: Boolean) {
         val dist = distanceM?.takeIf { it.isFinite() && it > 0 }
         val dur = durationSec?.takeIf { it.isFinite() && it > 0 }
         val both = if (dist != null && dur != null) dist to dur else null
-        val parts = when (family) {
-            SportFamily.RUN -> listOf(
-                longDistance(dist, 2), duration(dur),
-                both?.let { (d, t) -> duration(t / (d / if (imperial) METERS_PER_MILE else 1000.0))?.let { "$it ${if (imperial) "/mi" else "/km"}" } },
-            )
-            SportFamily.RIDE -> listOf(
-                longDistance(dist, 1), duration(dur),
-                both?.let { (d, t) -> "%.1f %s".format(Locale.US, d / t * 3.6 / if (imperial) KM_PER_MILE else 1.0, if (imperial) "mph" else "km/h") },
-                avgPower?.takeIf { it.isFinite() && it > 0 }?.let { "${it.roundToInt()} W avg" },
-            )
-            SportFamily.SWIM -> {
-                val unit = if (imperial) METERS_PER_YARD else 1.0 // metres per displayed unit
-                listOf(
-                    dist?.let { "%,d %s".format(Locale.US, (it / unit).roundToInt(), if (imperial) "yd" else "m") }, duration(dur),
-                    both?.let { (d, t) -> duration(t / (d / unit / 100))?.let { "$it /100${if (imperial) "yd" else "m"}" } },
-                )
+        val parts =
+            when (family) {
+                SportFamily.RUN -> {
+                    listOf(
+                        longDistance(dist, 2),
+                        duration(dur),
+                        both?.let { (d, t) -> duration(t / (d / if (imperial) METERS_PER_MILE else 1000.0))?.let { "$it ${if (imperial) "/mi" else "/km"}" } },
+                    )
+                }
+
+                SportFamily.RIDE -> {
+                    listOf(
+                        longDistance(dist, 1),
+                        duration(dur),
+                        both?.let { (d, t) -> "%.1f %s".format(Locale.US, d / t * 3.6 / if (imperial) KM_PER_MILE else 1.0, if (imperial) "mph" else "km/h") },
+                        avgPower?.takeIf { it.isFinite() && it > 0 }?.let { "${it.roundToInt()} W avg" },
+                    )
+                }
+
+                SportFamily.SWIM -> {
+                    val unit = if (imperial) METERS_PER_YARD else 1.0 // metres per displayed unit
+                    listOf(
+                        dist?.let { "%,d %s".format(Locale.US, (it / unit).roundToInt(), if (imperial) "yd" else "m") },
+                        duration(dur),
+                        both?.let { (d, t) -> duration(t / (d / unit / 100))?.let { "$it /100${if (imperial) "yd" else "m"}" } },
+                    )
+                }
+
+                SportFamily.STRENGTH -> {
+                    listOf(
+                        dur?.let { "${(it / 60).roundToInt()} min" },
+                        sets?.takeIf { it > 0 }?.let { "$it ${if (it == 1) "set" else "sets"}" },
+                    )
+                }
+
+                SportFamily.OTHER -> {
+                    listOf(longDistance(dist, 2), duration(dur))
+                }
             }
-            SportFamily.STRENGTH -> listOf(
-                dur?.let { "${(it / 60).roundToInt()} min" },
-                sets?.takeIf { it > 0 }?.let { "$it ${if (it == 1) "set" else "sets"}" },
-            )
-            SportFamily.OTHER -> listOf(longDistance(dist, 2), duration(dur))
-        }
         return parts.filterNotNull().joinToString(" · ")
     }
 
@@ -168,7 +186,11 @@ class Formatters(val imperial: Boolean) {
         /** "Today · Sat, Oct 24", "Yesterday · Fri, Oct 23", else "Thu, Oct 22". */
         fun dayHeader(date: LocalDate, today: LocalDate): String {
             val d = date.format(DAY_HEADER)
-            return when (date) { today -> "Today · $d"; today.minusDays(1) -> "Yesterday · $d"; else -> d }
+            return when (date) {
+                today -> "Today · $d"
+                today.minusDays(1) -> "Yesterday · $d"
+                else -> d
+            }
         }
 
         /** "6:48" (rounded to the minute); "—" for a zero duration. */

@@ -68,25 +68,36 @@ fun TrendsContent(state: TrendsUiState, onRange: (TrendRange) -> Unit) {
             TrendCard("RECOVERY", a.recovery?.let { "avg $it%" } ?: "avg $MISSING") {
                 val have = state.recovery.count { it.second != null }
                 BarChart(
-                    state.recovery.map { (_, v) -> v?.let { Bar(it / 100f, zoneColor(RecoveryZone.of(it))) } }, SleepCap,
+                    state.recovery.map { (_, v) -> v?.let { Bar(it / 100f, zoneColor(RecoveryZone.of(it))) } },
+                    SleepCap,
                     "Daily recovery, $have of $n days with data, bars coloured by zone",
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Legend(RecoveryGreen, "67–100"); Legend(RecoveryAmber, "34–66"); Legend(RecoveryRed, "0–33")
+                    Legend(RecoveryGreen, "67–100")
+                    Legend(RecoveryAmber, "34–66")
+                    Legend(RecoveryRed, "0–33")
                 }
             }
             TrendCard("HRV · OVERNIGHT", state.hrvHeader()) {
                 val band = remember(state.hrvBand) { state.hrvBand.toMap() }
                 TrendLine(
-                    state.hrv.map { it.second }, RecoveryGreen, "Overnight HRV over the last $n days, ${state.hrv.count { it.second != null }} days with data",
-                    band = state.hrv.map { band[it.first] }, height = 110.dp,
+                    state.hrv.map { it.second },
+                    RecoveryGreen,
+                    "Overnight HRV over the last $n days, ${state.hrv.count { it.second != null }} days with data",
+                    band = state.hrv.map { band[it.first] },
+                    height = 110.dp,
                 )
                 if (band.isNotEmpty()) Text("Shaded band = your normal range (Garmin HRV baseline)", fontSize = 11.sp, color = TextMuted)
             }
             TrendCard("RESTING HEART RATE", state.rhrHeader()) {
                 TrendLine(
-                    state.rhr.map { it.second }, RecoveryRed, "Resting heart rate over the last $n days, ${state.rhr.count { it.second != null }} days with data",
-                    midline = a.rhr, height = 90.dp,
+                    state.rhr.map {
+                        it.second
+                    },
+                    RecoveryRed,
+                    "Resting heart rate over the last $n days, ${state.rhr.count { it.second != null }} days with data",
+                    midline = a.rhr,
+                    height = 90.dp,
                 )
             }
             TrendCard("SLEEP vs NEED", a.sleep?.let { "avg ${Formatters.hoursMinutes(it)}" } ?: "avg $MISSING") {
@@ -95,7 +106,10 @@ fun TrendsContent(state: TrendsUiState, onRange: (TrendRange) -> Unit) {
                     state.sleepVsNeed.map { (_, s, need) ->
                         s?.let { Bar(it.seconds / scale, SleepPurple, ((need?.seconds ?: 0L) - it.seconds).coerceAtLeast(0L) / scale) }
                     },
-                    SleepCap, "Nightly sleep as bars, the shortfall against need as a lighter cap, ${state.sleepVsNeed.count { it.second != null }} of $n nights with data",
+                    SleepCap,
+                    "Nightly sleep as bars, the shortfall against need as a lighter cap, ${state.sleepVsNeed.count {
+                        it.second != null
+                    }} of $n nights with data",
                 )
             }
         }

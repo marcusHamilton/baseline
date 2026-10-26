@@ -41,7 +41,8 @@ class ScorePipeline(
 
     /** Everything derived from activities, built from scratch each run. */
     private class Loads(
-        val zones: HrZones?, val set: BanisterSet,
+        val zones: HrZones?,
+        val set: BanisterSet,
         val activities: List<ActivityEntity>,
         val coverage: Map<Long, Double>,
         val resolved: Map<Long, ResolvedLoad>,
@@ -69,8 +70,7 @@ class ScorePipeline(
         }
     }
 
-    private suspend fun newMonth(today: LocalDate) =
-        prefs.strainCalibratedOn.first().let { it == null || YearMonth.from(it) < YearMonth.from(today) }
+    private suspend fun newMonth(today: LocalDate) = prefs.strainCalibratedOn.first().let { it == null || YearMonth.from(it) < YearMonth.from(today) }
 
     /**
      * Re-fits the strain scale (tau = p90 of daily loads under the current coefficient set) and then re-scores every
@@ -97,7 +97,8 @@ class ScorePipeline(
         val today = LocalDate.now(clock)
         val loads = loads()
         val from = listOfNotNull(fromDay, loads.firstUnscored).min()
-        val cal = prefs.strainCalibration.first() ?: calibrate(loads, 1, today, provisional = true) // unknown backfill state: let the next recalibrateIfDue finalize it
+        // Unknown backfill state: let the next recalibrateIfDue finalize it.
+        val cal = prefs.strainCalibration.first() ?: calibrate(loads, 1, today, provisional = true)
         val history = db.dayDao().all()
         val byDate = history.associateBy { it.date }
 
@@ -117,8 +118,11 @@ class ScorePipeline(
             for (a in loads.activities.filter { it.day >= from }) {
                 loads.coverage[a.id]?.let { db.activityDao().setHrCoverage(a.id, it) }
                 val r = loads.resolved[a.id]
-                if (r != null) db.activityScoreDao().upsert(ActivityScoreEntity(a.id, r.load, r.source, Strain.of(r.load, cal)))
-                else db.activityScoreDao().delete(a.id)
+                if (r != null) {
+                    db.activityScoreDao().upsert(ActivityScoreEntity(a.id, r.load, r.source, Strain.of(r.load, cal)))
+                } else {
+                    db.activityScoreDao().delete(a.id)
+                }
             }
             scores.forEach { db.scoreDao().upsert(it) }
         }
@@ -154,7 +158,9 @@ class ScorePipeline(
         val z = l.zones ?: return fromActivities
         val hr = db.hrDayDao().get(date) ?: return fromActivities
         // Neighbouring days too: an activity running past midnight excludes samples on both sides.
-        val windows = (l.byDay[date.minusDays(1)].orEmpty() + acts + l.byDay[date.plusDays(1)].orEmpty()).map { it.startGmt.epochSecond..it.startGmt.epochSecond + it.durationSec.toLong() }
+        val windows = (l.byDay[date.minusDays(1)].orEmpty() + acts + l.byDay[date.plusDays(1)].orEmpty()).map {
+            it.startGmt.epochSecond..it.startGmt.epochSecond + it.durationSec.toLong()
+        }
         return fromActivities + NonActivityLoad.compute(HrPacking.unpack(hr.packed), windows, z.zone1Floor, z.restingHr, z.maxHr, l.set)
     }
 
@@ -169,15 +175,18 @@ class ScorePipeline(
         val samples = mutableListOf<LoadSample>()
         val trimps = mutableMapOf<Long, Double>()
         var firstUnscored: LocalDate? = null
-        if (zones != null) for (a in activities) {
-            val stream = db.activityStreamDao().get(a.id)
-                ?.let { runCatching { ActivityStreams.unpack(it.packed) }.getOrNull() } ?: continue
-            val pts = stream.toHrPoints()
-            val trimp = Trimp.load(pts, zones.restingHr, zones.maxHr, set)
-            val cov = Trimp.coverage(pts, a.durationSec)
-            trimps[a.id] = trimp; coverage[a.id] = cov
-            samples += LoadSample(a.sportFamily, trimp, cov, a.garminLoad)
-            if (a.hrCoverage == null) firstUnscored = listOfNotNull(firstUnscored, a.day).min()
+        if (zones != null) {
+            for (a in activities) {
+                val stream = db.activityStreamDao().get(a.id)
+                    ?.let { runCatching { ActivityStreams.unpack(it.packed) }.getOrNull() } ?: continue
+                val pts = stream.toHrPoints()
+                val trimp = Trimp.load(pts, zones.restingHr, zones.maxHr, set)
+                val cov = Trimp.coverage(pts, a.durationSec)
+                trimps[a.id] = trimp
+                coverage[a.id] = cov
+                samples += LoadSample(a.sportFamily, trimp, cov, a.garminLoad)
+                if (a.hrCoverage == null) firstUnscored = listOfNotNull(firstUnscored, a.day).min()
+            }
         }
 
         val factors = ActivityLoad.scalingFactors(samples)

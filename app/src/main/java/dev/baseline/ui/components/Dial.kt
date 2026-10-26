@@ -72,7 +72,10 @@ fun Dial(
                     if (suffix.isNotEmpty()) withStyle(SpanStyle(fontSize = (valueSize / 2).sp)) { append(suffix) }
                 },
                 Modifier.clearAndSetSemantics {}, // the dial's description already says the value
-                fontFamily = BarlowCondensed, fontWeight = FontWeight.Bold, fontSize = valueSize.sp, maxLines = 1,
+                fontFamily = BarlowCondensed,
+                fontWeight = FontWeight.Bold,
+                fontSize = valueSize.sp,
+                maxLines = 1,
                 textAlign = TextAlign.Center,
             )
             if (note != null) Text(note, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = color)

@@ -29,10 +29,20 @@ private const val UNREADABLE_DAY =
         "substr(d.`key`, 13, 10) >= substr(f.`key`, -10)))))"
 
 /** Endpoints whose responses make up a day's figures (Today). */
-val DAY_ENDPOINTS = listOf(
-    "DAILY_SUMMARIES", "HRV_RANGE", "SLEEP_SUMMARIES", "BODY_BATTERY", "STRESS", "STEPS",
-    "SLEEP_DAY", "HEART_RATE_DAY", "HRV_DAY", "SPO2_DAY", "ACTIVITY_RANGE",
-)
+val DAY_ENDPOINTS =
+    listOf(
+        "DAILY_SUMMARIES",
+        "HRV_RANGE",
+        "SLEEP_SUMMARIES",
+        "BODY_BATTERY",
+        "STRESS",
+        "STEPS",
+        "SLEEP_DAY",
+        "HEART_RATE_DAY",
+        "HRV_DAY",
+        "SPO2_DAY",
+        "ACTIVITY_RANGE",
+    )
 
 /** The subset behind the Sleep screen. */
 val SLEEP_ENDPOINTS = listOf("SLEEP_SUMMARIES", "SLEEP_DAY", "HRV_RANGE", "HRV_DAY", "HEART_RATE_DAY", "SPO2_DAY")
@@ -71,7 +81,8 @@ interface RawDao {
 
 @Dao
 interface TaskDao {
-    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertIgnore(tasks: List<SyncTaskEntity>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIgnore(tasks: List<SyncTaskEntity>)
 
     @Query("SELECT * FROM sync_task WHERE status = 'PENDING' ORDER BY priority ASC, `key` DESC LIMIT 1")
     suspend fun nextPending(): SyncTaskEntity?

@@ -18,15 +18,27 @@ class TypographyTest {
         rule.setContent {
             BaselineTheme {
                 val t = MaterialTheme.typography
-                val barlow = listOf(
-                    t.displayLarge, t.displayMedium, t.displaySmall,
-                    t.headlineLarge, t.headlineMedium, t.headlineSmall,
-                    t.titleLarge, t.titleMedium, t.titleSmall,
-                )
-                val inter = listOf(
-                    t.bodyLarge, t.bodyMedium, t.bodySmall,
-                    t.labelLarge, t.labelMedium, t.labelSmall,
-                )
+                val barlow =
+                    listOf(
+                        t.displayLarge,
+                        t.displayMedium,
+                        t.displaySmall,
+                        t.headlineLarge,
+                        t.headlineMedium,
+                        t.headlineSmall,
+                        t.titleLarge,
+                        t.titleMedium,
+                        t.titleSmall,
+                    )
+                val inter =
+                    listOf(
+                        t.bodyLarge,
+                        t.bodyMedium,
+                        t.bodySmall,
+                        t.labelLarge,
+                        t.labelMedium,
+                        t.labelSmall,
+                    )
                 barlow.forEach { assertEquals(BarlowCondensed, it.fontFamily) }
                 inter.forEach { assertEquals(Inter, it.fontFamily) }
             }

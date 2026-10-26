@@ -13,10 +13,17 @@ import java.util.UUID
 
 class SyncStatusTest {
     private fun info(
-        state: WorkInfo.State, attempts: Int = 0, network: NetworkType = NetworkType.NOT_REQUIRED,
-        tags: Set<String> = emptySet(), periodic: Boolean = false,
+        state: WorkInfo.State,
+        attempts: Int = 0,
+        network: NetworkType = NetworkType.NOT_REQUIRED,
+        tags: Set<String> = emptySet(),
+        periodic: Boolean = false,
     ) = WorkInfo(
-        UUID.randomUUID(), state, tags, runAttemptCount = attempts, constraints = Constraints(requiredNetworkType = network),
+        UUID.randomUUID(),
+        state,
+        tags,
+        runAttemptCount = attempts,
+        constraints = Constraints(requiredNetworkType = network),
         periodicityInfo = if (periodic) WorkInfo.PeriodicityInfo(3_600_000, 300_000) else null,
     )
 

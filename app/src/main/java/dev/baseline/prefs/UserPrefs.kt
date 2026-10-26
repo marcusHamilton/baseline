@@ -26,22 +26,27 @@ enum class BanisterSet(val a: Double, val b: Double) {
 val DEFAULT_BASELINE_ORDER = listOf("hrv", "rhr", "sleep", "resp", "bb", "stress", "steps")
 
 class UserPrefs(private val store: DataStore<Preferences>) {
-    val baselineOrder: Flow<List<String>> = store.data.map { p ->
-        p[ORDER]?.split(',')?.filter { it.isNotEmpty() } ?: DEFAULT_BASELINE_ORDER
-    }
+    val baselineOrder: Flow<List<String>> =
+        store.data.map { p ->
+            p[ORDER]?.split(',')?.filter { it.isNotEmpty() } ?: DEFAULT_BASELINE_ORDER
+        }
     val hiddenRows: Flow<Set<String>> = store.data.map { it[HIDDEN] ?: emptySet() }
-    val syncInterval: Flow<SyncInterval> = store.data.map { p ->
-        p[SYNC]?.let { n -> SyncInterval.entries.firstOrNull { it.name == n } } ?: SyncInterval.HOURLY
-    }
-    val banister: Flow<BanisterSet> = store.data.map { p ->
-        p[BANISTER]?.let { n -> BanisterSet.entries.firstOrNull { it.name == n } } ?: BanisterSet.MALE_FITTED
-    }
+    val syncInterval: Flow<SyncInterval> =
+        store.data.map { p ->
+            p[SYNC]?.let { n -> SyncInterval.entries.firstOrNull { it.name == n } } ?: SyncInterval.HOURLY
+        }
+    val banister: Flow<BanisterSet> =
+        store.data.map { p ->
+            p[BANISTER]?.let { n -> BanisterSet.entries.firstOrNull { it.name == n } } ?: BanisterSet.MALE_FITTED
+        }
 
     /** Null until the first calibration; tau and version are written together. */
-    val strainCalibration: Flow<StrainCalibration?> = store.data.map { p ->
-        val tau = p[TAU]; val version = p[TAU_VERSION]
-        if (tau != null && version != null) StrainCalibration(tau, version, p[TAU_PROVISIONAL] ?: false) else null
-    }
+    val strainCalibration: Flow<StrainCalibration?> =
+        store.data.map { p ->
+            val tau = p[TAU]
+            val version = p[TAU_VERSION]
+            if (tau != null && version != null) StrainCalibration(tau, version, p[TAU_PROVISIONAL] ?: false) else null
+        }
     val strainCalibratedOn: Flow<LocalDate?> = store.data.map { p -> p[TAU_DATE]?.let(LocalDate::parse) }
 
     /** When a sync run last completed; null before the first one. */
@@ -72,7 +77,12 @@ class UserPrefs(private val store: DataStore<Preferences>) {
     }
 
     suspend fun setStrainCalibration(cal: StrainCalibration, on: LocalDate) {
-        store.edit { it[TAU] = cal.tau; it[TAU_VERSION] = cal.version; it[TAU_PROVISIONAL] = cal.provisional; it[TAU_DATE] = on.toString() }
+        store.edit {
+            it[TAU] = cal.tau
+            it[TAU_VERSION] = cal.version
+            it[TAU_PROVISIONAL] = cal.provisional
+            it[TAU_DATE] = on.toString()
+        }
     }
 
     suspend fun setLastSyncedAt(at: Instant) {

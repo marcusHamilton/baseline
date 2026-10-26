@@ -13,11 +13,20 @@ private fun NetworkCapabilities?.hasInternet() =
 
 /** True while the default network can reach the internet. Emits the current state first, then every change. */
 fun ConnectivityManager.onlineFlow(): Flow<Boolean> = callbackFlow {
-    val callback = object : ConnectivityManager.NetworkCallback() {
-        override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) { trySend(caps.hasInternet()) }
-        override fun onLost(network: Network) { trySend(false) }
-        override fun onUnavailable() { trySend(false) }
-    }
+    val callback =
+        object : ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                trySend(caps.hasInternet())
+            }
+
+            override fun onLost(network: Network) {
+                trySend(false)
+            }
+
+            override fun onUnavailable() {
+                trySend(false)
+            }
+        }
     trySend(getNetworkCapabilities(activeNetwork).hasInternet())
     registerDefaultNetworkCallback(callback)
     awaitClose { unregisterNetworkCallback(callback) }

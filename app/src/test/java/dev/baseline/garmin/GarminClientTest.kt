@@ -37,11 +37,14 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class GarminClientTest {
     private val now = Instant.parse("2026-10-24T12:00:00Z")
-    private val clock = object : Clock() {
-        override fun getZone() = ZoneOffset.UTC
-        override fun withZone(zone: java.time.ZoneId?) = this
-        override fun instant(): Instant = now
-    }
+    private val clock =
+        object : Clock() {
+            override fun getZone() = ZoneOffset.UTC
+
+            override fun withZone(zone: java.time.ZoneId?) = this
+
+            override fun instant(): Instant = now
+        }
 
     private lateinit var server: MockWebServer
     private lateinit var file: File
@@ -53,6 +56,7 @@ class GarminClientTest {
     /** Mint responses (JWT text, or "" for a 401) are popped per mint; the last one repeats. */
     private val mintJwts = ConcurrentLinkedQueue<String>()
     private var lastMint: String? = null
+
     @Volatile private var mintOverride: MockResponse? = null
     private val mintCount = AtomicInteger()
     private val dataCodes = ConcurrentLinkedQueue<MockResponse>()
@@ -79,19 +83,20 @@ class GarminClientTest {
         vault = ApiKeyVault(store, { it }, { it }, clock)
         prefs = UserPrefs(store)
         server = MockWebServer()
-        server.dispatcher = object : Dispatcher() {
-            override fun dispatch(request: RecordedRequest): MockResponse {
-                recorded.add(request)
-                if (request.path == mintPath) {
-                    mintCount.incrementAndGet()
-                    mintOverride?.let { return it }
-                    if (mintJwts.isNotEmpty()) lastMint = mintJwts.poll()
-                    return lastMint?.takeIf { it.isNotEmpty() }?.let { MockResponse().setBody("  $it\n") } ?: MockResponse().setResponseCode(401)
+        server.dispatcher =
+            object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    recorded.add(request)
+                    if (request.path == mintPath) {
+                        mintCount.incrementAndGet()
+                        mintOverride?.let { return it }
+                        if (mintJwts.isNotEmpty()) lastMint = mintJwts.poll()
+                        return lastMint?.takeIf { it.isNotEmpty() }?.let { MockResponse().setBody("  $it\n") } ?: MockResponse().setResponseCode(401)
+                    }
+                    if (request.path != mintPath) onDataRequest()
+                    return dataCodes.poll() ?: MockResponse().setResponseCode(200).setBody("""{"ok":1}""")
                 }
-                if (request.path != mintPath) onDataRequest()
-                return dataCodes.poll() ?: MockResponse().setResponseCode(200).setBody("""{"ok":1}""")
             }
-        }
         server.start()
     }
 
@@ -101,10 +106,8 @@ class GarminClientTest {
         file.delete()
     }
 
-    private fun tokens(
-        encrypt: (ByteArray) -> ByteArray = { it },
-        decrypt: (ByteArray) -> ByteArray = { it },
-    ) = TokenProvider(server.url("/"), OkHttpClient(), vault, prefs, encrypt, decrypt, clock)
+    private fun tokens(encrypt: (ByteArray) -> ByteArray = { it }, decrypt: (ByteArray) -> ByteArray = { it }) =
+        TokenProvider(server.url("/"), OkHttpClient(), vault, prefs, encrypt, decrypt, clock)
 
     private fun client(tp: TokenProvider = tokens()) = GarminClient(
         server.url("/"),
@@ -141,7 +144,6 @@ class GarminClientTest {
         c.fetch(GarminEndpoint.PROFILE, "")
         c.fetch(GarminEndpoint.PROFILE, "")
         assertEquals(1, mintCount.get())
-
     }
 
     @Test
@@ -265,12 +267,13 @@ class GarminClientTest {
         val c = client()
         // First mint succeeds; the re-mint triggered by the 401 gets 429.
         server.dispatcher.let { real ->
-            server.dispatcher = object : Dispatcher() {
-                override fun dispatch(request: RecordedRequest): MockResponse {
-                    if (request.path == mintPath && mintCount.get() >= 1) mintOverride = MockResponse().setResponseCode(429)
-                    return real.dispatch(request)
+            server.dispatcher =
+                object : Dispatcher() {
+                    override fun dispatch(request: RecordedRequest): MockResponse {
+                        if (request.path == mintPath && mintCount.get() >= 1) mintOverride = MockResponse().setResponseCode(429)
+                        return real.dispatch(request)
+                    }
                 }
-            }
         }
         assertEquals(GarminResult.RateLimited(429), c.fetch(GarminEndpoint.PROFILE, ""))
         assertTrue(vault.status.first() is KeyStatus.Ok)
@@ -278,15 +281,21 @@ class GarminClientTest {
 
     @Test
     fun fetchDoesNotBlockTheCallerThread() {
-        val exec = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "fake-main") }
+        val exec =
+            java.util.concurrent.Executors
+                .newSingleThreadExecutor { Thread(it, "fake-main") }
         try {
             runBlocking(exec.asCoroutineDispatcher()) {
                 vault.save("k", 365)
                 mintJwts.add(jwtIn(7200))
                 val names = ConcurrentLinkedQueue<String>()
-                val http = OkHttpClient.Builder()
-                    .addInterceptor { chain -> names.add(Thread.currentThread().name); chain.proceed(chain.request()) }
-                    .build()
+                val http =
+                    OkHttpClient
+                        .Builder()
+                        .addInterceptor { chain ->
+                            names.add(Thread.currentThread().name)
+                            chain.proceed(chain.request())
+                        }.build()
                 val tp = TokenProvider(server.url("/"), http, vault, prefs, { it }, { it }, clock)
                 GarminClient(server.url("/"), http, tp).fetch(GarminEndpoint.PROFILE, "")
                 assertEquals(2, names.size) // mint + data

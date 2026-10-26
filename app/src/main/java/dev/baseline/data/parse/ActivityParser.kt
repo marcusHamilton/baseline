@@ -3,9 +3,9 @@ package dev.baseline.data.parse
 import dev.baseline.data.SportFamily
 import dev.baseline.data.db.ActivityEntity
 import dev.baseline.garmin.GarminTime
-import java.time.DateTimeException
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import java.time.DateTimeException
 
 object ActivityParser {
     /**

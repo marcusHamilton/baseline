@@ -74,6 +74,7 @@ class ActivityStreams(
                 val n = i.readInt()
                 val mask = i.readByte().toInt()
                 require(n >= 0 && n <= b.size) { "bad stream length" }
+
                 fun has(bit: Int) = mask and (1 shl bit) != 0
                 ActivityStreams(
                     LongArray(n) { i.readLong() },
@@ -107,14 +108,7 @@ data class Lap(
 /** [stroke] is the lowercase FIT swim_stroke name (e.g. "freestyle"); null for rest lengths. */
 data class SwimLength(val startSec: Double, val durationSec: Double, val strokes: Int?, val stroke: String?, val active: Boolean)
 
-data class StrengthSet(
-    val startSec: Double,
-    val durationSec: Double,
-    val reps: Int?,
-    val weightKg: Double?,
-    val category: Int?,
-    val active: Boolean,
-)
+data class StrengthSet(val startSec: Double, val durationSec: Double, val reps: Int?, val weightKg: Double?, val category: Int?, val active: Boolean)
 
 data class FitActivity(
     val streams: ActivityStreams,
@@ -130,7 +124,8 @@ object FitReader {
     /** The first `.fit` entry. A damaged zip is a bad payload (IllegalArgumentException), not a network error. */
     fun readZip(zip: ByteArray): ByteArray = try {
         ZipInputStream(ByteArrayInputStream(zip)).use { z ->
-            generateSequence { z.nextEntry }.firstOrNull { it.name.endsWith(".fit", ignoreCase = true) }
+            generateSequence { z.nextEntry }
+                .firstOrNull { it.name.endsWith(".fit", ignoreCase = true) }
                 ?.let { z.readBytes() }
         }
     } catch (e: IOException) {
@@ -156,11 +151,13 @@ object FitReader {
         require(records.isNotEmpty()) { "FIT file has no records" }
 
         val start = (sessions.firstNotNullOfOrNull { it.startTime } ?: records.first().timestamp).instant
+
         fun off(t: com.garmin.fit.DateTime?) = t?.let { (it.instant.toEpochMilli() - start.toEpochMilli()) / 1000.0 } ?: 0.0
         val n = records.size
 
         return FitActivity(
-            streams = ActivityStreams(
+            streams =
+            ActivityStreams(
                 epochSec = LongArray(n) { records[it].timestamp.instant.epochSecond },
                 hr = ints(records) { it.heartRate?.toInt() } ?: IntArray(n) { -1 },
                 distanceM = floats(records) { it.distance },
@@ -171,28 +168,43 @@ object FitReader {
                 lon = degrees(records) { it.positionLong },
                 cadence = ints(records) { it.cadence?.toInt() },
             ),
-            laps = laps.map {
+            laps =
+            laps.map {
                 Lap(
-                    off(it.startTime), (it.totalElapsedTime ?: it.totalTimerTime ?: 0f).toDouble(),
-                    it.totalDistance?.toDouble(), it.avgHeartRate?.toInt(), it.maxHeartRate?.toInt(),
-                    (it.enhancedAvgSpeed ?: it.avgSpeed)?.toDouble(), it.avgPower?.toDouble(),
+                    off(it.startTime),
+                    (it.totalElapsedTime ?: it.totalTimerTime ?: 0f).toDouble(),
+                    it.totalDistance?.toDouble(),
+                    it.avgHeartRate?.toInt(),
+                    it.maxHeartRate?.toInt(),
+                    (it.enhancedAvgSpeed ?: it.avgSpeed)?.toDouble(),
+                    it.avgPower?.toDouble(),
                 )
             },
-            lengths = lengths.map {
+            lengths =
+            lengths.map {
                 SwimLength(
-                    off(it.startTime), (it.totalElapsedTime ?: it.totalTimerTime ?: 0f).toDouble(), it.totalStrokes,
-                    it.swimStroke?.let(SwimStroke::getStringFromValue)?.lowercase(), it.lengthType == LengthType.ACTIVE,
+                    off(it.startTime),
+                    (it.totalElapsedTime ?: it.totalTimerTime ?: 0f).toDouble(),
+                    it.totalStrokes,
+                    it.swimStroke?.let(SwimStroke::getStringFromValue)?.lowercase(),
+                    it.lengthType == LengthType.ACTIVE,
                 )
             },
-            sets = sets.map {
+            sets =
+            sets.map {
                 StrengthSet(
-                    off(it.startTime), (it.duration ?: 0f).toDouble(), it.repetitions, it.weight?.toDouble(),
-                    it.category?.firstNotNullOfOrNull { c -> c }, it.setType == SetType.ACTIVE,
+                    off(it.startTime),
+                    (it.duration ?: 0f).toDouble(),
+                    it.repetitions,
+                    it.weight?.toDouble(),
+                    it.category?.firstNotNullOfOrNull { c -> c },
+                    it.setType == SetType.ACTIVE,
                 )
             },
             poolLengthM = sessions.firstNotNullOfOrNull { it.poolLength }?.toDouble(),
             startGmt = start,
-            durationSec = sessions.mapNotNull { it.totalElapsedTime }.sumOf { it.toDouble() }.takeIf { it > 0 }
+            durationSec =
+            sessions.mapNotNull { it.totalElapsedTime }.sumOf { it.toDouble() }.takeIf { it > 0 }
                 ?: (records.last().timestamp.timestamp - records.first().timestamp.timestamp).toDouble(),
         )
     }
@@ -210,7 +222,10 @@ object FitReader {
     /** Semicircles to degrees; one array per axis, so a record with only one axis present still gets MISSING on the other. */
     private fun degrees(r: List<RecordMesg>, f: (RecordMesg) -> Int?): DoubleArray? {
         val v = r.map(f)
-        return if (v.all { it == null }) null
-        else DoubleArray(v.size) { v[it]?.let { s -> s.toDouble() * 180.0 / 2147483648.0 } ?: ActivityStreams.MISSING.toDouble() }
+        return if (v.all { it == null }) {
+            null
+        } else {
+            DoubleArray(v.size) { v[it]?.let { s -> s.toDouble() * 180.0 / 2147483648.0 } ?: ActivityStreams.MISSING.toDouble() }
+        }
     }
 }

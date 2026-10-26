@@ -35,7 +35,8 @@ fun SwimSection(swim: Section.Swim) {
                 Modifier.fillMaxWidth().heightIn(min = 30.dp).semantics(mergeDescendants = true) {
                     contentDescription = "Length ${l.n}, ${l.stroke}, ${l.strokes} strokes, ${l.time}, pace ${l.pace}"
                 },
-                Arrangement.spacedBy(8.dp), Alignment.CenterVertically,
+                Arrangement.spacedBy(8.dp),
+                Alignment.CenterVertically,
             ) {
                 Text("${l.n}", Modifier.width(32.dp), fontSize = 13.sp, color = TextMuted)
                 Text(l.stroke, Modifier.weight(1f), fontSize = 13.sp, color = TextBody, maxLines = 1)

@@ -54,10 +54,30 @@ internal fun act(
     avgPower: Double? = null,
     name: String? = "Activity $id",
 ) = ActivityEntity(
-    id, name, typeKey, SportFamily.of(typeKey), LocalDateTime.of(day, time), day, Instant.EPOCH.plusSeconds(id), durationSec,
-    distanceM, avgHr = null, maxHr = null, zone1Sec = null, zone2Sec = null, zone3Sec = null, zone4Sec = null, zone5Sec = null,
-    garminLoad = null, elevationGainM = null, avgPower = avgPower, normPower = null, fastestSplitsJson = null, fitPath = null,
-    hrCoverage = null, poolLengthM = null,
+    id,
+    name,
+    typeKey,
+    SportFamily.of(typeKey),
+    LocalDateTime.of(day, time),
+    day,
+    Instant.EPOCH.plusSeconds(id),
+    durationSec,
+    distanceM,
+    avgHr = null,
+    maxHr = null,
+    zone1Sec = null,
+    zone2Sec = null,
+    zone3Sec = null,
+    zone4Sec = null,
+    zone5Sec = null,
+    garminLoad = null,
+    elevationGainM = null,
+    avgPower = avgPower,
+    normPower = null,
+    fastestSplitsJson = null,
+    fitPath = null,
+    hrCoverage = null,
+    poolLengthM = null,
 )
 
 internal fun build(
@@ -103,13 +123,16 @@ class ActivitiesViewModelTest {
     @Test
     fun groupsByLocalDayNewestFirst() {
         val yesterday = TODAY.minusDays(1)
-        val s = build(listOf(
-            act(1, day = yesterday, time = LocalTime.of(18, 0)),
-            act(2, time = LocalTime.of(7, 0)),
-            act(3, day = yesterday, time = LocalTime.of(8, 0)),
-            act(4, time = LocalTime.of(17, 30)),
-            act(5, day = TODAY.minusDays(5)),
-        ))
+        val s =
+            build(
+                listOf(
+                    act(1, day = yesterday, time = LocalTime.of(18, 0)),
+                    act(2, time = LocalTime.of(7, 0)),
+                    act(3, day = yesterday, time = LocalTime.of(8, 0)),
+                    act(4, time = LocalTime.of(17, 30)),
+                    act(5, day = TODAY.minusDays(5)),
+                ),
+            )
         assertEquals(listOf(TODAY, yesterday, TODAY.minusDays(5)), s.days.map { it.date })
         assertEquals(listOf(4L, 2L), s.days[0].items.map { it.id })
         assertEquals(listOf(1L, 3L), s.days[1].items.map { it.id })
@@ -118,8 +141,22 @@ class ActivitiesViewModelTest {
     @Test
     fun filterBySport() {
         val all = listOf(act(1), act(2, "road_biking"), act(3, "strength_training"), act(4, "lap_swimming"), act(5, "hiking"), act(6, "treadmill_running"))
-        assertEquals(setOf(1L, 2L, 3L, 4L, 5L, 6L), build(all).days.flatMap { it.items }.map { it.id }.toSet())
-        assertEquals(setOf(1L, 6L), build(all, SportFamily.RUN).days.flatMap { it.items }.map { it.id }.toSet())
+        assertEquals(
+            setOf(1L, 2L, 3L, 4L, 5L, 6L),
+            build(all)
+                .days
+                .flatMap { it.items }
+                .map { it.id }
+                .toSet(),
+        )
+        assertEquals(
+            setOf(1L, 6L),
+            build(all, SportFamily.RUN)
+                .days
+                .flatMap { it.items }
+                .map { it.id }
+                .toSet(),
+        )
         assertEquals(listOf(5L), build(all, SportFamily.OTHER).days.flatMap { it.items }.map { it.id })
         assertEquals(SportFamily.RIDE, build(all, SportFamily.RIDE).filter)
         assertEquals(emptyList<DayGroup>(), build(all.take(1), SportFamily.SWIM).days)
@@ -127,18 +164,19 @@ class ActivitiesViewModelTest {
 
     @Test
     fun metaFormatsByFamily() {
-        val s = build(
-            listOf(
-                act(1),
-                act(2, "road_biking", durationSec = 5660.0, distanceM = 42_600.0, avgPower = 196.4),
-                act(3, "lap_swimming", durationSec = 2468.0, distanceM = 2000.0),
-                act(4, "strength_training", durationSec = 2760.0, distanceM = null),
-                act(5, "hiking", durationSec = 7960.0, distanceM = 7500.0),
-                act(6, "yoga", durationSec = 1800.0, distanceM = 0.0),
-                act(7, "running", durationSec = 3930.0, distanceM = 12_000.0),
-            ),
-            sets = mapOf(4L to 18),
-        )
+        val s =
+            build(
+                listOf(
+                    act(1),
+                    act(2, "road_biking", durationSec = 5660.0, distanceM = 42_600.0, avgPower = 196.4),
+                    act(3, "lap_swimming", durationSec = 2468.0, distanceM = 2000.0),
+                    act(4, "strength_training", durationSec = 2760.0, distanceM = null),
+                    act(5, "hiking", durationSec = 7960.0, distanceM = 7500.0),
+                    act(6, "yoga", durationSec = 1800.0, distanceM = 0.0),
+                    act(7, "running", durationSec = 3930.0, distanceM = 12_000.0),
+                ),
+                sets = mapOf(4L to 18),
+            )
         assertEquals("10.21 km · 52:14 · 5:07 /km", s.metaOf(1))
         assertEquals("42.6 km · 1:34:20 · 27.1 km/h · 196 W avg", s.metaOf(2))
         assertEquals("2,000 m · 41:08 · 2:03 /100m", s.metaOf(3))
@@ -166,7 +204,24 @@ class ActivitiesViewModelTest {
         db.activityDao().upsert(act(2, "strength_training", durationSec = 1800.0, distanceM = null))
         db.strengthSetDao().insertAll(
             (0 until 5).map { i ->
-                StrengthSetEntity(activityId = 1, setIndex = i, startOffsetSec = null, exerciseName = null, setType = if (i % 2 == 0) "ACTIVE" else "REST", category = null, reps = null, weightKg = null, durationSec = null)
+                StrengthSetEntity(
+                    activityId = 1,
+                    setIndex = i,
+                    startOffsetSec = null,
+                    exerciseName = null,
+                    setType =
+                    if (i % 2 ==
+                        0
+                    ) {
+                        "ACTIVE"
+                    } else {
+                        "REST"
+                    },
+                    category = null,
+                    reps = null,
+                    weightKg = null,
+                    durationSec = null,
+                )
             },
         )
         val s = awaitState { st -> st.days.flatMap { it.items }.any { it.id == 1L && it.meta.contains("sets") } }
@@ -178,11 +233,12 @@ class ActivitiesViewModelTest {
     @Test
     fun weekSummaryRespectsFirstDayOfWeek() {
         val sunday = LocalDate.of(2026, 10, 18)
-        val list = listOf(
-            act(1, day = sunday, durationSec = 3600.0, distanceM = 10_000.0),
-            act(2, day = TODAY, durationSec = 1800.0, distanceM = null),
-            act(3, day = LocalDate.of(2026, 10, 17), durationSec = 999.0, distanceM = 99_000.0),
-        )
+        val list =
+            listOf(
+                act(1, day = sunday, durationSec = 3600.0, distanceM = 10_000.0),
+                act(2, day = TODAY, durationSec = 1800.0, distanceM = null),
+                act(3, day = LocalDate.of(2026, 10, 17), durationSec = 999.0, distanceM = 99_000.0),
+            )
         val strains = mapOf(1L to 10.0, 2L to 6.0, 3L to 20.0)
         val monday = build(list, strains = strains, firstDay = DayOfWeek.MONDAY).week
         assertEquals(WeekSummary(1, Duration.ofSeconds(1800), 0.0, 6.0), monday)
@@ -217,7 +273,14 @@ class ActivitiesViewModelTest {
         db.activityDao().upsert(act(2, "road_biking"))
         db.activityScoreDao().upsert(ActivityScoreEntity(1, 100.0, LoadSource.HR, 9.8))
         assertEquals(2, awaitState { it.days.sumOf { d -> d.items.size } == 2 }.days[0].items.size)
-        assertEquals(9.8, vm.state.value.days[0].items.single { it.id == 1L }.strain!!, 0.0)
+        assertEquals(
+            9.8,
+            vm.state.value.days[0]
+                .items
+                .single { it.id == 1L }
+                .strain!!,
+            0.0,
+        )
         vm.setFilter(SportFamily.RIDE)
         assertEquals(listOf(2L), awaitState { it.filter == SportFamily.RIDE }.days.flatMap { it.items }.map { it.id })
         vm.setFilter(null)

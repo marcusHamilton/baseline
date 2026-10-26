@@ -19,8 +19,7 @@ import dev.baseline.ui.theme.TextBody
 import java.time.Instant
 
 /** "Last synced 3 h ago"; before the first sync there is no time to show. */
-fun offlineText(lastSynced: Instant?, now: Instant): String =
-    lastSynced?.let { "Last synced ${Formatters.ago(it, now)}" } ?: "Offline. Nothing synced yet."
+fun offlineText(lastSynced: Instant?, now: Instant): String = lastSynced?.let { "Last synced ${Formatters.ago(it, now)}" } ?: "Offline. Nothing synced yet."
 
 /** The line under the status bar while the phone is offline; draws nothing when online. Cached data stays readable below it. */
 @Composable
@@ -30,6 +29,8 @@ fun OfflineBar(online: Boolean, lastSynced: Instant?, now: Instant, modifier: Mo
         offlineText(lastSynced, now),
         modifier.fillMaxWidth().testTag("offline-bar").background(Surface2).padding(horizontal = 20.dp, vertical = 6.dp)
             .semantics { liveRegion = LiveRegionMode.Polite },
-        fontSize = 12.sp, color = TextBody, textAlign = TextAlign.Center,
+        fontSize = 12.sp,
+        color = TextBody,
+        textAlign = TextAlign.Center,
     )
 }

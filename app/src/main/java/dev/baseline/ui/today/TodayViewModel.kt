@@ -29,8 +29,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -45,13 +45,7 @@ import kotlin.math.exp
 import kotlin.math.roundToInt
 
 /** [latest] is the last sample of [curve]; [drained] stays null until the day table stores it. */
-data class BodyBatteryUi(
-    val latest: Int?,
-    val curve: List<Pair<Instant, Int>>,
-    val charged: Int?,
-    val drained: Int?,
-    val expanded: Boolean,
-)
+data class BodyBatteryUi(val latest: Int?, val curve: List<Pair<Instant, Int>>, val charged: Int?, val drained: Int?, val expanded: Boolean)
 
 /**
  * [delta] is e.g. "▲ 6%"; [better] says whether that move is good (true), bad (false) or neither (null).
@@ -94,10 +88,13 @@ data class TodayUiState(
 /** The sync line shown above Today; null when WorkManager has nothing to say. */
 fun syncStatus(infos: List<WorkInfo>, counts: TaskCounts, backfillPending: Boolean, key: KeyStatus?, online: Boolean = true): String? = when {
     key is KeyStatus.Invalid || key is KeyStatus.Expired -> "Garmin key problem: check Settings"
+
     infos.any { it.state == WorkInfo.State.RUNNING } ->
         if (backfillPending) "Syncing… ${counts.done}/${counts.total}" else "Syncing…"
+
     infos.any { it.state == WorkInfo.State.FAILED || (it.state == WorkInfo.State.ENQUEUED && it.runAttemptCount > 0) } ->
         if (online) "Retrying shortly" else "Offline, will retry"
+
     // The next slice (a PARTIAL run's follow-up, or the first sync) is held back until Wi-Fi. Not the periodic job, and not
     // while the user's own any-network request is queued.
     backfillPending && infos.any {
@@ -106,9 +103,11 @@ fun syncStatus(infos: List<WorkInfo>, counts: TaskCounts, backfillPending: Boole
     } && infos.none {
         !it.state.isFinished && SyncScheduler.USER in it.tags && it.constraints.requiredNetworkType == NetworkType.CONNECTED
     } -> "Waiting for Wi-Fi"
+
     // A PARTIAL run also ends SUCCEEDED; while the backfill is unfinished the follow-up is queued, so don't claim "Up to date".
     infos.any { it.state == WorkInfo.State.SUCCEEDED } ->
         if (backfillPending) "Syncing… ${counts.done}/${counts.total}" else "Up to date"
+
     else -> null
 }
 
@@ -124,8 +123,14 @@ class TodayViewModel(
     private val todayFlow: StateFlow<LocalDate>,
 ) : ViewModel() {
     constructor(
-        repo: Repository, scheduler: SyncScheduler, prefs: UserPrefs, counts: Flow<TaskCounts>,
-        backfillPending: Flow<Boolean>, keyStatusFlow: Flow<KeyStatus>, online: Flow<Boolean>, today: LocalDate,
+        repo: Repository,
+        scheduler: SyncScheduler,
+        prefs: UserPrefs,
+        counts: Flow<TaskCounts>,
+        backfillPending: Flow<Boolean>,
+        keyStatusFlow: Flow<KeyStatus>,
+        online: Flow<Boolean>,
+        today: LocalDate,
     ) : this(repo, scheduler, prefs, counts, backfillPending, keyStatusFlow, online, MutableStateFlow(today))
 
     private val whileSubscribed = SharingStarted.WhileSubscribed(5_000)
@@ -148,11 +153,17 @@ class TodayViewModel(
     private val editing = MutableStateFlow(false)
     private val prefsLock = Mutex()
 
-    fun setDate(d: LocalDate) { date.value = if (d.isAfter(today)) today else d }
+    fun setDate(d: LocalDate) {
+        date.value = if (d.isAfter(today)) today else d
+    }
     fun prevDay() = setDate(date.value.minusDays(1))
     fun nextDay() = setDate(date.value.plusDays(1))
-    fun toggleBodyBattery() { bodyBatteryExpanded.value = !bodyBatteryExpanded.value }
-    fun toggleEdit() { editing.value = !editing.value }
+    fun toggleBodyBattery() {
+        bodyBatteryExpanded.value = !bodyBatteryExpanded.value
+    }
+    fun toggleEdit() {
+        editing.value = !editing.value
+    }
 
     /** [from] and [to] index the list as shown in edit mode (all rows, hidden ones included). */
     fun moveRow(from: Int, to: Int) {
@@ -184,8 +195,10 @@ class TodayViewModel(
     val state: StateFlow<TodayUiState> = combine(date, todayFlow, ::Pair).flatMapLatest { (d, today) ->
         val dayInputs = combine(repo.day(d), repo.score(d), repo.days(d.minusDays(HISTORY_DAYS), d.minusDays(1)), repo.dayUnreadable(d), ::DayInputs)
         val activityInputs = combine(
-            repo.activitiesOn(d), repo.activityScores(d).map { all -> all.associate { it.activityId to it.strain } },
-            repo.bodyBatteryCurve(d), ::ActivityInputs,
+            repo.activitiesOn(d),
+            repo.activityScores(d).map { all -> all.associate { it.activityId to it.strain } },
+            repo.bodyBatteryCurve(d),
+            ::ActivityInputs,
         )
         val displayInputs = combine(prefs.baselineOrder, prefs.hiddenRows, repo.imperial, prefs.lastSyncedAt.distinctUntilChanged(), editing, ::DisplayInputs)
         combine(dayInputs, activityInputs, displayInputs, bodyBatteryExpanded) { a, b, c, expanded ->
@@ -204,8 +217,7 @@ class TodayViewModel(
     val sync: StateFlow<String?> =
         combine(infos, counts, backfillPending, keyStatusFlow, online, ::syncStatus).stateIn(viewModelScope, whileSubscribed, null)
 
-    private fun List<WorkInfo>.syncNow(vararg states: WorkInfo.State) =
-        any { SyncScheduler.SYNC_NOW in it.tags && it.state in states }
+    private fun List<WorkInfo>.syncNow(vararg states: WorkInfo.State) = any { SyncScheduler.SYNC_NOW in it.tags && it.state in states }
 
     // The spinner belongs to a pull: it ends when the sync-now run goes from RUNNING to not running.
     private val pulled = MutableStateFlow(false)
@@ -218,7 +230,9 @@ class TodayViewModel(
         .map { (p, running) -> p && running }
         .stateIn(viewModelScope, whileSubscribed, false)
 
-    init { viewModelScope.launch { scheduler.syncSoon() } }
+    init {
+        viewModelScope.launch { scheduler.syncSoon() }
+    }
 
     fun refresh() {
         pulled.value = true // also when a waiting syncSoon is taken over, or a running sync covers this pull
@@ -282,8 +296,12 @@ internal fun buildTodayState(
         strainTarget = target,
         activities = activities.map { a ->
             ActivityCardUi(
-                a.id, a.name?.takeIf { it.isNotBlank() } ?: prettyType(a.typeKey), a.sportFamily, a.typeKey,
-                fmt.activityMeta(a.startTimeLocal, a.distanceM, a.durationSec), activityStrains[a.id],
+                a.id,
+                a.name?.takeIf { it.isNotBlank() } ?: prettyType(a.typeKey),
+                a.sportFamily,
+                a.typeKey,
+                fmt.activityMeta(a.startTimeLocal, a.distanceM, a.durationSec),
+                activityStrains[a.id],
             )
         },
         rows = statRows(day, window, baseline, order, hidden, date == today, editing),
@@ -324,23 +342,46 @@ private fun whole(v: Double) = v.roundToInt().toDouble()
 private fun grouped(v: Double) = java.text.NumberFormat.getIntegerInstance(Locale.US).format(v.roundToInt())
 
 private val ROWS: Map<String, RowSpec> = listOf(
-    RowSpec("hrv", "HRV (overnight)", "ms", Good.HIGHER, { it.hrvLastNight?.takeIf { v -> v > 0 } }, ::whole, ::whole,
-        { "%.0f".format(Locale.US, it) }, { "${it.roundToInt()}%" }, relative = true),
-    RowSpec("rhr", "Resting heart rate", "bpm", Good.LOWER, { it.restingHr?.takeIf { v -> v > 0 }?.toDouble() }, ::whole, ::whole,
-        { "%.0f".format(Locale.US, it) }, { "${it.roundToInt()}" }),
-    RowSpec("sleep", "Sleep", "", Good.HIGHER, { it.sleepSeconds?.takeIf { v -> v > 0 }?.toDouble() }, { (it / 60).roundToInt() * 60.0 }, { (it / 60).roundToInt() * 60.0 },
-        { Formatters.hoursMinutes(it) ?: "—" }, { Formatters.hoursMinutes(it) ?: "—" }),
-    RowSpec("resp", "Respiration (sleep)", "brpm", Good.ONLY_LOWER, { it.respirationAvg?.takeIf { v -> v > 0 } }, { (it * 10).roundToInt() / 10.0 }, { (it * 10).roundToInt() / 10.0 },
-        { "%.1f".format(Locale.US, it) }, { "%.1f".format(Locale.US, it) }),
-    RowSpec("bb", "Body Battery at wake", "", Good.HIGHER, { it.bodyBatteryWake?.toDouble() }, ::whole, ::whole,
-        { "%.0f".format(Locale.US, it) }, { "${it.roundToInt()}" }),
-    RowSpec("stress", "Avg stress", "", Good.LOWER, { it.stressAvg?.toDouble() }, ::whole, ::whole,
-        { "%.0f".format(Locale.US, it) }, { "${it.roundToInt()}" }),
+    RowSpec(
+        "hrv", "HRV (overnight)", "ms", Good.HIGHER, { it.hrvLastNight?.takeIf { v -> v > 0 } }, ::whole, ::whole,
+        { "%.0f".format(Locale.US, it) }, { "${it.roundToInt()}%" }, relative = true,
+    ),
+    RowSpec(
+        "rhr", "Resting heart rate", "bpm", Good.LOWER, { it.restingHr?.takeIf { v -> v > 0 }?.toDouble() }, ::whole, ::whole,
+        { "%.0f".format(Locale.US, it) }, { "${it.roundToInt()}" },
+    ),
+    RowSpec(
+        "sleep", "Sleep", "", Good.HIGHER, { it.sleepSeconds?.takeIf { v -> v > 0 }?.toDouble() }, { (it / 60).roundToInt() * 60.0 }, {
+            (it / 60).roundToInt() *
+                60.0
+        },
+        { Formatters.hoursMinutes(it) ?: "—" }, { Formatters.hoursMinutes(it) ?: "—" },
+    ),
+    RowSpec(
+        "resp", "Respiration (sleep)", "brpm", Good.ONLY_LOWER, { it.respirationAvg?.takeIf { v -> v > 0 } }, { (it * 10).roundToInt() / 10.0 }, {
+            (it * 10).roundToInt() /
+                10.0
+        },
+        { "%.1f".format(Locale.US, it) }, { "%.1f".format(Locale.US, it) },
+    ),
+    RowSpec(
+        "bb", "Body Battery at wake", "", Good.HIGHER, { it.bodyBatteryWake?.toDouble() }, ::whole, ::whole,
+        { "%.0f".format(Locale.US, it) }, { "${it.roundToInt()}" },
+    ),
+    RowSpec(
+        "stress", "Avg stress", "", Good.LOWER, { it.stressAvg?.toDouble() }, ::whole, ::whole,
+        { "%.0f".format(Locale.US, it) }, { "${it.roundToInt()}" },
+    ),
     RowSpec("steps", "Steps", "", Good.HIGHER, { it.steps?.toDouble() }, ::whole, ::whole, ::grouped, ::grouped, inBaseline = { it > 0 }),
 ).associateBy { it.id }
 
 private fun statRows(
-    day: DayEntity?, window: List<DayEntity>, recoveryBaseline: Baseline?, order: List<String>, hidden: Set<String>, isToday: Boolean,
+    day: DayEntity?,
+    window: List<DayEntity>,
+    recoveryBaseline: Baseline?,
+    order: List<String>,
+    hidden: Set<String>,
+    isToday: Boolean,
     editing: Boolean,
 ): List<StatRowUi> {
     val ids = fullOrder(order).filter { editing || it !in hidden }

@@ -34,14 +34,7 @@ import dev.baseline.ui.theme.TextMuted
 import java.util.Locale
 
 /** [meta] is the second line, e.g. "7:05 AM · 10.21 km · 52:14". [strain] is null when the activity has no score. */
-data class ActivityCardUi(
-    val id: Long,
-    val name: String,
-    val family: SportFamily,
-    val typeKey: String,
-    val meta: String,
-    val strain: Double?,
-)
+data class ActivityCardUi(val id: Long, val name: String, val family: SportFamily, val typeKey: String, val meta: String, val strain: Double?)
 
 @DrawableRes
 fun sportIcon(family: SportFamily): Int = when (family) {
@@ -58,7 +51,8 @@ fun ActivityCard(ui: ActivityCardUi, onClick: () -> Unit, modifier: Modifier = M
     Row(
         modifier.fillMaxWidth().heightIn(min = 72.dp).clip(RoundedCornerShape(14.dp)).background(Card)
             .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
-        Arrangement.spacedBy(14.dp), Alignment.CenterVertically,
+        Arrangement.spacedBy(14.dp),
+        Alignment.CenterVertically,
     ) {
         Box(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF1E2A3A)), Alignment.Center) {
             Icon(painterResource(sportIcon(ui.family)), contentDescription = null, Modifier.size(22.dp), tint = StrainBlueLight)

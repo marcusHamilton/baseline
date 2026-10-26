@@ -44,15 +44,19 @@ class RecordsViewModel(repo: Repository, private val todayFlow: StateFlow<LocalD
 
     private val tab = MutableStateFlow(SportFamily.RUN)
 
-    fun setTab(t: SportFamily) { tab.value = t }
+    fun setTab(t: SportFamily) {
+        tab.value = t
+    }
 
-    val state: StateFlow<RecordsUiState> = combine(tab, repo.bestEfforts(), repo.activities(), repo.imperial, todayFlow) { t, e, a, imperial, today ->
-        buildRecordsState(t, e, a, today, Formatters(imperial))
-    }.flowOn(Dispatchers.Default)
-        .stateIn(
-            viewModelScope, SharingStarted.WhileSubscribed(5_000),
-            buildRecordsState(SportFamily.RUN, emptyList(), emptyList(), todayFlow.value, Formatters(false)),
-        )
+    val state: StateFlow<RecordsUiState> =
+        combine(tab, repo.bestEfforts(), repo.activities(), repo.imperial, todayFlow) { t, e, a, imperial, today ->
+            buildRecordsState(t, e, a, today, Formatters(imperial))
+        }.flowOn(Dispatchers.Default)
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                buildRecordsState(SportFamily.RUN, emptyList(), emptyList(), todayFlow.value, Formatters(false)),
+            )
 }
 
 private val RUN_LABELS = mapOf(1000 to "1 km", 1609 to "1 mile", 5000 to "5K", 10000 to "10K", 21098 to "Half marathon", 42195 to "Marathon")
@@ -72,26 +76,37 @@ internal fun buildRecordsState(
 ): RecordsUiState {
     val byId = activities.associateBy { it.id }
     val mine = efforts.filter { it.sport == tab }.associateBy { it.effort }
-    val labels = when (tab) { SportFamily.RIDE -> RIDE_LABELS; SportFamily.SWIM -> SWIM_LABELS; else -> RUN_LABELS }
-
-    val rows = labels.map { (meters, label) ->
-        val e = mine[BestEfforts.distanceKey(meters)]
-        if (e == null) RecordRow(label, "—", "No record yet", false, null)
-        else {
-            val pace = when (tab) {
-                SportFamily.RIDE -> fmt.speedValue(meters / e.valueSec)?.let { "$it ${fmt.speedUnit}" }
-                SportFamily.SWIM -> fmt.swimPace(e.valueSec / meters * 100)?.let { "$it ${fmt.swimPaceUnit}" }
-                else -> fmt.pace(fmt.secondsPerUnit(meters.toDouble(), e.valueSec))?.let { "$it ${fmt.paceUnit}" }
-            }
-            val a = byId[e.activityId]
-            val meta = listOfNotNull(pace, a?.let { it.name?.takeIf(String::isNotBlank) ?: prettyType(it.typeKey) }, e.achievedOn.format(DATE))
-            RecordRow(label, fmt.duration(e.valueSec) ?: "—", meta.joinToString(" · "), e.achievedOn >= today.minusDays(NEW_DAYS), e.activityId)
+    val labels =
+        when (tab) {
+            SportFamily.RIDE -> RIDE_LABELS
+            SportFamily.SWIM -> SWIM_LABELS
+            else -> RUN_LABELS
         }
-    }
 
-    val power = if (tab == SportFamily.RIDE && mine.keys.any(BestEfforts::isPower)) {
-        POWER_LABELS.map { (sec, label) -> PowerRow(label, mine[BestEfforts.powerKey(sec)]?.let { "${it.valueSec.roundToInt()}" } ?: "—") }
-    } else null
+    val rows =
+        labels.map { (meters, label) ->
+            val e = mine[BestEfforts.distanceKey(meters)]
+            if (e == null) {
+                RecordRow(label, "—", "No record yet", false, null)
+            } else {
+                val pace =
+                    when (tab) {
+                        SportFamily.RIDE -> fmt.speedValue(meters / e.valueSec)?.let { "$it ${fmt.speedUnit}" }
+                        SportFamily.SWIM -> fmt.swimPace(e.valueSec / meters * 100)?.let { "$it ${fmt.swimPaceUnit}" }
+                        else -> fmt.pace(fmt.secondsPerUnit(meters.toDouble(), e.valueSec))?.let { "$it ${fmt.paceUnit}" }
+                    }
+                val a = byId[e.activityId]
+                val meta = listOfNotNull(pace, a?.let { it.name?.takeIf(String::isNotBlank) ?: prettyType(it.typeKey) }, e.achievedOn.format(DATE))
+                RecordRow(label, fmt.duration(e.valueSec) ?: "—", meta.joinToString(" · "), e.achievedOn >= today.minusDays(NEW_DAYS), e.activityId)
+            }
+        }
+
+    val power =
+        if (tab == SportFamily.RIDE && mine.keys.any(BestEfforts::isPower)) {
+            POWER_LABELS.map { (sec, label) -> PowerRow(label, mine[BestEfforts.powerKey(sec)]?.let { "${it.valueSec.roundToInt()}" } ?: "—") }
+        } else {
+            null
+        }
     val outdoorPower = activities.any { it.sportFamily == SportFamily.RIDE && it.sportFamily.countsForDistanceRecords(it.typeKey) && it.avgPower != null }
     return RecordsUiState(tab, rows, power, if (outdoorPower) "All rides" else "Indoor", activities.minOfOrNull { it.day }?.format(MONTH))
 }

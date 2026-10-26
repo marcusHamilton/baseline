@@ -12,9 +12,14 @@ room3 {
 }
 
 // Release signing lives outside the repo; keystore.properties (git-ignored) points at it. Without it, release is unsigned.
-val keystoreProps = Properties().apply {
-    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
-}
+val keystoreProps =
+    Properties().apply {
+        rootProject
+            .file("keystore.properties")
+            .takeIf { it.exists() }
+            ?.inputStream()
+            ?.use { load(it) }
+    }
 
 // -PgarminBaseUrl=http://127.0.0.1:8080 (with adb reverse tcp:8080 tcp:8080) points a build at tools/fake_garmin.py (emulator testing). Never ship one:
 // it allows cleartext traffic and its versionName ends in "-fake".
@@ -37,11 +42,13 @@ android {
     }
 
     signingConfigs {
-        if (keystoreProps.isNotEmpty()) create("release") {
-            storeFile = file(keystoreProps.getProperty("storeFile"))
-            storePassword = keystoreProps.getProperty("storePassword")
-            keyAlias = keystoreProps.getProperty("keyAlias")
-            keyPassword = keystoreProps.getProperty("keyPassword")
+        if (keystoreProps.isNotEmpty()) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
         }
     }
 

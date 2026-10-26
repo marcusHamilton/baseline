@@ -11,11 +11,14 @@ import java.time.ZoneOffset
 class DateTickerTest {
     private var now = Instant.parse("2026-10-24T23:30:00Z")
     private var zoneId: ZoneId = ZoneOffset.UTC
-    private val clock = object : Clock() {
-        override fun getZone(): ZoneId = zoneId
-        override fun withZone(zone: ZoneId): Clock = this
-        override fun instant(): Instant = now
-    }
+    private val clock =
+        object : Clock() {
+            override fun getZone(): ZoneId = zoneId
+
+            override fun withZone(zone: ZoneId): Clock = this
+
+            override fun instant(): Instant = now
+        }
 
     @Test
     fun refreshPicksUpMidnightAndZoneChanges() {

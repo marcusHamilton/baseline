@@ -8,8 +8,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -48,6 +48,7 @@ val BodyBatteryFillColor = SemanticsPropertyKey<Color>("BodyBatteryFillColor")
 private var SemanticsPropertyReceiver.bodyBatteryFillColor by BodyBatteryFillColor
 
 const val BODY_BATTERY_FILL_TAG = "body-battery-fill"
+
 /** "Body Battery today, ranging 22 to 83, now 48" (past days say "that day" and "ending at"). */
 fun bodyBatteryChartDescription(bb: BodyBatteryUi, isToday: Boolean): String {
     val levels = bb.curve.map { it.second }
@@ -65,7 +66,8 @@ fun BodyBatteryCard(bb: BodyBatteryUi, onToggle: () -> Unit, modifier: Modifier 
         modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card)
             .clickable(
                 onClickLabel = if (bb.expanded) "Hide Body Battery curve" else "Show Body Battery curve",
-                role = Role.Button, onClick = onToggle,
+                role = Role.Button,
+                onClick = onToggle,
             )
             .semantics { stateDescription = if (bb.expanded) "Expanded" else "Collapsed" }
             .heightIn(min = 48.dp).padding(16.dp),

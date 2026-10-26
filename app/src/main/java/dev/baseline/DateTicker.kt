@@ -10,7 +10,9 @@ import java.time.ZoneId
 /** Wall clock that reads the device zone at every call, so a timezone change is picked up without a restart. */
 object SystemZoneClock : Clock() {
     override fun getZone(): ZoneId = ZoneId.systemDefault()
+
     override fun withZone(zone: ZoneId): Clock = system(zone)
+
     override fun instant(): Instant = Instant.now()
 }
 

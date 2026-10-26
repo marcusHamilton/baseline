@@ -78,7 +78,9 @@ fun CalendarScreen(vm: CalendarViewModel, onBack: () -> Unit, onOpenDay: (LocalD
 
 internal fun cellDescription(c: CalendarCell): String = c.date.format(CellDate) + when {
     c.isFuture -> ", no data yet"
+
     c.recovery == null && c.activities == 0 -> ", no data"
+
     else -> (c.recovery?.let { ", recovery $it%" } ?: "") +
         (if (c.activities > 0) ", ${c.activities} ${if (c.activities == 1) "activity" else "activities"}" else "")
 }
@@ -93,15 +95,21 @@ fun CalendarContent(
     onOpenDay: (LocalDate) -> Unit,
 ) {
     Column(
-        Modifier.fillMaxSize().testTag("screen-calendar").verticalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, top = 20.dp, bottom = 32.dp),
+        Modifier.fillMaxSize().testTag(
+            "screen-calendar",
+        ).verticalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, top = 20.dp, bottom = 32.dp),
         Arrangement.spacedBy(16.dp),
     ) {
         // Page margin 12 dp, plus an 8 dp inset on everything but the grid, whose cells keep a full 48 dp touch width on a 360 dp phone; each cell draws its box inset by the same 8 dp.
         Row(Modifier.padding(horizontal = PageInset), Arrangement.spacedBy(12.dp), Alignment.CenterVertically) {
             CircleButton(R.drawable.ic_chevron_left, "Back to Today", true, onBack)
             Text(
-                state.month.atDay(1).format(Title).uppercase(), Modifier.weight(1f),
-                fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, letterSpacing = 0.88.sp,
+                state.month.atDay(1).format(Title).uppercase(),
+                Modifier.weight(1f),
+                fontFamily = BarlowCondensed,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 22.sp,
+                letterSpacing = 0.88.sp,
             )
             CircleButton(R.drawable.ic_chevron_left, "Previous month", true, onPrevMonth)
             CircleButton(R.drawable.ic_chevron_right, "Next month", state.canGoNext, onNextMonth)
@@ -123,7 +131,13 @@ private fun MonthGrid(state: CalendarUiState, onPrev: () -> Unit, onNext: () -> 
             var total = 0f
             detectHorizontalDragGestures(
                 onDragStart = { total = 0f },
-                onDragEnd = { if (total > threshold) prev() else if (total < -threshold) next() },
+                onDragEnd = {
+                    if (total > threshold) {
+                        prev()
+                    } else if (total < -threshold) {
+                        next()
+                    }
+                },
             ) { _, amount -> total += amount }
         },
         Arrangement.spacedBy(6.dp),
@@ -132,8 +146,12 @@ private fun MonthGrid(state: CalendarUiState, onPrev: () -> Unit, onNext: () -> 
             repeat(7) { i ->
                 val d = DayOfWeek.of((state.firstDayOfWeek.value - 1 + i) % 7 + 1)
                 Text(
-                    d.getDisplayName(TextStyle.NARROW, Locale.US), Modifier.weight(1f),
-                    fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = TextMuted, textAlign = TextAlign.Center,
+                    d.getDisplayName(TextStyle.NARROW, Locale.US),
+                    Modifier.weight(1f),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextMuted,
+                    textAlign = TextAlign.Center,
                 )
             }
         }
@@ -141,8 +159,11 @@ private fun MonthGrid(state: CalendarUiState, onPrev: () -> Unit, onNext: () -> 
             Row(Modifier.fillMaxWidth(), Arrangement.Start) {
                 repeat(7) { i ->
                     val cell = week.getOrNull(i)
-                    if (cell == null) Spacer(Modifier.weight(1f).height(58.dp))
-                    else DayCell(cell, cell.date == state.selected, { onSelect(cell.date) }, Modifier.weight(1f))
+                    if (cell == null) {
+                        Spacer(Modifier.weight(1f).height(58.dp))
+                    } else {
+                        DayCell(cell, cell.date == state.selected, { onSelect(cell.date) }, Modifier.weight(1f))
+                    }
                 }
             }
         }
@@ -153,30 +174,38 @@ private fun MonthGrid(state: CalendarUiState, onPrev: () -> Unit, onNext: () -> 
 @Composable
 private fun DayCell(cell: CalendarCell, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
     val shape = RoundedCornerShape(12.dp)
-    val outline = when { cell.isToday -> TextPrimary; selected -> SelectedBorder; else -> Color.Transparent }
+    val outline = when {
+        cell.isToday -> TextPrimary
+        selected -> SelectedBorder
+        else -> Color.Transparent
+    }
     val description = cellDescription(cell)
     // The touch target is the whole 48 dp+ column; the drawn box sits PageInset inside it so Sunday's ends at the cards' edge.
     Box(
         modifier.height(58.dp)
             .then(if (cell.isFuture) Modifier else Modifier.clickable(role = Role.Button, onClick = onClick))
-            .semantics(mergeDescendants = true) { contentDescription = description; this.selected = selected },
+            .semantics(mergeDescendants = true) {
+                contentDescription = description
+                this.selected = selected
+            },
     ) {
-    Column(
-        // Tagged for tests: the drawn box is inset inside the described touch target and has no semantics node of its own.
-        Modifier.fillMaxSize().padding(horizontal = PageInset).testTag("day-highlight").clip(shape)
-            .background(if (selected) SelectedBg else Color.Transparent).border(1.dp, outline, shape).padding(vertical = 6.dp),
-        Arrangement.Center, Alignment.CenterHorizontally,
-    ) {
-        Box(
-            Modifier.size(26.dp).border(3.dp, cell.zone?.let(::zoneColor) ?: Color.Transparent, CircleShape),
-            Alignment.Center,
+        Column(
+            // Tagged for tests: the drawn box is inset inside the described touch target and has no semantics node of its own.
+            Modifier.fillMaxSize().padding(horizontal = PageInset).testTag("day-highlight").clip(shape)
+                .background(if (selected) SelectedBg else Color.Transparent).border(1.dp, outline, shape).padding(vertical = 6.dp),
+            Arrangement.Center,
+            Alignment.CenterHorizontally,
         ) {
-            Text("${cell.date.dayOfMonth}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = if (cell.isFuture) FutureText else TextPrimary)
+            Box(
+                Modifier.size(26.dp).border(3.dp, cell.zone?.let(::zoneColor) ?: Color.Transparent, CircleShape),
+                Alignment.Center,
+            ) {
+                Text("${cell.date.dayOfMonth}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = if (cell.isFuture) FutureText else TextPrimary)
+            }
+            Row(Modifier.padding(top = 5.dp).height(5.dp), Arrangement.spacedBy(3.dp)) {
+                repeat(cell.activityCount) { Spacer(Modifier.size(5.dp).clip(CircleShape).background(DotColor)) }
+            }
         }
-        Row(Modifier.padding(top = 5.dp).height(5.dp), Arrangement.spacedBy(3.dp)) {
-            repeat(cell.activityCount) { Spacer(Modifier.size(5.dp).clip(CircleShape).background(DotColor)) }
-        }
-    }
     }
 }
 
@@ -225,7 +254,10 @@ private fun DayCard(state: CalendarUiState, onOpenDay: (LocalDate) -> Unit, modi
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Text(
                 (if (isToday) "Today · " else "") + s.date.format(CardDate),
-                fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, letterSpacing = 0.54.sp,
+                fontFamily = BarlowCondensed,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 18.sp,
+                letterSpacing = 0.54.sp,
                 modifier = Modifier.weight(1f),
             )
             Box(
@@ -240,7 +272,8 @@ private fun DayCard(state: CalendarUiState, onOpenDay: (LocalDate) -> Unit, modi
         }
         Text(
             if (s.activityNames.isEmpty()) "Rest day — no activities" else s.activityNames.joinToString(" · "),
-            fontSize = 13.sp, color = TextBody,
+            fontSize = 13.sp,
+            color = TextBody,
         )
     }
 }

@@ -66,7 +66,11 @@ fun RecordsContent(state: RecordsUiState, onTab: (SportFamily) -> Unit, onBack: 
             Text(
                 if (state.tab == SportFamily.SWIM) "FASTEST TIMES · POOL" else "FASTEST TIMES",
                 Modifier.padding(top = 8.dp, bottom = 4.dp),
-                fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, letterSpacing = 1.28.sp, color = TextMuted,
+                fontFamily = BarlowCondensed,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp,
+                letterSpacing = 1.28.sp,
+                color = TextMuted,
             )
         }
         items(state.rows, key = { "${state.tab}-${it.label}" }) { RecordCard(it, onOpenActivity) }
@@ -82,7 +86,8 @@ private fun Header(since: String?, onBack: () -> Unit) {
             Text("ALL-TIME RECORDS", fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, letterSpacing = 0.88.sp)
             Text(
                 "Best efforts from every activity" + (since?.let { " since $it" } ?: ""),
-                fontSize = 13.sp, color = TextMuted,
+                fontSize = 13.sp,
+                color = TextMuted,
             )
         }
     }
@@ -110,7 +115,8 @@ private fun RecordCard(r: RecordRow, onOpen: (Long) -> Unit) {
         Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).background(Card)
             .then(if (open != null) Modifier.clickable(role = Role.Button) { onOpen(open) } else Modifier)
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        Arrangement.spacedBy(12.dp), Alignment.CenterVertically,
+        Arrangement.spacedBy(12.dp),
+        Alignment.CenterVertically,
     ) {
         Text(r.label, Modifier.width(88.dp), fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, letterSpacing = 0.36.sp)
         Column(Modifier.weight(1f), Arrangement.spacedBy(2.dp)) {
@@ -118,8 +124,12 @@ private fun RecordCard(r: RecordRow, onOpen: (Long) -> Unit) {
                 Text(r.time, fontFamily = BarlowCondensed, fontWeight = FontWeight.Bold, fontSize = 24.sp)
                 if (r.isNew) {
                     Text(
-                        "NEW", Modifier.clip(RoundedCornerShape(6.dp)).background(NewBg).padding(horizontal = 6.dp, vertical = 2.dp),
-                        fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp, color = NewFg,
+                        "NEW",
+                        Modifier.clip(RoundedCornerShape(6.dp)).background(NewBg).padding(horizontal = 6.dp, vertical = 2.dp),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.6.sp,
+                        color = NewFg,
                     )
                 }
             }
@@ -134,13 +144,21 @@ private fun PowerCard(power: List<PowerRow>, label: String) {
     Column(Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).padding(16.dp), Arrangement.spacedBy(12.dp)) {
         Text(
             "BEST POWER · ${label.uppercase()}",
-            fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, letterSpacing = 1.28.sp, color = TextMuted,
+            fontFamily = BarlowCondensed,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 16.sp,
+            letterSpacing = 1.28.sp,
+            color = TextMuted,
         )
         Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(6.dp)) {
             power.forEach { p ->
                 Column(
-                    Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = if (p.watts == "—") "${p.label}: no record" else "${p.label}: ${p.watts} watts" },
-                    Arrangement.spacedBy(2.dp), Alignment.CenterHorizontally,
+                    Modifier.weight(1f).semantics(mergeDescendants = true) {
+                        contentDescription =
+                            if (p.watts == "—") "${p.label}: no record" else "${p.label}: ${p.watts} watts"
+                    },
+                    Arrangement.spacedBy(2.dp),
+                    Alignment.CenterHorizontally,
                 ) {
                     Text(p.watts, fontFamily = BarlowCondensed, fontWeight = FontWeight.Bold, fontSize = 22.sp)
                     Text(p.label, fontSize = 11.sp, color = TextMuted)

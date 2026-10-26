@@ -19,9 +19,14 @@ import java.time.LocalDate
 import kotlin.math.roundToInt
 
 enum class TrendRange(val days: Int) {
-    D7(7), D30(30), D90(90);
+    D7(7),
+    D30(30),
+    D90(90),
+    ;
 
-    companion object { val Default = D30 }
+    companion object {
+        val Default = D30
+    }
 }
 
 /** Each average is the mean of the non-null values over the range; null when there are none. */
@@ -55,14 +60,18 @@ class TrendsViewModel(private val repo: Repository, private val todayFlow: State
 
     private val range = MutableStateFlow(TrendRange.Default)
 
-    fun setRange(r: TrendRange) { range.value = r }
+    fun setRange(r: TrendRange) {
+        range.value = r
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val state: StateFlow<TrendsUiState> = combine(range, todayFlow, ::Pair).flatMapLatest { (r, today) ->
-        val from = today.minusDays(r.days - 1L)
-        combine(repo.days(from, today), repo.scores(from, today)) { d, s -> buildTrendsState(r, today, d, s) }
-    }.flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), buildTrendsState(range.value, todayFlow.value, emptyList(), emptyList()))
+    val state: StateFlow<TrendsUiState> =
+        combine(range, todayFlow, ::Pair)
+            .flatMapLatest { (r, today) ->
+                val from = today.minusDays(r.days - 1L)
+                combine(repo.days(from, today), repo.scores(from, today)) { d, s -> buildTrendsState(r, today, d, s) }
+            }.flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), buildTrendsState(range.value, todayFlow.value, emptyList(), emptyList()))
 }
 
 private fun Double?.finitePositive(): Double? = this?.takeIf { it.isFinite() && it > 0 }
@@ -74,26 +83,36 @@ internal fun buildTrendsState(range: TrendRange, today: LocalDate, days: List<Da
     val recovery = dates.map { it to byScore[it]?.recovery }
     val hrv = dates.map { it to byDay[it]?.hrvLastNight.finitePositive()?.roundToInt() }
     val rhr = dates.map { it to byDay[it]?.restingHr?.takeIf { v -> v > 0 } }
-    val sleep = dates.map { d ->
-        val day = byDay[d]
-        Triple(
-            d,
-            day?.sleepSeconds?.takeIf { it > 0 }?.let { Duration.ofSeconds(it.toLong()) },
-            day?.sleepNeedMinutes?.takeIf { it > 0 }?.let { Duration.ofMinutes(it.toLong()) },
-        )
-    }
-    val band = dates.mapNotNull { d ->
-        val lo = byDay[d]?.hrvBalancedLow.finitePositive()?.roundToInt()
-        val hi = byDay[d]?.hrvBalancedUpper.finitePositive()?.roundToInt()
-        if (lo != null && hi != null && lo <= hi) d to (lo..hi) else null
-    }
+    val sleep =
+        dates.map { d ->
+            val day = byDay[d]
+            Triple(
+                d,
+                day?.sleepSeconds?.takeIf { it > 0 }?.let { Duration.ofSeconds(it.toLong()) },
+                day?.sleepNeedMinutes?.takeIf { it > 0 }?.let { Duration.ofMinutes(it.toLong()) },
+            )
+        }
+    val band =
+        dates.mapNotNull { d ->
+            val lo = byDay[d]?.hrvBalancedLow.finitePositive()?.roundToInt()
+            val hi = byDay[d]?.hrvBalancedUpper.finitePositive()?.roundToInt()
+            if (lo != null && hi != null && lo <= hi) d to (lo..hi) else null
+        }
     val asleep = sleep.mapNotNull { it.second }
-    val baseline = dates.lastNotNullOf { byDay[it]?.hrvWeeklyAvg.finitePositive()?.roundToInt() }
-        ?: band.lastOrNull()?.let { (_, r) -> (r.start + r.endInclusive) / 2 }
+    val baseline =
+        dates.lastNotNullOf { byDay[it]?.hrvWeeklyAvg.finitePositive()?.roundToInt() }
+            ?: band.lastOrNull()?.let { (_, r) -> (r.start + r.endInclusive) / 2 }
     return TrendsUiState(
-        range, recovery, hrv, band, rhr, sleep,
+        range,
+        recovery,
+        hrv,
+        band,
+        rhr,
+        sleep,
         TrendAverages(
-            recovery.mean(), hrv.mean(), rhr.mean(),
+            recovery.mean(),
+            hrv.mean(),
+            rhr.mean(),
             if (asleep.isEmpty()) null else Duration.ofSeconds((asleep.sumOf { it.seconds }.toDouble() / asleep.size).roundToInt().toLong()),
         ),
         TrendLatest(hrv.lastValue(), baseline, rhr.lastValue()),

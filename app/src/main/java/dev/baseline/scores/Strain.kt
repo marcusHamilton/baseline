@@ -15,6 +15,5 @@ object Strain {
     }
 
     /** `21 * (1 - exp(-load/tau))` rounded to 0.1 and clamped to 0..21. */
-    fun of(load: Double, cal: StrainCalibration): Double =
-        (Math.round(21.0 * (1 - exp(-load / cal.tau)) * 10) / 10.0).coerceIn(0.0, 21.0)
+    fun of(load: Double, cal: StrainCalibration): Double = (Math.round(21.0 * (1 - exp(-load / cal.tau)) * 10) / 10.0).coerceIn(0.0, 21.0)
 }

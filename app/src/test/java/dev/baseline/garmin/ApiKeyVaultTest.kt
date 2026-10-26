@@ -1,17 +1,17 @@
 package dev.baseline.garmin
 
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.core.DataStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import androidx.datastore.preferences.core.edit
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.async
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -30,11 +30,14 @@ class ApiKeyVaultTest {
     private lateinit var scope: CoroutineScope
     private var today = LocalDate.of(2026, 10, 24)
 
-    private val clock = object : Clock() {
-        override fun getZone() = ZoneOffset.UTC
-        override fun withZone(zone: java.time.ZoneId?) = this
-        override fun instant(): Instant = today.atStartOfDay(ZoneOffset.UTC).toInstant()
-    }
+    private val clock =
+        object : Clock() {
+            override fun getZone() = ZoneOffset.UTC
+
+            override fun withZone(zone: java.time.ZoneId?) = this
+
+            override fun instant(): Instant = today.atStartOfDay(ZoneOffset.UTC).toInstant()
+        }
 
     private val xor: (ByteArray) -> ByteArray = { b -> ByteArray(b.size) { (b[it].toInt() xor 0x5A).toByte() } }
 
@@ -50,8 +53,7 @@ class ApiKeyVaultTest {
         file.delete()
     }
 
-    private fun vault(enc: (ByteArray) -> ByteArray = { it }, dec: (ByteArray) -> ByteArray = { it }) =
-        ApiKeyVault(store, enc, dec, clock)
+    private fun vault(enc: (ByteArray) -> ByteArray = { it }, dec: (ByteArray) -> ByteArray = { it }) = ApiKeyVault(store, enc, dec, clock)
 
     @Test
     fun missingWhenNoKey() = runBlocking {
@@ -113,10 +115,21 @@ class ApiKeyVaultTest {
         val v = vault(xor, xor)
         v.save("secret-key-123", 90)
         assertEquals("secret-key-123", v.key())
-        val stored = store.data.first().asMap().values.joinToString { it.toString() }
+        val stored =
+            store.data
+                .first()
+                .asMap()
+                .values
+                .joinToString { it.toString() }
         assertFalse(stored.contains("secret-key-123"))
         val raw = store.data.first()[stringPreferencesKey("api_key_enc")]!!
-        assertFalse(java.util.Base64.getDecoder().decode(raw).decodeToString().contains("secret-key-123"))
+        assertFalse(
+            java.util.Base64
+                .getDecoder()
+                .decode(raw)
+                .decodeToString()
+                .contains("secret-key-123"),
+        )
     }
 
     @Test

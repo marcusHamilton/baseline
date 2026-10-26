@@ -19,13 +19,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.text.NumberFormat
 import java.time.Clock
 import java.time.Duration
-import kotlin.time.Duration as KDuration
-import kotlin.time.toKotlinDuration
 import java.time.Instant
-import java.text.NumberFormat
 import java.time.LocalDate
+import kotlin.time.toKotlinDuration
+import kotlin.time.Duration as KDuration
 
 /** What a run needs. [afterSync] gets the earliest changed day (Task 14 recomputes scores from it); [reschedule] re-applies the interval. */
 class SyncWorkerDeps(
@@ -39,55 +39,58 @@ class SyncWorkerDeps(
     val continueSoon: suspend (Boolean) -> Unit,
 )
 
-class SyncWorker(
-    ctx: Context,
-    params: WorkerParameters,
-    private val deps: SyncWorkerDeps,
-) : CoroutineWorker(ctx, params) {
+class SyncWorker(ctx: Context, params: WorkerParameters, private val deps: SyncWorkerDeps) : CoroutineWorker(ctx, params) {
     /** WorkManager's reflective constructor; tests use the other one with a WorkerFactory. */
     constructor(ctx: Context, params: WorkerParameters) :
         this(ctx, params, (ctx.applicationContext as BaselineApp).container.syncWorkerDeps)
 
     override suspend fun doWork(): Result {
         val queuedAt = deps.clock.instant()
-        val outcome = syncMutex.withLock {
-            // Time spent waiting for another run counts against WorkManager's limit too.
-            val waited = Duration.between(queuedAt, deps.clock.instant()).toKotlinDuration()
-            val today = LocalDate.now(deps.clock)
-            deps.engine.repairSleepPlaceholders()
-            deps.engine.ensureBackfillPlanned(today)
-            deps.engine.planIncremental(today)
-            // onProgress is not suspending, so progress goes through a conflated channel; the delay throttles setForeground.
-            val progress = Channel<TaskCounts>(Channel.CONFLATED)
-            val run = coroutineScope {
-                val notifier = launch {
-                    for (c in progress) {
-                        // One refusal (Android 12+ background start) ends the notifications; the sync itself carries on.
-                        if (c.total - c.done > FOREGROUND_THRESHOLD && !showProgress(c)) break
-                        delay(NOTIFY_EVERY_MS)
+        val outcome =
+            syncMutex.withLock {
+                // Time spent waiting for another run counts against WorkManager's limit too.
+                val waited = Duration.between(queuedAt, deps.clock.instant()).toKotlinDuration()
+                val today = LocalDate.now(deps.clock)
+                deps.engine.repairSleepPlaceholders()
+                deps.engine.ensureBackfillPlanned(today)
+                deps.engine.planIncremental(today)
+                // onProgress is not suspending, so progress goes through a conflated channel; the delay throttles setForeground.
+                val progress = Channel<TaskCounts>(Channel.CONFLATED)
+                val run =
+                    coroutineScope {
+                        val notifier =
+                            launch {
+                                for (c in progress) {
+                                    // One refusal (Android 12+ background start) ends the notifications; the sync itself carries on.
+                                    if (c.total - c.done > FOREGROUND_THRESHOLD && !showProgress(c)) break
+                                    delay(NOTIFY_EVERY_MS)
+                                }
+                            }
+                        try {
+                            deps.engine.runPending((RUN_BUDGET - waited).coerceAtLeast(KDuration.ZERO)) { progress.trySend(it) }
+                        } finally {
+                            notifier.cancel()
+                        }
                     }
-                }
-                try {
-                    deps.engine.runPending((RUN_BUDGET - waited).coerceAtLeast(KDuration.ZERO)) { progress.trySend(it) }
-                } finally {
-                    notifier.cancel()
-                }
+                deps.afterSync(run.changedFrom)
+                run.outcome
             }
-            deps.afterSync(run.changedFrom)
-            run.outcome
-        }
         return when (outcome) {
             SyncOutcome.COMPLETED, SyncOutcome.KEY_INVALID -> {
                 if (outcome == SyncOutcome.COMPLETED) markSynced()
                 deps.reschedule() // backfill may just have finished: UNMETERED -> CONNECTED
                 Result.success()
             }
+
             SyncOutcome.PARTIAL -> {
                 markSynced()
                 deps.continueSoon(SyncScheduler.USER in tags)
                 Result.success()
             }
-            SyncOutcome.RATE_LIMITED, SyncOutcome.OFFLINE -> Result.retry()
+
+            SyncOutcome.RATE_LIMITED, SyncOutcome.OFFLINE -> {
+                Result.retry()
+            }
         }
     }
 
@@ -118,13 +121,15 @@ class SyncWorker(
     }
 
     private fun foregroundInfo(text: String, c: TaskCounts?): ForegroundInfo {
-        val n: Notification = NotificationCompat.Builder(applicationContext, CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
-            .setContentText(text)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setProgress(c?.total ?: 0, c?.done ?: 0, c == null)
-            .build()
+        val n: Notification =
+            NotificationCompat
+                .Builder(applicationContext, CHANNEL)
+                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setContentText(text)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setProgress(c?.total ?: 0, c?.done ?: 0, c == null)
+                .build()
         return ForegroundInfo(NOTIFICATION_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     }
 
@@ -140,7 +145,8 @@ class SyncWorker(
 
         /** Called once from Application.onCreate; the channel must exist before the first foreground notification. */
         fun createChannel(context: Context) {
-            context.getSystemService(NotificationManager::class.java)
+            context
+                .getSystemService(NotificationManager::class.java)
                 .createNotificationChannel(NotificationChannel(CHANNEL, "Sync", NotificationManager.IMPORTANCE_LOW))
         }
     }

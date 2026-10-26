@@ -4,8 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.garmin.GarminResult
-import dev.baseline.garmin.KeyTest
 import dev.baseline.garmin.KeyStatus
+import dev.baseline.garmin.KeyTest
 import dev.baseline.garmin.saveAndTest
 import dev.baseline.prefs.BanisterSet
 import dev.baseline.prefs.SyncInterval
@@ -33,8 +33,11 @@ data class HistoryCoverage(val healthSince: LocalDate?, val activitiesSince: Loc
 
 sealed interface KeyEntryState {
     data object Idle : KeyEntryState
+
     data object Testing : KeyEntryState
+
     data class Error(val message: String) : KeyEntryState
+
     data object Saved : KeyEntryState
 }
 
@@ -76,16 +79,28 @@ class SettingsViewModel(
     private val recalculating = recalculator.running
     private val retrying = MutableStateFlow(false)
 
-    val state: StateFlow<SettingsUiState> = combine(
-        combine(vault.status, prefs.syncInterval, prefs.banister, ::Triple),
-        combine(prefs.lastSyncedAt, coverage, imperial, recalculating, failedCount, retrying) { arrayOf(it[0], it[1], it[2], it[3], it[4], it[5]) },
-    ) { (status, interval, banister), rest ->
-        @Suppress("UNCHECKED_CAST")
-        SettingsUiState(status, interval, banister, rest[0] as Instant?, rest[1] as HistoryCoverage, rest[2] as Boolean, rest[3] as Boolean, rest[4] as Int, rest[5] as Boolean)
-    }.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5_000),
-        SettingsUiState(null, SyncInterval.HOURLY, BanisterSet.MALE_FITTED, null, HistoryCoverage(null, null), false, false),
-    )
+    val state: StateFlow<SettingsUiState> =
+        combine(
+            combine(vault.status, prefs.syncInterval, prefs.banister, ::Triple),
+            combine(prefs.lastSyncedAt, coverage, imperial, recalculating, failedCount, retrying) { arrayOf(it[0], it[1], it[2], it[3], it[4], it[5]) },
+        ) { (status, interval, banister), rest ->
+            @Suppress("UNCHECKED_CAST")
+            SettingsUiState(
+                status,
+                interval,
+                banister,
+                rest[0] as Instant?,
+                rest[1] as HistoryCoverage,
+                rest[2] as Boolean,
+                rest[3] as Boolean,
+                rest[4] as Int,
+                rest[5] as Boolean,
+            )
+        }.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            SettingsUiState(null, SyncInterval.HOURLY, BanisterSet.MALE_FITTED, null, HistoryCoverage(null, null), false, false),
+        )
 
     /** Same test-then-save as onboarding; a rejected key leaves the current one in place. Sync resumes once the new key works. */
     fun replaceKey(key: String, lifetimeDays: Int) {
@@ -104,7 +119,9 @@ class SettingsViewModel(
     }
 
     /** Hides the saved/error line once the user starts typing again. */
-    fun clearEntry() { if (_entry.value !is KeyEntryState.Testing) _entry.value = KeyEntryState.Idle }
+    fun clearEntry() {
+        if (_entry.value !is KeyEntryState.Testing) _entry.value = KeyEntryState.Idle
+    }
 
     fun setInterval(interval: SyncInterval) {
         viewModelScope.launch {
@@ -116,15 +133,14 @@ class SettingsViewModel(
     private val banisterLock = Mutex()
 
     /** Scores depend on the coefficients, so the whole history is re-scored with the new set. */
-    fun setBanister(set: BanisterSet): Job =
-        viewModelScope.launch {
-            // Check and write as one step: two quick taps must not interleave and leave the first choice saved.
-            banisterLock.withLock {
-                if (prefs.banister.first() == set) return@launch
-                prefs.setBanister(set)
-                recalculator.request()
-            }
+    fun setBanister(set: BanisterSet): Job = viewModelScope.launch {
+        // Check and write as one step: two quick taps must not interleave and leave the first choice saved.
+        banisterLock.withLock {
+            if (prefs.banister.first() == set) return@launch
+            prefs.setBanister(set)
+            recalculator.request()
         }
+    }
 
     fun recalculateHistory(): Job = viewModelScope.launch { recalculator.request() }
 

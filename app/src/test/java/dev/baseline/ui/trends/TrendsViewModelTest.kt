@@ -80,9 +80,10 @@ class TrendsViewModelTest {
 
     @Test fun rangeEndFollowsTheTodayFlow() = runBlocking {
         val flow = kotlinx.coroutines.flow.MutableStateFlow(today)
-        val store: DataStore<Preferences> = PreferenceDataStoreFactory.create(
-            scope = scopes.storeScope,
-        ) { File.createTempFile("trendsvm2", ".preferences_pb").also { it.delete() } }
+        val store: DataStore<Preferences> =
+            PreferenceDataStoreFactory.create(
+                scope = scopes.storeScope,
+            ) { File.createTempFile("trendsvm2", ".preferences_pb").also { it.delete() } }
         val live = scopes.track(TrendsViewModel(Repository(db, UserPrefs(store), ApiKeyVault(store, { it }, { it }, Clock.systemUTC())), flow))
         withTimeout(10_000) { live.state.first { it.rhr.last().first == today } }
         flow.value = today.plusDays(1)
@@ -92,23 +93,25 @@ class TrendsViewModelTest {
     }
 
     @Test fun headersShowLatestValueWithReference() {
-        val s = build(
-            TrendRange.D7,
-            listOf(
-                DayEntity(today, restingHr = 47, hrvLastNight = 58.0, hrvWeeklyAvg = 55.0),
-                DayEntity(today.minusDays(1), restingHr = 51, hrvLastNight = 62.0, hrvWeeklyAvg = 54.0),
-                DayEntity(today.minusDays(2), restingHr = 49, hrvLastNight = 60.0),
-            ),
-        )
+        val s =
+            build(
+                TrendRange.D7,
+                listOf(
+                    DayEntity(today, restingHr = 47, hrvLastNight = 58.0, hrvWeeklyAvg = 55.0),
+                    DayEntity(today.minusDays(1), restingHr = 51, hrvLastNight = 62.0, hrvWeeklyAvg = 54.0),
+                    DayEntity(today.minusDays(2), restingHr = 49, hrvLastNight = 60.0),
+                ),
+            )
         assertEquals("58 ms · baseline 55", s.hrvHeader())
         assertEquals("47 bpm · avg 49", s.rhrHeader())
     }
 
     @Test fun latestSkipsNullDays_baselineFallsBackToBandMidpointThenAverage() {
-        val band = build(
-            TrendRange.D7,
-            listOf(DayEntity(today.minusDays(1), restingHr = 52, hrvLastNight = 60.0, hrvBalancedLow = 50.0, hrvBalancedUpper = 60.0), DayEntity(today)),
-        )
+        val band =
+            build(
+                TrendRange.D7,
+                listOf(DayEntity(today.minusDays(1), restingHr = 52, hrvLastNight = 60.0, hrvBalancedLow = 50.0, hrvBalancedUpper = 60.0), DayEntity(today)),
+            )
         assertEquals("60 ms · baseline 55", band.hrvHeader())
         assertEquals("52 bpm · avg 52", band.rhrHeader())
         val none = build(TrendRange.D7, listOf(DayEntity(today.minusDays(3), hrvLastNight = 40.0), DayEntity(today.minusDays(2), hrvLastNight = 50.0)))
@@ -123,6 +126,7 @@ class TrendsViewModelTest {
     }
 
     private fun score(d: LocalDate, recovery: Int?) = ScoreEntity(d, recovery, false, null, 0.0, 0.0, null, null, 1)
+
     private fun build(range: TrendRange, days: List<DayEntity> = emptyList(), scores: List<ScoreEntity> = emptyList()) =
         buildTrendsState(range, today, days, scores)
 
@@ -132,7 +136,9 @@ class TrendsViewModelTest {
             assertEquals(n, s.recovery.size)
             assertEquals(today, s.recovery.last().first)
             assertEquals(today.minusDays(n - 1L), s.recovery.first().first)
-            assertEquals(n, s.hrv.size); assertEquals(n, s.rhr.size); assertEquals(n, s.sleepVsNeed.size)
+            assertEquals(n, s.hrv.size)
+            assertEquals(n, s.rhr.size)
+            assertEquals(n, s.sleepVsNeed.size)
         }
         assertEquals(TrendRange.D30, TrendRange.Default)
     }
@@ -147,15 +153,16 @@ class TrendsViewModelTest {
     }
 
     @Test fun averagesIgnoreNulls() {
-        val s = build(
-            TrendRange.D7,
-            listOf(
-                DayEntity(today, restingHr = 50, hrvLastNight = 60.4, sleepSeconds = 7 * 3600),
-                DayEntity(today.minusDays(1), restingHr = 46, hrvLastNight = 56.0, sleepSeconds = 8 * 3600),
-                DayEntity(today.minusDays(2)),
-            ),
-            listOf(score(today, 80), score(today.minusDays(1), 41), score(today.minusDays(2), null)),
-        )
+        val s =
+            build(
+                TrendRange.D7,
+                listOf(
+                    DayEntity(today, restingHr = 50, hrvLastNight = 60.4, sleepSeconds = 7 * 3600),
+                    DayEntity(today.minusDays(1), restingHr = 46, hrvLastNight = 56.0, sleepSeconds = 8 * 3600),
+                    DayEntity(today.minusDays(2)),
+                ),
+                listOf(score(today, 80), score(today.minusDays(1), 41), score(today.minusDays(2), null)),
+            )
         assertEquals(61, s.averages.recovery) // (80 + 41) / 2 = 60.5, rounded half up
         assertEquals(58, s.averages.hrv) // (60 + 56) / 2, each rounded first
         assertEquals(48, s.averages.rhr)
@@ -165,22 +172,24 @@ class TrendsViewModelTest {
     }
 
     @Test fun hrvBandOnlyWhenBothBoundsPresent() {
-        val s = build(
-            TrendRange.D7,
-            listOf(
-                DayEntity(today, hrvBalancedLow = 48.4, hrvBalancedUpper = 62.6),
-                DayEntity(today.minusDays(1), hrvBalancedLow = 48.0),
-                DayEntity(today.minusDays(2), hrvBalancedUpper = 62.0),
-            ),
-        )
+        val s =
+            build(
+                TrendRange.D7,
+                listOf(
+                    DayEntity(today, hrvBalancedLow = 48.4, hrvBalancedUpper = 62.6),
+                    DayEntity(today.minusDays(1), hrvBalancedLow = 48.0),
+                    DayEntity(today.minusDays(2), hrvBalancedUpper = 62.0),
+                ),
+            )
         assertEquals(listOf(today to 48..63), s.hrvBand)
     }
 
     @Test fun sleepVsNeedPairsDurations() {
-        val s = build(
-            TrendRange.D7,
-            listOf(DayEntity(today, sleepSeconds = 26_400, sleepNeedMinutes = 480), DayEntity(today.minusDays(1), sleepSeconds = 25_000)),
-        )
+        val s =
+            build(
+                TrendRange.D7,
+                listOf(DayEntity(today, sleepSeconds = 26_400, sleepNeedMinutes = 480), DayEntity(today.minusDays(1), sleepSeconds = 25_000)),
+            )
         assertEquals(Triple(today, Duration.ofSeconds(26_400), Duration.ofMinutes(480)), s.sleepVsNeed.last())
         assertEquals(Triple(today.minusDays(1), Duration.ofSeconds(25_000), null), s.sleepVsNeed[5])
     }

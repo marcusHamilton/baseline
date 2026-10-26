@@ -2,10 +2,10 @@ package dev.baseline.ui.nav
 
 import android.content.Context
 import androidx.activity.ComponentActivity
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelected
@@ -23,18 +23,18 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
+import androidx.work.WorkManager
+import androidx.work.testing.WorkManagerTestInitHelper
 import dev.baseline.AppContainer
-import dev.baseline.testutil.ScopeCleanup
 import dev.baseline.data.db.AppDatabase
 import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.garmin.GarminEndpoint
 import dev.baseline.garmin.GarminResult
 import dev.baseline.garmin.KeyTest
-import androidx.work.WorkManager
-import androidx.work.testing.WorkManagerTestInitHelper
 import dev.baseline.sync.SyncEngine
 import dev.baseline.sync.SyncScheduler
+import dev.baseline.testutil.ScopeCleanup
 import dev.baseline.ui.theme.BaselineTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -55,15 +55,16 @@ import java.util.concurrent.atomic.AtomicInteger
 /** Counts Today's refresh requests; the test WorkManager keeps the work enqueued, so nothing actually syncs. */
 private class CountingScheduler(wm: WorkManager) : SyncScheduler(wm, { true }) {
     val syncSoons = AtomicInteger()
-    override suspend fun syncSoon() { syncSoons.incrementAndGet(); super.syncSoon() }
+
+    override suspend fun syncSoon() {
+        syncSoons.incrementAndGet()
+        super.syncSoon()
+    }
 }
 
 /** Identity-cipher vault, in-memory db and an offline engine: no Keystore, no network. */
-private class TestContainer(
-    context: Context,
-    private val store: DataStore<Preferences>,
-    private val fetch: suspend (GarminEndpoint, String) -> GarminResult,
-) : AppContainer(context) {
+private class TestContainer(context: Context, private val store: DataStore<Preferences>, private val fetch: suspend (GarminEndpoint, String) -> GarminResult) :
+    AppContainer(context) {
     override val scheduler = CountingScheduler(WorkManager.getInstance(context))
     override val apiKeyVault by lazy { ApiKeyVault(store, { it }, { it }, clock) }
     override val db: AppDatabase by lazy {
@@ -90,10 +91,11 @@ class NavShellTest {
         WorkManagerTestInitHelper.initializeTestWorkManager(ApplicationProvider.getApplicationContext())
         file = File.createTempFile("navshell", ".preferences_pb").also { it.delete() }
         val store = PreferenceDataStoreFactory.create(scope = scopes.storeScope) { file }
-        container = TestContainer(ApplicationProvider.getApplicationContext(), store) { e, _ ->
-            if (e != GarminEndpoint.PROFILE) dataFetches.incrementAndGet()
-            GarminResult.Empty
-        }
+        container =
+            TestContainer(ApplicationProvider.getApplicationContext(), store) { e, _ ->
+                if (e != GarminEndpoint.PROFILE) dataFetches.incrementAndGet()
+                GarminResult.Empty
+            }
     }
 
     @After
@@ -213,7 +215,9 @@ class NavShellTest {
     }
 
     private fun cellFor(date: LocalDate) = SemanticsMatcher("calendar cell for $date") { node ->
-        node.config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull()
+        node.config
+            .getOrNull(SemanticsProperties.ContentDescription)
+            ?.firstOrNull()
             ?.startsWith(date.format(DateTimeFormatter.ofPattern("MMMM d", Locale.US)) + ",") == true
     }
 

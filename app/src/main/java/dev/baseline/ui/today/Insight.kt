@@ -27,6 +27,8 @@ fun contributorPhrase(c: Contributor): String {
 }
 
 /** "HRV is 6% above your 30-day baseline and resting HR is 2 bpm below." from the top contributors; empty when there are none. */
-fun insightSentence(top: List<Contributor>): String =
-    top.map(::contributorPhrase).filter { it.isNotEmpty() }.joinToString(" and ")
-        .let { if (it.isEmpty()) it else it.replaceFirstChar(Char::uppercase) + "." }
+fun insightSentence(top: List<Contributor>): String = top
+    .map(::contributorPhrase)
+    .filter { it.isNotEmpty() }
+    .joinToString(" and ")
+    .let { if (it.isEmpty()) it else it.replaceFirstChar(Char::uppercase) + "." }

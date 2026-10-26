@@ -20,10 +20,10 @@ import dev.baseline.data.parse.DayParser
 import dev.baseline.data.parse.fixture
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.prefs.UserPrefs
-import dev.baseline.testutil.ScopeCleanup
 import dev.baseline.scores.HrPoint
 import dev.baseline.sync.SyncScheduler
 import dev.baseline.sync.closeWorkManagerDb
+import dev.baseline.testutil.ScopeCleanup
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -52,7 +52,10 @@ import java.util.concurrent.atomic.AtomicInteger
 
 private class CountingScheduler(wm: WorkManager) : SyncScheduler(wm, { false }) {
     val syncNows = AtomicInteger()
-    override suspend fun syncNow() { syncNows.incrementAndGet() }
+
+    override suspend fun syncNow() {
+        syncNows.incrementAndGet()
+    }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -90,6 +93,7 @@ class SleepViewModelTest {
     }
 
     private fun vm(on: LocalDate = date) = scopes.track(SleepViewModel(repo, db.taskDao(), scheduler, on, today, ZoneOffset.ofHours(-7)))
+
     private suspend fun SleepViewModel.await(p: (SleepUiState) -> Boolean) = withTimeout(10_000) { state.first(p) }
 
     private fun seedFixtureNight() = runBlocking {
@@ -133,7 +137,18 @@ class SleepViewModelTest {
         val t = start.epochSecond
         // The previous evening's row holds the pre-bed and first samples, the wake-day's row the rest.
         db.hrDayDao().upsert(HrDayEntity(date.minusDays(1), HrPacking.pack(listOf(HrPoint(t - 600, 80), HrPoint(t, 60), HrPoint(t + 120, 55)))))
-        db.hrDayDao().upsert(HrDayEntity(date, HrPacking.pack(listOf(HrPoint(end.epochSecond - 120, 48), HrPoint(end.epochSecond, 50), HrPoint(end.epochSecond + 120, 90)))))
+        db.hrDayDao().upsert(
+            HrDayEntity(
+                date,
+                HrPacking.pack(
+                    listOf(
+                        HrPoint(end.epochSecond - 120, 48),
+                        HrPoint(end.epochSecond, 50),
+                        HrPoint(end.epochSecond + 120, 90),
+                    ),
+                ),
+            ),
+        )
         val s = vm().await { it.hrSeries.isNotEmpty() }
         assertEquals(listOf(60, 55, 48, 50), s.hrSeries.map { it.second })
         assertTrue(s.hrSeries.all { it.first in start..end })

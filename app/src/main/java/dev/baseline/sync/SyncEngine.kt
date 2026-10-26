@@ -14,11 +14,11 @@ import kotlinx.coroutines.flow.first
 import java.io.IOException
 import java.time.Clock
 import java.time.LocalDate
-import java.time.Duration as JavaDuration
 import java.time.temporal.ChronoUnit
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.toJavaDuration
+import java.time.Duration as JavaDuration
 
 /** PARTIAL: the time budget ran out with tasks still PENDING; the work continues in a follow-up run. */
 enum class SyncOutcome { COMPLETED, PARTIAL, RATE_LIMITED, KEY_INVALID, OFFLINE }
@@ -75,6 +75,7 @@ class SyncEngine(
         var requests = 0
         var rateLimited = 0 // consecutive 429/5xx; the retry right after a back-off needs no extra spacer
         fun stop(o: SyncOutcome) = SyncRunResult(o, changed)
+
         // Ingests [body] for [t], then sets [status]. Returns OFFLINE if the write hit an IOException (task stays PENDING).
         suspend fun ingestTask(t: SyncTaskEntity, endpoint: GarminEndpoint, body: ByteArray, status: TaskStatus): SyncOutcome? {
             try {
@@ -113,25 +114,36 @@ class SyncEngine(
                 is GarminResult.RateLimited -> {
                     if (rateLimited == BACKOFF_MS.size) return stop(SyncOutcome.RATE_LIMITED)
                     // A back-off that would outlast the budget could get the run killed before afterSync: stop now, the task stays PENDING.
-                    if (JavaDuration.between(started, clock.instant()).toMillis() + BACKOFF_MS[rateLimited] >= limit.toMillis()) return stop(SyncOutcome.RATE_LIMITED)
+                    if (JavaDuration.between(started, clock.instant()).toMillis() + BACKOFF_MS[rateLimited] >=
+                        limit.toMillis()
+                    ) {
+                        return stop(SyncOutcome.RATE_LIMITED)
+                    }
                     pause(BACKOFF_MS[rateLimited++])
                     continue
                 }
+
                 GarminResult.KeyInvalid -> return stop(SyncOutcome.KEY_INVALID)
+
                 // An empty activity window still means "nothing there", so local activities in it are deleted.
                 GarminResult.Empty ->
-                    if (endpoint == ACTIVITY_RANGE) ingestTask(t, endpoint, "[]".toByteArray(), TaskStatus.EMPTY)?.let { return stop(it) }
-                    else tasks.update(t.copy(status = TaskStatus.EMPTY))
+                    if (endpoint == ACTIVITY_RANGE) {
+                        ingestTask(t, endpoint, "[]".toByteArray(), TaskStatus.EMPTY)?.let { return stop(it) }
+                    } else {
+                        tasks.update(t.copy(status = TaskStatus.EMPTY))
+                    }
+
                 is GarminResult.BadRequest -> onBadRequest(t)
+
                 is GarminResult.Failed -> fail(t, listOfNotNull(r.code, r.message).joinToString(" "))
+
                 is GarminResult.Ok -> ingestTask(t, endpoint, r.body, TaskStatus.DONE)?.let { return stop(it) }
             }
             onProgress(tasks.counts().first())
         }
     }
 
-    private suspend fun fail(t: SyncTaskEntity, error: String) =
-        db.taskDao().update(t.copy(status = TaskStatus.FAILED, lastError = error))
+    private suspend fun fail(t: SyncTaskEntity, error: String) = db.taskDao().update(t.copy(status = TaskStatus.FAILED, lastError = error))
 
     /** A too-wide range is replaced by its two halves once; anything else that gets a 400 is a bug and fails. */
     private suspend fun onBadRequest(t: SyncTaskEntity) {

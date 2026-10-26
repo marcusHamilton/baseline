@@ -23,38 +23,62 @@ class FitIngest(private val filesDir: File, private val db: AppDatabase) {
         val file = File(filesDir, relative)
         file.parentFile!!.mkdirs()
         file.writeBytes(bytes)
-        val fit = try {
-            FitReader.read(bytes)
-        } catch (e: FitRuntimeException) {
-            throw IllegalArgumentException("FIT $id: ${e.message}", e)
-        }
+        val fit =
+            try {
+                FitReader.read(bytes)
+            } catch (e: FitRuntimeException) {
+                throw IllegalArgumentException("FIT $id: ${e.message}", e)
+            }
 
         db.withWriteTransaction {
             val activity = db.activityDao().get(id) ?: return@withWriteTransaction // the FK needs the row
             db.activityStreamDao().upsert(ActivityStreamEntity(id, fit.streams.pack()))
             db.lapDao().deleteFor(id)
-            db.lapDao().insertAll(fit.laps.mapIndexed { i, l ->
-                LapEntity(
-                    activityId = id, lapIndex = i, startOffsetSec = l.startSec, durationSec = l.durationSec,
-                    distanceM = l.distanceM, avgHr = l.avgHr?.toDouble(), maxHr = l.maxHr?.toDouble(),
-                    avgSpeed = l.avgSpeedMs, avgPower = l.avgPowerW,
-                )
-            })
+            db.lapDao().insertAll(
+                fit.laps.mapIndexed { i, l ->
+                    LapEntity(
+                        activityId = id,
+                        lapIndex = i,
+                        startOffsetSec = l.startSec,
+                        durationSec = l.durationSec,
+                        distanceM = l.distanceM,
+                        avgHr = l.avgHr?.toDouble(),
+                        maxHr = l.maxHr?.toDouble(),
+                        avgSpeed = l.avgSpeedMs,
+                        avgPower = l.avgPowerW,
+                    )
+                },
+            )
             db.swimLengthDao().deleteFor(id)
-            db.swimLengthDao().insertAll(fit.lengths.mapIndexed { i, l ->
-                SwimLengthEntity(
-                    activityId = id, lengthIndex = i, startOffsetSec = l.startSec, active = l.active,
-                    durationSec = l.durationSec, strokeType = l.stroke, strokeCount = l.strokes,
-                )
-            })
+            db.swimLengthDao().insertAll(
+                fit.lengths.mapIndexed { i, l ->
+                    SwimLengthEntity(
+                        activityId = id,
+                        lengthIndex = i,
+                        startOffsetSec = l.startSec,
+                        active = l.active,
+                        durationSec = l.durationSec,
+                        strokeType = l.stroke,
+                        strokeCount = l.strokes,
+                    )
+                },
+            )
             db.strengthSetDao().deleteFor(id)
-            db.strengthSetDao().insertAll(fit.sets.mapIndexed { i, s ->
-                StrengthSetEntity(
-                    activityId = id, setIndex = i, startOffsetSec = s.startSec, exerciseName = null,
-                    setType = if (s.active) "ACTIVE" else "REST", category = s.category, reps = s.reps,
-                    weightKg = s.weightKg, durationSec = s.durationSec,
-                )
-            })
+            db.strengthSetDao().insertAll(
+                fit.sets.mapIndexed { i, s ->
+                    StrengthSetEntity(
+                        activityId = id,
+                        setIndex = i,
+                        startOffsetSec = s.startSec,
+                        exerciseName = null,
+                        setType = if (s.active) "ACTIVE" else "REST",
+                        category = s.category,
+                        reps = s.reps,
+                        weightKg = s.weightKg,
+                        durationSec = s.durationSec,
+                    )
+                },
+            )
             db.activityDao().upsert(
                 activity.copy(fitPath = relative, poolLengthM = activity.poolLengthM ?: fit.poolLengthM),
             )

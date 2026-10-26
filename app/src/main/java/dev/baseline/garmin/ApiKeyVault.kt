@@ -21,9 +21,13 @@ import java.util.Base64
 
 sealed interface KeyStatus {
     data object Missing : KeyStatus
+
     data class Ok(val expires: LocalDate, val daysLeft: Int) : KeyStatus
+
     data class ExpiringSoon(val expires: LocalDate, val daysLeft: Int) : KeyStatus
+
     data class Expired(val expires: LocalDate) : KeyStatus
+
     data object Invalid : KeyStatus
 }
 
@@ -33,7 +37,13 @@ class ApiKeyVault(
     private val encrypt: (ByteArray) -> ByteArray,
     private val decrypt: (ByteArray) -> ByteArray,
     private val clock: Clock,
-    private val today: Flow<LocalDate> = flow { while (true) { emit(LocalDate.now(clock)); delay(TICK_MS) } },
+    private val today: Flow<LocalDate> =
+        flow {
+            while (true) {
+                emit(LocalDate.now(clock))
+                delay(TICK_MS)
+            }
+        },
 ) {
     suspend fun save(key: String, lifetimeDays: Int) {
         // Keystore work can block; keep it off the caller's (main) thread.
@@ -77,17 +87,18 @@ class ApiKeyVault(
         if (store.data.first()[INVALID] == true) store.edit { if (it[INVALID] == true) it[INVALID] = false }
     }
 
-    val status: Flow<KeyStatus> = combine(store.data, today.distinctUntilChanged()) { p, today ->
-        val expires = p[EXPIRES]?.let(LocalDate::parse)
-        if (p[KEY] == null || expires == null) return@combine KeyStatus.Missing
-        if (p[INVALID] == true) return@combine KeyStatus.Invalid
-        val daysLeft = ChronoUnit.DAYS.between(today, expires).toInt()
-        when {
-            today.isAfter(expires) -> KeyStatus.Expired(expires)
-            daysLeft <= 7 -> KeyStatus.ExpiringSoon(expires, daysLeft)
-            else -> KeyStatus.Ok(expires, daysLeft)
+    val status: Flow<KeyStatus> =
+        combine(store.data, today.distinctUntilChanged()) { p, today ->
+            val expires = p[EXPIRES]?.let(LocalDate::parse)
+            if (p[KEY] == null || expires == null) return@combine KeyStatus.Missing
+            if (p[INVALID] == true) return@combine KeyStatus.Invalid
+            val daysLeft = ChronoUnit.DAYS.between(today, expires).toInt()
+            when {
+                today.isAfter(expires) -> KeyStatus.Expired(expires)
+                daysLeft <= 7 -> KeyStatus.ExpiringSoon(expires, daysLeft)
+                else -> KeyStatus.Ok(expires, daysLeft)
+            }
         }
-    }
 
     private companion object {
         const val TICK_MS = 60_000L

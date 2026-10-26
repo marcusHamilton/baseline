@@ -57,16 +57,36 @@ fun RouteMap(latLon: List<Pair<Double, Double>>, modifier: Modifier = Modifier) 
     key(latLon) {
         val context = LocalContext.current
         val lifecycle = LocalLifecycleOwner.current.lifecycle
-        val mapView = remember { MapLibre.getInstance(context); MapView(context, MapLibreMapOptions.createFromAttributes(context).textureMode(true).foregroundLoadColor(android.graphics.Color.parseColor(BG))) }
+        val mapView =
+            remember {
+                MapLibre.getInstance(context)
+                MapView(context, MapLibreMapOptions.createFromAttributes(context).textureMode(true).foregroundLoadColor(android.graphics.Color.parseColor(BG)))
+            }
         DisposableEffect(lifecycle, mapView) {
             var started = false
             var resumed = false
             val observer = LifecycleEventObserver { _, event ->
                 when (event) {
-                    Lifecycle.Event.ON_START -> { mapView.onStart(); started = true }
-                    Lifecycle.Event.ON_RESUME -> { mapView.onResume(); resumed = true }
-                    Lifecycle.Event.ON_PAUSE -> if (resumed) { mapView.onPause(); resumed = false }
-                    Lifecycle.Event.ON_STOP -> if (started) { mapView.onStop(); started = false }
+                    Lifecycle.Event.ON_START -> {
+                        mapView.onStart()
+                        started = true
+                    }
+
+                    Lifecycle.Event.ON_RESUME -> {
+                        mapView.onResume()
+                        resumed = true
+                    }
+
+                    Lifecycle.Event.ON_PAUSE -> if (resumed) {
+                        mapView.onPause()
+                        resumed = false
+                    }
+
+                    Lifecycle.Event.ON_STOP -> if (started) {
+                        mapView.onStop()
+                        started = false
+                    }
+
                     else -> {}
                 }
             }
@@ -109,7 +129,10 @@ private fun setUp(view: MapView, latLon: List<Pair<Double, Double>>) {
         }
         view.addOnDidFailLoadingMapListener {
             // The dark style may be gone: switch to the light one once, and only while no style has shown.
-            if (!styleLoaded && !fellBack) { fellBack = true; load(FALLBACK_STYLE) }
+            if (!styleLoaded && !fellBack) {
+                fellBack = true
+                load(FALLBACK_STYLE)
+            }
         }
         load(DARK_STYLE)
     }
@@ -120,13 +143,19 @@ private fun drawRoute(map: MapLibreMap, style: Style, latLon: List<Pair<Double, 
     style.addSource(GeoJsonSource("route", Feature.fromGeometry(LineString.fromLngLats(points))))
     style.addLayer(
         LineLayer("route-line", "route").withProperties(
-            lineColor(ROUTE_BLUE), lineWidth(4f), lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND),
+            lineColor(ROUTE_BLUE),
+            lineWidth(4f),
+            lineCap(Property.LINE_CAP_ROUND),
+            lineJoin(Property.LINE_JOIN_ROUND),
         ),
     )
     style.addSource(GeoJsonSource("route-start", Feature.fromGeometry(points.first())))
     style.addLayer(
         CircleLayer("route-start-dot", "route-start").withProperties(
-            circleRadius(7f), circleColor(START_GREEN), circleStrokeColor(BG), circleStrokeWidth(2f),
+            circleRadius(7f),
+            circleColor(START_GREEN),
+            circleStrokeColor(BG),
+            circleStrokeWidth(2f),
         ),
     )
     val bounds = LatLngBounds.Builder().includes(latLon.map { (lat, lon) -> LatLng(lat, lon) }).build()

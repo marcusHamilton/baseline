@@ -2,30 +2,30 @@ package dev.baseline
 
 import android.content.Context
 import android.net.ConnectivityManager
-import dev.baseline.net.onlineFlow
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.work.WorkManager
 import dev.baseline.data.Repository
 import dev.baseline.data.db.AppDatabase
 import dev.baseline.fit.FitIngest
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.garmin.GarminAuthenticator
 import dev.baseline.garmin.GarminClient
+import dev.baseline.garmin.KeyStatus
 import dev.baseline.garmin.KeyTest
 import dev.baseline.garmin.KeystoreAead
 import dev.baseline.garmin.TokenProvider
-import dev.baseline.garmin.KeyStatus
+import dev.baseline.net.onlineFlow
 import dev.baseline.prefs.SyncInterval
+import dev.baseline.prefs.UserPrefs
 import dev.baseline.scores.AfterSync
 import dev.baseline.scores.HistoryRecalculator
 import dev.baseline.scores.ScorePipeline
-import dev.baseline.prefs.UserPrefs
 import dev.baseline.sync.RawIngest
 import dev.baseline.sync.SyncEngine
 import dev.baseline.sync.SyncScheduler
 import dev.baseline.sync.SyncWorkerDeps
-import androidx.work.WorkManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,10 +36,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import java.time.LocalDate
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import java.time.Clock
+import java.time.LocalDate
 import java.util.concurrent.TimeUnit
 
 private val Context.baselineStore: DataStore<Preferences> by preferencesDataStore(name = "baseline")
@@ -67,7 +67,8 @@ open class AppContainer(context: Context) {
 
     // callTimeout bounds the whole call (connect + retries + body): GarminClient holds its request lock across execute().
     // FIT downloads are single-digit-MB zips, so 120 s (~40 KB/s) still lets them finish on a poor connection; minting is tiny.
-    private fun httpBuilder(callTimeoutSeconds: Long) = OkHttpClient.Builder()
+    private fun httpBuilder(callTimeoutSeconds: Long) = OkHttpClient
+        .Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .callTimeout(callTimeoutSeconds, TimeUnit.SECONDS)
@@ -83,6 +84,7 @@ open class AppContainer(context: Context) {
     }
     private val fitIngest by lazy { FitIngest(appContext.filesDir, db) }
     val rawIngest by lazy { RawIngest(db, fitIngest::ingest, clock) }
+
     // open: NavShellTest swaps in an offline test.
     open val testKey: KeyTest by lazy { garminClient::testKey }
     open val syncEngine by lazy { SyncEngine(garminClient::fetch, db, clock, rawIngest, ::delay) }
@@ -113,7 +115,10 @@ open class AppContainer(context: Context) {
     }
     val syncWorkerDeps by lazy {
         SyncWorkerDeps(
-            syncEngine, clock, afterSync::invoke, userPrefs::setLastSyncedAt,
+            syncEngine,
+            clock,
+            afterSync::invoke,
+            userPrefs::setLastSyncedAt,
             reschedule = { scheduler.apply(scheduleInterval.first()) },
             continueSoon = { user -> scheduler.continueSoon(user) },
         )

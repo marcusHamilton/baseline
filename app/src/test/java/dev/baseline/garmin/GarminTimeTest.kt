@@ -1,10 +1,10 @@
 package dev.baseline.garmin
 
+import org.junit.Assert.assertEquals
+import org.junit.Test
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
-import org.junit.Assert.assertEquals
-import org.junit.Test
 
 class GarminTimeTest {
     @Test fun localEpochIsWallClock() {

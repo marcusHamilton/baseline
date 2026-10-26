@@ -2,6 +2,7 @@ package dev.baseline.data.db
 
 import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
+import dev.baseline.data.SportFamily
 import dev.baseline.scores.HrPoint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -13,7 +14,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import dev.baseline.data.SportFamily
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -24,9 +24,11 @@ class RawAndTaskDaoTest {
 
     @Before
     fun setUp() {
-        db = Room.inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
-            .allowMainThreadQueries()
-            .build()
+        db =
+            Room
+                .inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
+                .allowMainThreadQueries()
+                .build()
     }
 
     @After
@@ -48,8 +50,8 @@ class RawAndTaskDaoTest {
     @Test
     fun unreadableDayCoversKeysAndRangesButNotHttpFailures() = runBlocking {
         val dao = db.taskDao()
-        fun failed(endpoint: String, key: String, error: String) =
-            SyncTaskEntity(endpoint, key, 1, TaskStatus.FAILED, 1, error)
+
+        fun failed(endpoint: String, key: String, error: String) = SyncTaskEntity(endpoint, key, 1, TaskStatus.FAILED, 1, error)
         dao.upsertAll(
             listOf(
                 failed("SLEEP_DAY", "2026-10-05", PARSE_ERROR_PREFIX + "bad"),
@@ -58,6 +60,7 @@ class RawAndTaskDaoTest {
                 failed("FIT", "2026-10-25", PARSE_ERROR_PREFIX + "bad"),
             ),
         )
+
         fun unreadable(d: String) = runBlocking { dao.unreadableDay(d, DAY_ENDPOINTS).first() }
         assertEquals(true, unreadable("2026-10-05"))
         assertEquals(true, unreadable("2026-10-10"))
@@ -70,8 +73,8 @@ class RawAndTaskDaoTest {
     @Test
     fun unreadableDayClearsOnceASuccessfulTaskOfTheSameEndpointCoversIt() = runBlocking {
         val dao = db.taskDao()
-        fun task(endpoint: String, key: String, status: TaskStatus, error: String? = null) =
-            SyncTaskEntity(endpoint, key, 1, status, 1, error)
+
+        fun task(endpoint: String, key: String, status: TaskStatus, error: String? = null) = SyncTaskEntity(endpoint, key, 1, status, 1, error)
         dao.upsertAll(
             listOf(
                 task("STEPS", "2026-10-01..2026-10-07", TaskStatus.FAILED, PARSE_ERROR_PREFIX + "bad"),
@@ -82,6 +85,7 @@ class RawAndTaskDaoTest {
                 task("HRV_DAY", "2026-10-20", TaskStatus.DONE), // another endpoint: does not vouch for SLEEP_DAY
             ),
         )
+
         fun unreadable(d: String, vararg endpoints: String) = runBlocking { dao.unreadableDay(d, endpoints.toList()).first() }
         assertEquals(true, unreadable("2026-10-02", "STEPS")) // no successful task covers it
         assertEquals(false, unreadable("2026-10-06", "STEPS")) // re-fetched by a DONE range
@@ -93,6 +97,7 @@ class RawAndTaskDaoTest {
     @Test
     fun anOlderSuccessfulWindowDoesNotHideANewerFailure() = runBlocking {
         val dao = db.taskDao()
+
         fun task(key: String, status: TaskStatus, error: String? = null) = SyncTaskEntity("STEPS", key, 1, status, 1, error)
         dao.upsertAll(
             listOf(
@@ -147,6 +152,7 @@ class RawAndTaskDaoTest {
     @Test
     fun backfillPendingIsTrueForAnEmptyTableOrPendingPriorityOneToSix() = runBlocking {
         val dao = db.taskDao()
+
         fun t(key: String, priority: Int, status: TaskStatus) = SyncTaskEntity("STEPS", key, priority, status, 0, null)
         assertEquals(true, dao.backfillPending()) // nothing planned yet
         dao.insertIgnore(listOf(t("a", 0, TaskStatus.PENDING), t("b", 7, TaskStatus.PENDING), t("c", 6, TaskStatus.DONE)))
@@ -173,18 +179,67 @@ class RawAndTaskDaoTest {
         val start = LocalDateTime.of(2026, 10, 23, 7, 0)
         db.activityDao().upsert(
             ActivityEntity(
-                7, "Run", "running", SportFamily.RUN, start, day, Instant.ofEpochSecond(1_761_202_800),
-                3600.0, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                7,
+                "Run",
+                "running",
+                SportFamily.RUN,
+                start,
+                day,
+                Instant.ofEpochSecond(1_761_202_800),
+                3600.0,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
             ),
         )
         db.activityStreamDao().upsert(ActivityStreamEntity(7, byteArrayOf(1)))
         db.activityScoreDao().upsert(ActivityScoreEntity(7, 50.0, LoadSource.HR, 8.0))
-        db.lapDao().insertAll(listOf(LapEntity(activityId = 7, lapIndex = 0, startOffsetSec = null, durationSec = 60.0, distanceM = null, avgHr = null, maxHr = null, avgSpeed = null, avgPower = null)))
+        db.lapDao().insertAll(
+            listOf(
+                LapEntity(
+                    activityId = 7,
+                    lapIndex = 0,
+                    startOffsetSec = null,
+                    durationSec = 60.0,
+                    distanceM = null,
+                    avgHr = null,
+                    maxHr = null,
+                    avgSpeed = null,
+                    avgPower = null,
+                ),
+            ),
+        )
         assertEquals(1, db.lapDao().forActivity(7).size)
 
         // Re-sync upserts the same id: it must update in place, not delete-and-insert (which would cascade).
-        db.activityDao().upsert(db.activityDao().byDay(day).single().copy(name = "Renamed"))
-        assertEquals("Renamed", db.activityDao().byDay(day).single().name)
+        db.activityDao().upsert(
+            db
+                .activityDao()
+                .byDay(day)
+                .single()
+                .copy(name = "Renamed"),
+        )
+        assertEquals(
+            "Renamed",
+            db
+                .activityDao()
+                .byDay(day)
+                .single()
+                .name,
+        )
         assertEquals(1, db.lapDao().forActivity(7).size)
         assertNotNull(db.activityStreamDao().get(7))
         assertNotNull(db.activityScoreDao().get(7))

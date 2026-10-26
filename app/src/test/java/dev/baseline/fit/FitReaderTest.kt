@@ -12,12 +12,15 @@ import java.io.ByteArrayOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-fun fitFixture(name: String): ByteArray =
-    checkNotNull(object {}.javaClass.getResourceAsStream("/fixtures/fit/$name.fit")) { "missing fit $name" }.readBytes()
+fun fitFixture(name: String): ByteArray = checkNotNull(object {}.javaClass.getResourceAsStream("/fixtures/fit/$name.fit")) { "missing fit $name" }.readBytes()
 
 fun zipOf(entryName: String, bytes: ByteArray): ByteArray {
     val out = ByteArrayOutputStream()
-    ZipOutputStream(out).use { it.putNextEntry(ZipEntry(entryName)); it.write(bytes); it.closeEntry() }
+    ZipOutputStream(out).use {
+        it.putNextEntry(ZipEntry(entryName))
+        it.write(bytes)
+        it.closeEntry()
+    }
     return out.toByteArray()
 }
 
@@ -72,14 +75,27 @@ class FitReaderTest {
 
     /** Every column as a list (null stays null) so equality is structural. */
     private fun ActivityStreams.cols() = listOf(
-        epochSec.toList(), hr.toList(), distanceM?.toList(), speedMs?.toList(), powerW?.toList(),
-        altitudeM?.toList(), lat?.toList(), lon?.toList(), cadence?.toList(),
+        epochSec.toList(),
+        hr.toList(),
+        distanceM?.toList(),
+        speedMs?.toList(),
+        powerW?.toList(),
+        altitudeM?.toList(),
+        lat?.toList(),
+        lon?.toList(),
+        cadence?.toList(),
     )
 
     @Test
     fun noNaNAnywhere() {
         for (n in listOf("run", "road_ride", "virtual_ride", "indoor_ride", "swim", "strength")) {
-            val nan = read(n).streams.cols().filterNotNull().flatten().any { (it is Float && it.isNaN()) || (it is Double && it.isNaN()) }
+            val nan =
+                read(n)
+                    .streams
+                    .cols()
+                    .filterNotNull()
+                    .flatten()
+                    .any { (it is Float && it.isNaN()) || (it is Double && it.isNaN()) }
             assertFalse(n, nan)
         }
     }

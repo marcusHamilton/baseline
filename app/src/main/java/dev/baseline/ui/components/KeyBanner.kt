@@ -30,11 +30,18 @@ fun keyBannerTone(status: KeyStatus?): KeyBannerTone? = when (status) {
 
 fun keyBannerText(status: KeyStatus?): String? = when (status) {
     is KeyStatus.ExpiringSoon -> {
-        val within = when (val n = status.daysLeft) { 0 -> "today"; 1 -> "in 1 day"; else -> "in $n days" }
+        val within = when (val n = status.daysLeft) {
+            0 -> "today"
+            1 -> "in 1 day"
+            else -> "in $n days"
+        }
         "Your Garmin key expires $within. Create a new one in Garmin Connect and paste it in Settings."
     }
+
     is KeyStatus.Expired -> "Your Garmin key expired, so new data can't sync. Paste a new key in Settings."
+
     KeyStatus.Invalid -> "Garmin rejected your key, so new data can't sync. Paste a new key in Settings."
+
     is KeyStatus.Ok, KeyStatus.Missing, null -> null
 }
 
@@ -48,6 +55,8 @@ fun KeyBanner(status: KeyStatus?, modifier: Modifier = Modifier) {
         modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (red) BannerRedBg else BannerAmberBg)
             .padding(horizontal = 14.dp, vertical = 12.dp)
             .semantics { liveRegion = LiveRegionMode.Polite }, // the mockup's role="status"
-        color = if (red) BannerRedFg else BannerAmberFg, fontSize = 14.sp, lineHeight = 20.sp,
+        color = if (red) BannerRedFg else BannerAmberFg,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
     )
 }

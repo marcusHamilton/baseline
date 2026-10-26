@@ -1,18 +1,20 @@
 package dev.baseline.scores
 
 import dev.baseline.data.db.DayEntity
-import java.time.LocalDate
-import kotlin.math.exp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
+import kotlin.math.exp
 
 class RecoveryTest {
     private val b = Baseline(lnHrvMean = 4.0, lnHrvSd = 0.2, rhrMean = 50.0, rhrSd = 4.0, respMean = 14.0, respSd = 1.0, nights = 30)
     private val d = LocalDate.of(2026, 10, 24)
+
     private fun avgDay() = DayEntity(d, restingHr = 50, respirationAvg = 14.0, hrvLastNight = exp(4.0))
+
     private fun logistic(c: Double) = Math.round(100.0 / (1 + exp(-(1.2 * c + 0.4)))).toInt()
 
     @Test fun averageDayIsAbout60() {
@@ -120,16 +122,22 @@ class RecoveryTest {
     }
 
     @Test fun extremeInputsStayFiniteAndInRange() {
-        val cases = listOf(
-            avgDay().copy(hrvLastNight = 1e300), avgDay().copy(hrvLastNight = 1e-300),
-            avgDay().copy(restingHr = 0), avgDay().copy(restingHr = Int.MAX_VALUE),
-            avgDay().copy(hrvLastNight = Double.POSITIVE_INFINITY), avgDay().copy(respirationAvg = Double.NaN),
-            avgDay().copy(respirationAvg = 1e300),
-        )
-        for (day in cases) for (sp in listOf(0.0, 1.0)) {
-            val r = Recovery.compute(day, b, sp)!!
-            assertTrue(r.score in 0..100)
-            assertTrue(r.top.all { it.z.isFinite() && it.delta.isFinite() })
+        val cases =
+            listOf(
+                avgDay().copy(hrvLastNight = 1e300),
+                avgDay().copy(hrvLastNight = 1e-300),
+                avgDay().copy(restingHr = 0),
+                avgDay().copy(restingHr = Int.MAX_VALUE),
+                avgDay().copy(hrvLastNight = Double.POSITIVE_INFINITY),
+                avgDay().copy(respirationAvg = Double.NaN),
+                avgDay().copy(respirationAvg = 1e300),
+            )
+        for (day in cases) {
+            for (sp in listOf(0.0, 1.0)) {
+                val r = Recovery.compute(day, b, sp)!!
+                assertTrue(r.score in 0..100)
+                assertTrue(r.top.all { it.z.isFinite() && it.delta.isFinite() })
+            }
         }
         val tiny = Recovery.compute(avgDay().copy(hrvLastNight = 1e-300, restingHr = Int.MAX_VALUE), b, 0.0)!!
         assertEquals(0, tiny.score)

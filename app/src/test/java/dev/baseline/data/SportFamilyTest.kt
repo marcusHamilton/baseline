@@ -13,12 +13,22 @@ import org.junit.Test
 class SportFamilyTest {
     @Test fun familiesCoverUserTypes() {
         mapOf(
-            "running" to RUN, "trail_running" to RUN, "track_running" to RUN, "treadmill_running" to RUN,
-            "road_biking" to RIDE, "virtual_ride" to RIDE, "indoor_cycling" to RIDE,
-            "cycling" to RIDE, "mountain_biking" to RIDE, "gravel_cycling" to RIDE,
-            "lap_swimming" to SWIM, "open_water_swimming" to SWIM,
-            "strength_training" to STRENGTH, "pickleball" to OTHER,
-            "walking" to OTHER, "never_seen_before" to OTHER,
+            "running" to RUN,
+            "trail_running" to RUN,
+            "track_running" to RUN,
+            "treadmill_running" to RUN,
+            "road_biking" to RIDE,
+            "virtual_ride" to RIDE,
+            "indoor_cycling" to RIDE,
+            "cycling" to RIDE,
+            "mountain_biking" to RIDE,
+            "gravel_cycling" to RIDE,
+            "lap_swimming" to SWIM,
+            "open_water_swimming" to SWIM,
+            "strength_training" to STRENGTH,
+            "pickleball" to OTHER,
+            "walking" to OTHER,
+            "never_seen_before" to OTHER,
         ).forEach { (k, f) -> assertEquals(k, f, SportFamily.of(k)) }
         assertFalse(RUN.countsForDistanceRecords("treadmill_running"))
         assertTrue(RIDE.countsForDistanceRecords("road_biking"))

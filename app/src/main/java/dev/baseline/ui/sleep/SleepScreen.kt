@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.baseline.R
+import dev.baseline.ui.activity.NOTE_UNREADABLE
 import dev.baseline.ui.charts.LineChart
 import dev.baseline.ui.components.CircleButton
 import dev.baseline.ui.components.Dial
@@ -42,7 +43,6 @@ import dev.baseline.ui.theme.BarlowCondensed
 import dev.baseline.ui.theme.Card
 import dev.baseline.ui.theme.RecoveryAmber
 import dev.baseline.ui.theme.RecoveryGreen
-import dev.baseline.ui.activity.NOTE_UNREADABLE
 import dev.baseline.ui.theme.RecoveryRed
 import dev.baseline.ui.theme.SleepPurple
 import dev.baseline.ui.theme.SleepPurpleLight
@@ -101,14 +101,21 @@ fun SleepContent(state: SleepUiState, is24h: Boolean, onBack: () -> Unit) {
 private fun Hero(state: SleepUiState, is24h: Boolean) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), Arrangement.spacedBy(20.dp), Alignment.CenterVertically) {
         Dial(
-            state.sleepPct?.let { it / 100f }, state.sleepPct?.toString() ?: "—", if (state.sleepPct != null) "%" else "", SleepPurple,
-            112.dp, 9.dp, 36, state.sleepPct?.let { "Sleep performance $it percent" } ?: "Sleep unavailable",
+            state.sleepPct?.let { it / 100f },
+            state.sleepPct?.toString() ?: "—",
+            if (state.sleepPct != null) "%" else "",
+            SleepPurple,
+            112.dp,
+            9.dp,
+            36,
+            state.sleepPct?.let { "Sleep performance $it percent" } ?: "Sleep unavailable",
         )
         Column(Modifier.weight(1f), Arrangement.spacedBy(6.dp)) {
             Text(Formatters.hoursMinutes(state.asleep), fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 32.sp, lineHeight = 32.sp)
             Text(
                 if (state.need.isZero) "asleep" else "asleep of ${Formatters.hoursMinutes(state.need)} needed",
-                fontSize = 14.sp, color = TextBody,
+                fontSize = 14.sp,
+                color = TextBody,
             )
             val span = state.bed?.let { b -> state.wake?.let { w -> "${Formatters.time(b, is24h)} → ${Formatters.time(w, is24h)}" } }
             val line = listOfNotNull(span, state.garminScore?.let { "Garmin score $it" }).joinToString(" · ")
@@ -130,8 +137,10 @@ private fun OvernightCard(state: SleepUiState, is24h: Boolean) {
         when {
             state.overnightLoading ->
                 Text("Loading overnight data…", Modifier.fillMaxWidth().padding(vertical = 24.dp), fontSize = 14.sp, color = TextMuted)
+
             hrv.size < 2 && hr.size < 2 ->
                 Text("No overnight data for this night", Modifier.fillMaxWidth().padding(vertical = 24.dp), fontSize = 14.sp, color = TextMuted)
+
             else -> {
                 if (hrv.size >= 2) SeriesChart("HRV", "ms", hrv.map { it.first to it.second }, RecoveryGreen, "Overnight HRV")
                 if (hr.size >= 2) SeriesChart("Heart rate", "bpm", hr, RecoveryRed, "Overnight heart rate")
@@ -148,7 +157,8 @@ private fun OvernightCard(state: SleepUiState, is24h: Boolean) {
 
 @Composable
 private fun SeriesChart(label: String, unit: String, points: List<Pair<java.time.Instant, Int>>, color: Color, description: String) {
-    val lo = points.minOf { it.second }; val hi = points.maxOf { it.second }
+    val lo = points.minOf { it.second }
+    val hi = points.maxOf { it.second }
     Row(Modifier.fillMaxWidth().clearAndSetSemantics {}, Arrangement.SpaceBetween, Alignment.CenterVertically) {
         Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.size(width = 12.dp, height = 3.dp).clip(RoundedCornerShape(2.dp)).background(color))
@@ -162,7 +172,10 @@ private fun SeriesChart(label: String, unit: String, points: List<Pair<java.time
 }
 
 private fun stageColor(label: String) = when (label) {
-    "Deep" -> DeepColor; "REM" -> RemColor; "Awake" -> AwakeColor; else -> SleepPurple
+    "Deep" -> DeepColor
+    "REM" -> RemColor
+    "Awake" -> AwakeColor
+    else -> SleepPurple
 }
 
 @Composable
@@ -203,9 +216,16 @@ private fun NeedCard(need: SleepNeedUi, tonight: Boolean, is24h: Boolean) {
         CardTitle(if (tonight) "TONIGHT'S SLEEP NEED" else "NEXT NIGHT'S SLEEP NEED")
         NeedRow("Your baseline (Garmin)", Formatters.hoursMinutes(need.baseline))
         NeedRow("Garmin adjustment", Formatters.signedHoursMinutes(need.adjustment))
-        if (need.reasons.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            need.reasons.forEach { r ->
-                Text(r, Modifier.clip(RoundedCornerShape(8.dp)).background(ChipBg).padding(horizontal = 10.dp, vertical = 4.dp), fontSize = 12.sp, color = ChipText)
+        if (need.reasons.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                need.reasons.forEach { r ->
+                    Text(
+                        r,
+                        Modifier.clip(RoundedCornerShape(8.dp)).background(ChipBg).padding(horizontal = 10.dp, vertical = 4.dp),
+                        fontSize = 12.sp,
+                        color = ChipText,
+                    )
+                }
             }
         }
         Spacer(Modifier.fillMaxWidth().height(1.dp).background(Surface2))
@@ -214,7 +234,10 @@ private fun NeedCard(need: SleepNeedUi, tonight: Boolean, is24h: Boolean) {
             Text("Aim for", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Text(
                 aim + (need.bedtimeStart?.let { " · bed ${Formatters.time(it, is24h)}" } ?: ""),
-                Modifier.padding(start = 12.dp), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = SleepPurpleLight,
+                Modifier.padding(start = 12.dp),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = SleepPurpleLight,
             )
         }
     }

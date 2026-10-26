@@ -13,13 +13,15 @@ import dev.baseline.fit.SwimLength
 class RecordsRefresher(private val db: AppDatabase) {
     suspend fun refresh() {
         val activities = db.activityDao().list()
-        val rows = BestEfforts.runFromSplits(activities) + activities.flatMap { a ->
-            when (a.sportFamily) {
-                SportFamily.RIDE -> BestEfforts.rideEfforts(a, stream(a.id))
-                SportFamily.SWIM -> BestEfforts.swimEfforts(a, lengths(a.id))
-                else -> emptyList()
-            }
-        }
+        val rows =
+            BestEfforts.runFromSplits(activities) +
+                activities.flatMap { a ->
+                    when (a.sportFamily) {
+                        SportFamily.RIDE -> BestEfforts.rideEfforts(a, stream(a.id))
+                        SportFamily.SWIM -> BestEfforts.swimEfforts(a, lengths(a.id))
+                        else -> emptyList()
+                    }
+                }
         val best = BestEfforts.best(rows)
         db.withWriteTransaction {
             db.bestEffortDao().deleteAll()

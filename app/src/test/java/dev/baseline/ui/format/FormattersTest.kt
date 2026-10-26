@@ -60,7 +60,8 @@ class FormattersTest {
 
     @Test
     fun activityDetailValuesInBothUnitSystems() {
-        val m = Formatters(false); val i = Formatters(true)
+        val m = Formatters(false)
+        val i = Formatters(true)
         assertEquals("10.21" to "6.34", m.distanceValue(10_210.0) to i.distanceValue(10_210.0))
         assertEquals(307.0, m.secondsPerUnit(10_210.0, 3134.0)!!, 0.5)
         assertEquals("5:07", m.pace(m.secondsPerUnit(10_210.0, 3134.0)))

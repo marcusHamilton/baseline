@@ -6,16 +6,16 @@ import dev.baseline.garmin.GarminAuthenticator
 import dev.baseline.garmin.GarminClient
 import dev.baseline.garmin.GarminEndpoint
 import dev.baseline.garmin.GarminResult
-import dev.baseline.garmin.TokenProvider
 import dev.baseline.garmin.KeyStatus
+import dev.baseline.garmin.TokenProvider
 import dev.baseline.garmin.saveAndTest
 import dev.baseline.prefs.UserPrefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -63,13 +63,17 @@ class TestConnectionTest {
     fun setUp() {
         file = File.createTempFile("tokenconn", ".preferences_pb").also { it.delete() }
         server = MockWebServer()
-        server.dispatcher = object : Dispatcher() {
-            override fun dispatch(request: RecordedRequest): MockResponse {
-                recorded.add(request)
-                return if (request.path == mintPath) MockResponse().setResponseCode(mintCode).setBody(jwt())
-                else MockResponse().setResponseCode(profileCode).setBody("""{"ok":1}""")
+        server.dispatcher =
+            object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    recorded.add(request)
+                    return if (request.path == mintPath) {
+                        MockResponse().setResponseCode(mintCode).setBody(jwt())
+                    } else {
+                        MockResponse().setResponseCode(profileCode).setBody("""{"ok":1}""")
+                    }
+                }
             }
-        }
         server.start()
     }
 
@@ -86,9 +90,12 @@ class TestConnectionTest {
         val vault = ApiKeyVault(store, { it }, { it }, clock)
         val prefs = UserPrefs(store)
         val tokens = TokenProvider(server.url("/"), OkHttpClient(), vault, prefs, { it }, { it }, clock)
-        val client = GarminClient(
-            server.url("/"), OkHttpClient.Builder().authenticator(GarminAuthenticator(tokens)).build(), tokens,
-        )
+        val client =
+            GarminClient(
+                server.url("/"),
+                OkHttpClient.Builder().authenticator(GarminAuthenticator(tokens)).build(),
+                tokens,
+            )
         return Rig(vault, tokens, client, prefs)
     }
 
@@ -159,23 +166,27 @@ class TestConnectionTest {
     private val profileAt = ConcurrentLinkedQueue<Long>()
 
     private fun slowProfile() {
-        server.dispatcher = object : Dispatcher() {
-            override fun dispatch(request: RecordedRequest): MockResponse {
-                recorded.add(request)
-                return if (request.path == mintPath) {
-                    events.add("mint"); mintAt.add(System.nanoTime())
-                    MockResponse().setBody(jwt())
-                } else {
-                    events.add("profile"); profileAt.add(System.nanoTime())
-                    MockResponse().setResponseCode(200).setBody("""{"ok":1}""")
-                        .setBodyDelay(PROFILE_DELAY_MS, TimeUnit.MILLISECONDS)
+        server.dispatcher =
+            object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    recorded.add(request)
+                    return if (request.path == mintPath) {
+                        events.add("mint")
+                        mintAt.add(System.nanoTime())
+                        MockResponse().setBody(jwt())
+                    } else {
+                        events.add("profile")
+                        profileAt.add(System.nanoTime())
+                        MockResponse()
+                            .setResponseCode(200)
+                            .setBody("""{"ok":1}""")
+                            .setBodyDelay(PROFILE_DELAY_MS, TimeUnit.MILLISECONDS)
+                    }
                 }
             }
-        }
     }
 
-    private suspend fun awaitEvent(name: String, count: Int) =
-        withTimeout(5_000) { while (events.count { it == name } < count) delay(5) }
+    private suspend fun awaitEvent(name: String, count: Int) = withTimeout(5_000) { while (events.count { it == name } < count) delay(5) }
 
     @Test
     fun testKeyWaitsBehindAnInFlightRequest() = runBlocking {
@@ -200,9 +211,14 @@ class TestConnectionTest {
         r.vault.save("old-key", 365)
         r.tokens.token() // a sync cached a JWT from old-key
         slowProfile()
-        val test = launch(Dispatchers.IO) {
-            r.client.testKey("new-key") { delay(200); events.add("saving"); r.vault.save("new-key", 365) }
-        }
+        val test =
+            launch(Dispatchers.IO) {
+                r.client.testKey("new-key") {
+                    delay(200)
+                    events.add("saving")
+                    r.vault.save("new-key", 365)
+                }
+            }
         awaitEvent("profile", 1) // the test holds the request lock
         val sync = launch(Dispatchers.IO) { r.client.fetch(GarminEndpoint.PROFILE, "") } // queued behind it
         test.join()
@@ -219,8 +235,17 @@ class TestConnectionTest {
         r.vault.save("old-key", 365)
         var cleared = false
         // The screen goes away right after the test passes, before the save + clear pair runs.
-        val test: dev.baseline.garmin.KeyTest = { _, onValid -> currentCoroutineContext().cancel(); onValid(); GarminResult.Empty }
-        launch(Dispatchers.Default) { r.vault.saveAndTest("new-key", 365, test) { delay(50); cleared = true } }.join()
+        val test: dev.baseline.garmin.KeyTest = { _, onValid ->
+            currentCoroutineContext().cancel()
+            onValid()
+            GarminResult.Empty
+        }
+        launch(Dispatchers.Default) {
+            r.vault.saveAndTest("new-key", 365, test) {
+                delay(50)
+                cleared = true
+            }
+        }.join()
 
         assertEquals("new-key", r.vault.key())
         assertTrue(cleared)
@@ -230,12 +255,17 @@ class TestConnectionTest {
     fun failedBodyReadAfter200DoesNotSaveTheKey() = runBlocking {
         val r = rig()
         r.vault.save("old-key", 365)
-        server.dispatcher = object : Dispatcher() {
-            override fun dispatch(request: RecordedRequest): MockResponse =
-                if (request.path == mintPath) MockResponse().setBody(jwt())
-                else MockResponse().setResponseCode(200).setBody("""{"ok":1}""")
-                    .setSocketPolicy(SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY)
-        }
+        server.dispatcher =
+            object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse = if (request.path == mintPath) {
+                    MockResponse().setBody(jwt())
+                } else {
+                    MockResponse()
+                        .setResponseCode(200)
+                        .setBody("""{"ok":1}""")
+                        .setSocketPolicy(SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY)
+                }
+            }
 
         val failure = r.vault.saveAndTest("new-key", 365, r.client::testKey, r.tokens::clear)
 

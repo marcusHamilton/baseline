@@ -7,10 +7,17 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 data class Baseline(
-    val lnHrvMean: Double, val lnHrvSd: Double, val rhrMean: Double, val rhrSd: Double,
-    val respMean: Double?, val respSd: Double?, val nights: Int,
+    val lnHrvMean: Double,
+    val lnHrvSd: Double,
+    val rhrMean: Double,
+    val rhrSd: Double,
+    val respMean: Double?,
+    val respSd: Double?,
+    val nights: Int,
 ) {
-    init { require(lnHrvSd > 0 && rhrSd > 0 && (respSd ?: 1.0) > 0) { "SDs must be positive" } }
+    init {
+        require(lnHrvSd > 0 && rhrSd > 0 && (respSd ?: 1.0) > 0) { "SDs must be positive" }
+    }
 }
 
 object Baselines {
@@ -22,15 +29,21 @@ object Baselines {
      * only and is null with fewer than 7 of them.
      */
     fun at(day: LocalDate, history: List<DayEntity>): Baseline? {
-        val from = day.minusDays(30); val to = day.minusDays(1)
+        val from = day.minusDays(30)
+        val to = day.minusDays(1)
         val valid = history.filter { it.date in from..to && (it.hrvLastNight ?: 0.0) > 0 && (it.restingHr ?: 0) > 0 }
         if (valid.size < MIN_NIGHTS) return null
         val hrv = valid.map { ln(it.hrvLastNight!!) }
         val rhr = valid.map { it.restingHr!!.toDouble() }
         val resp = valid.mapNotNull { it.respirationAvg?.takeIf { r -> r > 0 } }.takeIf { it.size >= MIN_NIGHTS }
         return Baseline(
-            hrv.average(), max(sd(hrv), 0.05), rhr.average(), max(sd(rhr), 1.5),
-            resp?.average(), resp?.let { max(sd(it), 0.3) }, valid.size,
+            hrv.average(),
+            max(sd(hrv), 0.05),
+            rhr.average(),
+            max(sd(rhr), 1.5),
+            resp?.average(),
+            resp?.let { max(sd(it), 0.3) },
+            valid.size,
         )
     }
 
