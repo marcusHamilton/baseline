@@ -22,7 +22,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 ```
 
 - `lintDebug` is clean and CI runs it with `warningsAsErrors`, so any new finding fails the build. Fix it, or disable the check in the `lint {}` block of `app/build.gradle.kts` with a reason. Run it before finishing a change.
-- `.editorconfig` holds the basic style (4 spaces, LF, 160 columns for new code). There is deliberately no ktlint/detekt/formatter: the code is hand-formatted with dense one-liners, and a formatter would rewrite most of it for no behaviour gain.
+- Formatting is ktlint through Spotless (config in the root `build.gradle.kts` and `.editorconfig`). Run `./gradlew spotlessApply` before committing; CI runs `spotlessCheck`. Don't hand-format. The formatting commit is listed in `.git-blame-ignore-revs`.
 
 - Kotlin 2.4, AGP 9.4, Compose BOM 2026.09, Room 3 (`androidx.room3`, KSP), WorkManager, DataStore, OkHttp 5, Garmin FIT SDK, Vico charts, MapLibre. Versions live in `gradle/libs.versions.toml`.
 - minSdk 29, target/compile 37, JVM 17. Release is minified with R8 (`app/proguard-rules.pro`) and ships a hand-written baseline profile (`app/src/main/baseline-prof.txt`); smoke-test a release build on the emulator after touching either, since R8 breakage only shows at runtime.
