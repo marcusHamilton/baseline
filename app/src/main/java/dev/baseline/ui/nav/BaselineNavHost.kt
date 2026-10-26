@@ -126,6 +126,19 @@ private val popExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> Exi
     }
 }
 
+// The edge-swipe back gesture has its own transitions (Navigation's default shrinks the page to 70%). Leaving a pushed
+// page it slides the whole page off with the finger, no fade, so the page beneath stays solid and the two never blend.
+private val predictivePopEnter: AnimatedContentTransitionScope<NavBackStackEntry>.(Int) -> EnterTransition = {
+    if (isTab(initialState.destination.route)) fadeIn(tween(TAB_FADE_MS)) else EnterTransition.None
+}
+private val predictivePopExit: AnimatedContentTransitionScope<NavBackStackEntry>.(Int) -> ExitTransition = {
+    if (isTab(initialState.destination.route)) {
+        fadeOut(tween(TAB_FADE_MS))
+    } else {
+        slideOutHorizontally(tween(PUSH_MS, easing = PushEasing)) { it }
+    }
+}
+
 @Composable
 fun BaselineNavHost(container: AppContainer) {
     val nav = rememberNavController()
@@ -180,6 +193,8 @@ fun BaselineNavHost(container: AppContainer) {
                 exitTransition = exit,
                 popEnterTransition = popEnter,
                 popExitTransition = popExit,
+                predictivePopEnterTransition = predictivePopEnter,
+                predictivePopExitTransition = predictivePopExit,
             ) {
                 composable(Routes.ONBOARDING) {
                     val vm = viewModel { OnboardingViewModel(container.apiKeyVault, container.tokenProvider::clear, container.testKey) }
