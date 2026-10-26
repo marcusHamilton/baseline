@@ -1,0 +1,60 @@
+# Hand-written baseline profile (spec §12). AGP merges it with the profiles the Compose, Navigation and Room
+# libraries ship, rewrites it for R8's renaming, and profileinstaller AOT-compiles the listed code on first run.
+# Rule syntax: flags H (hot), S (start-up), P (post-start-up), then a class or method; * and ** are wildcards.
+
+# Start-up: application, DI, the activity, navigation and the Today tab (the start destination).
+HSPLdev/baseline/*;->**(**)**
+Ldev/baseline/*;
+HSPLdev/baseline/data/**;->**(**)**
+Ldev/baseline/data/**;
+HSPLdev/baseline/prefs/**;->**(**)**
+Ldev/baseline/prefs/**;
+HSPLdev/baseline/garmin/ApiKeyVault**;->**(**)**
+Ldev/baseline/garmin/ApiKeyVault**;
+HSPLdev/baseline/garmin/KeystoreAead**;->**(**)**
+Ldev/baseline/garmin/KeystoreAead**;
+HSPLdev/baseline/net/**;->**(**)**
+Ldev/baseline/net/**;
+HSPLdev/baseline/sync/SyncScheduler**;->**(**)**
+Ldev/baseline/sync/SyncScheduler**;
+HSPLdev/baseline/ui/nav/**;->**(**)**
+Ldev/baseline/ui/nav/**;
+HSPLdev/baseline/ui/theme/**;->**(**)**
+Ldev/baseline/ui/theme/**;
+HSPLdev/baseline/ui/components/**;->**(**)**
+Ldev/baseline/ui/components/**;
+HSPLdev/baseline/ui/format/**;->**(**)**
+Ldev/baseline/ui/format/**;
+HSPLdev/baseline/ui/today/**;->**(**)**
+Ldev/baseline/ui/today/**;
+HSPLdev/baseline/ui/onboarding/**;->**(**)**
+Ldev/baseline/ui/onboarding/**;
+
+# Tab switching and the screens opened from them: Calendar, Sleep, Activities, Activity, Records, Trends, Settings.
+HPLdev/baseline/ui/calendar/**;->**(**)**
+Ldev/baseline/ui/calendar/**;
+HPLdev/baseline/ui/sleep/**;->**(**)**
+Ldev/baseline/ui/sleep/**;
+HPLdev/baseline/ui/activities/**;->**(**)**
+Ldev/baseline/ui/activities/**;
+HPLdev/baseline/ui/activity/**;->**(**)**
+Ldev/baseline/ui/activity/**;
+HPLdev/baseline/ui/charts/**;->**(**)**
+Ldev/baseline/ui/charts/**;
+HPLdev/baseline/ui/records/**;->**(**)**
+Ldev/baseline/ui/records/**;
+HPLdev/baseline/ui/trends/**;->**(**)**
+Ldev/baseline/ui/trends/**;
+HPLdev/baseline/ui/settings/**;->**(**)**
+Ldev/baseline/ui/settings/**;
+# The activity screen unpacks stored streams.
+HPLdev/baseline/fit/ActivityStreams**;->**(**)**
+Ldev/baseline/fit/ActivityStreams**;
+
+# Vico draws Today's, Trends' and Activity's charts; MapLibre draws the route map. Neither ships a profile.
+HPLcom/patrykandpatrick/vico/**;->**(**)**
+Lcom/patrykandpatrick/vico/**;
+HPLorg/maplibre/android/maps/**;->**(**)**
+Lorg/maplibre/android/maps/**;
+HPLorg/maplibre/android/style/**;->**(**)**
+Lorg/maplibre/android/style/**;

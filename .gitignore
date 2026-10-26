@@ -1,0 +1,48 @@
+# Gradle and Kotlin
+.gradle/
+build/
+.kotlin/
+# Keep the wrapper jar (gradle/wrapper/gradle-wrapper.jar) tracked.
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.hprof
+output-metadata.json
+lint-results*.*
+
+# Signing and secrets: never commit keys or Garmin credentials
+*.jks
+*.keystore
+keystore.properties
+.env
+.env.*
+google-services.json
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.fleet/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python tooling (tools/)
+/tools/out/
+__pycache__/
+*.py[cod]
+.venv/
+
+# Agent workspaces
+.superpowers/
+.claude/worktrees/
+.claude/settings.local.json
