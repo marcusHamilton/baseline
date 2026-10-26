@@ -47,16 +47,27 @@ class ActivityScreenTest {
         Box(Modifier.fillMaxSize().testTag("map-stub"))
     }
 
-    private fun show(state: ActivityUiState, onBack: () -> Unit = {}) =
-        rule.setContent { BaselineTheme { ActivityContent(state, onBack, stubMap) } }
+    private fun show(state: ActivityUiState, onBack: () -> Unit = {}) = rule.setContent { BaselineTheme { ActivityContent(state, onBack, stubMap) } }
 
-    private fun top(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().positionInRoot.y
+    private fun top(tag: String) = rule
+        .onNodeWithTag(tag)
+        .fetchSemanticsNode()
+        .positionInRoot.y
 
     private fun runState(
-        a: ActivityEntity = act(1).copy(
-            avgHr = 152.0, maxHr = 171.0, elevationGainM = 86.0, garminLoad = 112.0, avgPower = 268.0,
-            zone1Sec = 192.0, zone2Sec = 880.0, zone3Sec = 1325.0, zone4Sec = 647.0, zone5Sec = 90.0,
-        ),
+        a: ActivityEntity =
+            act(1).copy(
+                avgHr = 152.0,
+                maxHr = 171.0,
+                elevationGainM = 86.0,
+                garminLoad = 112.0,
+                avgPower = 268.0,
+                zone1Sec = 192.0,
+                zone2Sec = 880.0,
+                zone3Sec = 1325.0,
+                zone4Sec = 647.0,
+                zone5Sec = 90.0,
+            ),
     ) = buildActivityState(a, ActivityScoreEntity(1, 112.0, LoadSource.HR, 9.8), runStream, emptyList(), emptyList(), null, Formatters(false))
 
     @Test
@@ -91,16 +102,29 @@ class ActivityScreenTest {
     @Test
     fun strengthShowsChipsAndBackIsAtLeast48dp() {
         var back = 0
+
         fun set(i: Int, cat: Int, reps: Int, kg: Double?) = StrengthSetEntity(
-            activityId = 1, setIndex = i, startOffsetSec = i * 60.0, exerciseName = null, setType = "ACTIVE",
-            category = cat, reps = reps, weightKg = kg, durationSec = 40.0,
+            activityId = 1,
+            setIndex = i,
+            startOffsetSec = i * 60.0,
+            exerciseName = null,
+            setType = "ACTIVE",
+            category = cat,
+            reps = reps,
+            weightKg = kg,
+            durationSec = 40.0,
         )
         val sets = listOf(set(0, ExerciseCategory.BENCH_PRESS, 6, 100.0), set(1, ExerciseCategory.PULL_UP, 8, null))
         show(buildActivityState(act(1, "strength_training", distanceM = null), null, null, emptyList(), sets, null, Formatters(false)), { back++ })
         rule.onNodeWithText("Bench Press").assertExists()
         rule.onNodeWithText("6 × 100").assertExists()
         rule.onNodeWithText("8").assertExists()
-        rule.onNodeWithContentDescription("Back").assertHasClickAction().assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp).performClick()
+        rule
+            .onNodeWithContentDescription("Back")
+            .assertHasClickAction()
+            .assertHeightIsAtLeast(48.dp)
+            .assertWidthIsAtLeast(48.dp)
+            .performClick()
         assertEquals(1, back)
     }
 

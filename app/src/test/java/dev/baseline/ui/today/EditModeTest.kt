@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
@@ -21,13 +22,12 @@ import dev.baseline.garmin.KeyStatus
 import dev.baseline.prefs.UserPrefs
 import dev.baseline.sync.SyncScheduler
 import dev.baseline.sync.closeWorkManagerDb
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -69,13 +69,23 @@ class EditModeTest {
         val store: DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = storeScope) { file }
         prefs = UserPrefs(store)
         val vault = ApiKeyVault(store, { it }, { it }, Clock.systemUTC())
-        vm = ViewModelProvider.create(store0, object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T = TodayViewModel(
-                Repository(db, prefs, vault), SyncScheduler(WorkManager.getInstance(context)) { false }, prefs,
-                flowOf(TaskCounts(0, 0)), flowOf(false), flowOf(KeyStatus.Invalid), flowOf(true), today,
-            ) as T
-        })[TodayViewModel::class.java]
+        vm =
+            ViewModelProvider.create(
+                store0,
+                object : ViewModelProvider.Factory {
+                    @Suppress("UNCHECKED_CAST")
+                    override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T = TodayViewModel(
+                        Repository(db, prefs, vault),
+                        SyncScheduler(WorkManager.getInstance(context)) { false },
+                        prefs,
+                        flowOf(TaskCounts(0, 0)),
+                        flowOf(false),
+                        flowOf(KeyStatus.Invalid),
+                        flowOf(true),
+                        today,
+                    ) as T
+                },
+            )[TodayViewModel::class.java]
     }
 
     @After
@@ -89,8 +99,7 @@ class EditModeTest {
         Dispatchers.resetMain()
     }
 
-    private suspend fun awaitState(predicate: (TodayUiState) -> Boolean): TodayUiState =
-        withTimeout(10_000) { vm.state.first(predicate) }
+    private suspend fun awaitState(predicate: (TodayUiState) -> Boolean): TodayUiState = withTimeout(10_000) { vm.state.first(predicate) }
 
     @Test
     fun moveRowPersistsOrder() = runBlocking {

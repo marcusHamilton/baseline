@@ -19,8 +19,17 @@ internal class RowDrag {
     /** Laid-out row heights by row id; written from layout, read from gestures and the scroll loop. */
     val heights = mutableMapOf<String, Float>()
 
-    fun start(index: Int) { from = index; delta = 0f; scrolled = 0f }
-    fun reset() { from = null; delta = 0f; scrolled = 0f }
+    fun start(index: Int) {
+        from = index
+        delta = 0f
+        scrolled = 0f
+    }
+
+    fun reset() {
+        from = null
+        delta = 0f
+        scrolled = 0f
+    }
 }
 
 /** Top of each row's slot, in the list's own coordinates. */

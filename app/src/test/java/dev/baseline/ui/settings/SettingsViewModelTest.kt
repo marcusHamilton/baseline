@@ -3,9 +3,10 @@ package dev.baseline.ui.settings
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
+import androidx.lifecycle.viewModelScope
+import androidx.test.core.app.ApplicationProvider
 import androidx.work.WorkManager
 import androidx.work.testing.WorkManagerTestInitHelper
-import androidx.test.core.app.ApplicationProvider
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.garmin.GarminResult
 import dev.baseline.garmin.KeyStatus
@@ -15,17 +16,16 @@ import dev.baseline.prefs.UserPrefs
 import dev.baseline.scores.HistoryRecalculator
 import dev.baseline.sync.SyncScheduler
 import dev.baseline.sync.closeWorkManagerDb
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.joinAll
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -49,8 +49,12 @@ import java.util.concurrent.atomic.AtomicInteger
 private class FakeScheduler(wm: WorkManager) : SyncScheduler(wm, { false }) {
     val syncNows = AtomicInteger()
     val applied = mutableListOf<SyncInterval>()
-    override suspend fun syncNow() { syncNows.incrementAndGet() }
-    override suspend fun apply(interval: SyncInterval) { applied += interval }
+    override suspend fun syncNow() {
+        syncNows.incrementAndGet()
+    }
+    override suspend fun apply(interval: SyncInterval) {
+        applied += interval
+    }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -64,6 +68,7 @@ class SettingsViewModelTest {
     private var testResult: GarminResult = GarminResult.Ok(ByteArray(0), null)
     private val recalcs = AtomicInteger()
     private val requestedCount = AtomicInteger()
+
     @Volatile private var banisterAtRecalc: BanisterSet? = null
     private lateinit var vm: SettingsViewModel
     private lateinit var recalculator: HistoryRecalculator
@@ -88,7 +93,9 @@ class SettingsViewModelTest {
         vault = ApiKeyVault(store, { it }, { it }, clock)
         scheduler = FakeScheduler(WorkManager.getInstance(context))
         recalculator = HistoryRecalculator(recalcScope, prefs) {
-            banisterAtRecalc = prefs.banister.first(); recalcs.incrementAndGet(); inRecalc()
+            banisterAtRecalc = prefs.banister.first()
+            recalcs.incrementAndGet()
+            inRecalc()
         }
         vm = SettingsViewModel(
             vault, prefs, scheduler,
@@ -98,7 +105,11 @@ class SettingsViewModelTest {
             coverage = flowOf(HistoryCoverage(LocalDate.of(2025, 9, 1), LocalDate.of(2025, 8, 30))),
             imperial = flowOf(false),
             failedCount = flowOf(3),
-            requeueFailed = { syncNowsAtRequeue = scheduler.syncNows.get(); requeues.incrementAndGet(); requeueGate.await() },
+            requeueFailed = {
+                syncNowsAtRequeue = scheduler.syncNows.get()
+                requeues.incrementAndGet()
+                requeueGate.await()
+            },
         )
     }
 
@@ -176,7 +187,10 @@ class SettingsViewModelTest {
     @Test
     fun noRequestIsLostAtTheEndOfARun() = runBlocking {
         val seenAtRunStart = AtomicInteger()
-        val flaky = HistoryRecalculator(recalcScope, prefs) { seenAtRunStart.set(requestedCount.get()); kotlinx.coroutines.yield() }
+        val flaky = HistoryRecalculator(recalcScope, prefs) {
+            seenAtRunStart.set(requestedCount.get())
+            kotlinx.coroutines.yield()
+        }
         repeat(300) {
             requestedCount.incrementAndGet()
             flaky.request()
@@ -193,7 +207,12 @@ class SettingsViewModelTest {
         prefs.setRecalcPending(true)
         val started = CompletableDeferred<Unit>()
         val gate = CompletableDeferred<Unit>()
-        inRecalc = { if (recalcs.get() == 1) { started.complete(Unit); gate.await() } }
+        inRecalc = {
+            if (recalcs.get() == 1) {
+                started.complete(Unit)
+                gate.await()
+            }
+        }
 
         assertTrue(recalculator.redoIfPending())
         withTimeout(10_000) { started.await() }
@@ -209,7 +228,12 @@ class SettingsViewModelTest {
     fun requestsDuringARunCoalesceIntoOneMoreRun() = runBlocking {
         val started = CompletableDeferred<Unit>()
         val gate = CompletableDeferred<Unit>()
-        inRecalc = { if (recalcs.get() == 1) { started.complete(Unit); gate.await() } }
+        inRecalc = {
+            if (recalcs.get() == 1) {
+                started.complete(Unit)
+                gate.await()
+            }
+        }
 
         vm.recalculateHistory().join()
         withTimeout(10_000) { started.await() }

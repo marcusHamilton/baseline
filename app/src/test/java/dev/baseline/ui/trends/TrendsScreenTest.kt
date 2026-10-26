@@ -26,7 +26,19 @@ class TrendsScreenTest {
     private val today = LocalDate.of(2026, 10, 24)
 
     @Test fun d7StateRendersCardsAverages_andRangeChipsAreBigEnough() {
-        val days = (0L..6).map { DayEntity(today.minusDays(it), restingHr = 48, hrvLastNight = 58.0, hrvWeeklyAvg = 55.0, hrvBalancedLow = 50.0, hrvBalancedUpper = 65.0, sleepSeconds = 26_400, sleepNeedMinutes = 480) }
+        val days =
+            (0L..6).map {
+                DayEntity(
+                    today.minusDays(it),
+                    restingHr = 48,
+                    hrvLastNight = 58.0,
+                    hrvWeeklyAvg = 55.0,
+                    hrvBalancedLow = 50.0,
+                    hrvBalancedUpper = 65.0,
+                    sleepSeconds = 26_400,
+                    sleepNeedMinutes = 480,
+                )
+            }
         val scores = (0L..5).map { ScoreEntity(today.minusDays(it), 70, false, null, 0.0, 0.0, null, null, 1) } // one day missing
         val picked = mutableListOf<TrendRange>()
         rule.setContent { BaselineTheme { TrendsContent(buildTrendsState(TrendRange.D7, today, days, scores), { picked += it }) } }

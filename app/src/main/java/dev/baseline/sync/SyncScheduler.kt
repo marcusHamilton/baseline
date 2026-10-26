@@ -27,10 +27,11 @@ open class SyncScheduler(private val workManager: WorkManager, private val backf
             workManager.cancelUniqueWork(PERIODIC)
             return
         }
-        val request = PeriodicWorkRequestBuilder<SyncWorker>(if (interval == SyncInterval.HOURLY) 1 else 3, TimeUnit.HOURS)
-            .setConstraints(network(networkForBackfill()))
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
-            .build()
+        val request =
+            PeriodicWorkRequestBuilder<SyncWorker>(if (interval == SyncInterval.HOURLY) 1 else 3, TimeUnit.HOURS)
+                .setConstraints(network(networkForBackfill()))
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
+                .build()
         workManager.enqueueUniquePeriodicWork(PERIODIC, ExistingPeriodicWorkPolicy.UPDATE, request)
     }
 
@@ -44,8 +45,11 @@ open class SyncScheduler(private val workManager: WorkManager, private val backf
         if (workManager.getWorkInfosForUniqueWorkFlow(CONTINUE).first().none { it.state == WorkInfo.State.RUNNING }) {
             workManager.cancelUniqueWork(CONTINUE)
         }
-        val waiting = workManager.getWorkInfosForUniqueWorkFlow(SYNC_NOW).first()
-            .any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.BLOCKED }
+        val waiting =
+            workManager
+                .getWorkInfosForUniqueWorkFlow(SYNC_NOW)
+                .first()
+                .any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.BLOCKED }
         enqueueNow(NetworkType.CONNECTED, if (waiting) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP, user = true)
     }
 
@@ -59,29 +63,32 @@ open class SyncScheduler(private val workManager: WorkManager, private val backf
      * (spec §5.1). It has its own chain, [CONTINUE_USER], so it never queues behind an automatic link that waits for Wi-Fi.
      */
     open suspend fun continueSoon(user: Boolean = false) {
-        val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(network(if (user) NetworkType.CONNECTED else networkForBackfill()))
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
-            .apply { if (user) addTag(USER) }
-            .build()
+        val request =
+            OneTimeWorkRequestBuilder<SyncWorker>()
+                .setConstraints(network(if (user) NetworkType.CONNECTED else networkForBackfill()))
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
+                .apply { if (user) addTag(USER) }
+                .build()
         workManager.enqueueUniqueWork(if (user) CONTINUE_USER else CONTINUE, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
     }
 
     /** Work for all unique names; sync-now runs carry the [SYNC_NOW] tag. */
-    val workInfos: Flow<List<WorkInfo>> = combine(
-        listOf(SYNC_NOW, PERIODIC, CONTINUE, CONTINUE_USER).map { workManager.getWorkInfosForUniqueWorkFlow(it) },
-    ) { it.toList().flatten() }
+    val workInfos: Flow<List<WorkInfo>> =
+        combine(
+            listOf(SYNC_NOW, PERIODIC, CONTINUE, CONTINUE_USER).map { workManager.getWorkInfosForUniqueWorkFlow(it) },
+        ) { it.toList().flatten() }
 
     private suspend fun networkForBackfill() = if (backfillPending()) NetworkType.UNMETERED else NetworkType.CONNECTED
 
     private fun enqueueNow(type: NetworkType, policy: ExistingWorkPolicy, user: Boolean = false) {
-        val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(network(type))
-            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
-            .addTag(SYNC_NOW)
-            .apply { if (user) addTag(USER) }
-            .build()
+        val request =
+            OneTimeWorkRequestBuilder<SyncWorker>()
+                .setConstraints(network(type))
+                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
+                .addTag(SYNC_NOW)
+                .apply { if (user) addTag(USER) }
+                .build()
         workManager.enqueueUniqueWork(SYNC_NOW, policy, request)
     }
 
@@ -92,6 +99,7 @@ open class SyncScheduler(private val workManager: WorkManager, private val backf
         const val SYNC_NOW = "sync-now"
         const val CONTINUE = "sync-continue"
         const val CONTINUE_USER = "sync-continue-user"
+
         /** Marks work started by the user's "Sync now" and its continuations. */
         const val USER = "user"
         private const val BACKOFF_SECONDS = 60L

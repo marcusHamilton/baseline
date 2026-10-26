@@ -2,13 +2,13 @@ package dev.baseline.data.parse
 
 import dev.baseline.data.db.DayEntity
 import dev.baseline.scores.HrPoint
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import kotlin.math.abs
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Raw Garmin JSON -> [DayEntity]. Each merge returns an updated copy; missing fields stay null.
@@ -84,18 +84,23 @@ object DayParser {
     }
 
     /** Level of the [curve] sample nearest [sleepEnd], only within ±15 min; null otherwise. */
-    fun wakeLevel(curve: List<HrPoint>, sleepEnd: Instant): Int? =
-        curve.minByOrNull { abs(it.epochSec - sleepEnd.epochSecond) }
-            ?.takeIf { abs(it.epochSec - sleepEnd.epochSecond) <= WAKE_WINDOW_SEC }?.bpm
+    fun wakeLevel(curve: List<HrPoint>, sleepEnd: Instant): Int? = curve
+        .minByOrNull { abs(it.epochSec - sleepEnd.epochSecond) }
+        ?.takeIf { abs(it.epochSec - sleepEnd.epochSecond) <= WAKE_WINDOW_SEC }
+        ?.bpm
 
     /**
      * The all-day curve as [HrPoint]s (`bpm` = level 0..100), epochSec = GMT ms / 1000. Null levels are skipped,
      * duplicate timestamps keep the last value, result sorted by time. Columns are found via the descriptor list.
      */
     fun parseBodyBatteryCurve(item: JsonObject): List<HrPoint> {
-        val cols = item.arr("bodyBatteryValueDescriptorDTOList").orEmpty().mapNotNull { it as? JsonObject }
-            .mapNotNull { c -> c.str("bodyBatteryValueDescriptorKey")?.let { k -> c.int("bodyBatteryValueDescriptorIndex")?.let { k to it } } }
-            .toMap()
+        val cols =
+            item
+                .arr("bodyBatteryValueDescriptorDTOList")
+                .orEmpty()
+                .mapNotNull { it as? JsonObject }
+                .mapNotNull { c -> c.str("bodyBatteryValueDescriptorKey")?.let { k -> c.int("bodyBatteryValueDescriptorIndex")?.let { k to it } } }
+                .toMap()
         val tsCol = cols["timestamp"] ?: return emptyList()
         val levelCol = cols["bodyBatteryLevel"] ?: return emptyList()
         val byTime = sortedMapOf<Long, Int>()
@@ -122,12 +127,13 @@ object DayParser {
 
     /** `heartRateValues` is `[[epochMs, bpm|null], ...]`; null samples are dropped. */
     fun parseHeartRateDay(json: JsonObject): Pair<LocalDate, List<HrPoint>> {
-        val points = json.arr("heartRateValues").orEmpty().mapNotNull { row ->
-            val r = row as? JsonArray ?: return@mapNotNull null
-            val ms = (r.getOrNull(0) as? JsonPrimitive)?.numberOrNull() ?: return@mapNotNull null
-            val bpm = (r.getOrNull(1) as? JsonPrimitive)?.numberOrNull() ?: return@mapNotNull null
-            HrPoint(ms.toLong() / 1000, bpm.toInt())
-        }
+        val points =
+            json.arr("heartRateValues").orEmpty().mapNotNull { row ->
+                val r = row as? JsonArray ?: return@mapNotNull null
+                val ms = (r.getOrNull(0) as? JsonPrimitive)?.numberOrNull() ?: return@mapNotNull null
+                val bpm = (r.getOrNull(1) as? JsonPrimitive)?.numberOrNull() ?: return@mapNotNull null
+                HrPoint(ms.toLong() / 1000, bpm.toInt())
+            }
         return date(json, "calendarDate") to points
     }
 
@@ -136,7 +142,11 @@ object DayParser {
 
     private fun date(o: JsonObject, key: String): LocalDate {
         val s = o.str(key) ?: throw IllegalArgumentException("missing $key")
-        return try { LocalDate.parse(s) } catch (ex: DateTimeParseException) { throw IllegalArgumentException("bad $key: $s", ex) }
+        return try {
+            LocalDate.parse(s)
+        } catch (ex: DateTimeParseException) {
+            throw IllegalArgumentException("bad $key: $s", ex)
+        }
     }
 
     private fun base(e: DayEntity?, o: JsonObject, key: String = "calendarDate"): DayEntity {
@@ -147,7 +157,8 @@ object DayParser {
 
     private val ADJUSTMENTS = listOf("trainingFeedback", "sleepHistoryAdjustment", "hrvAdjustment", "napAdjustment")
 
-    private fun reasons(next: JsonObject): String? =
-        ADJUSTMENTS.mapNotNull { k -> next.str(k)?.takeIf { it != "NO_CHANGE" }?.let { "$k=$it" } }
-            .takeIf { it.isNotEmpty() }?.joinToString(",")
+    private fun reasons(next: JsonObject): String? = ADJUSTMENTS
+        .mapNotNull { k -> next.str(k)?.takeIf { it != "NO_CHANGE" }?.let { "$k=$it" } }
+        .takeIf { it.isNotEmpty() }
+        ?.joinToString(",")
 }

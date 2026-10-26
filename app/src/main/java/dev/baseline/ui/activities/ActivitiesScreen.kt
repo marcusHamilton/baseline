@@ -39,8 +39,8 @@ import dev.baseline.R
 import dev.baseline.data.SportFamily
 import dev.baseline.ui.components.ActivityCard
 import dev.baseline.ui.format.Formatters
-import dev.baseline.ui.theme.Bg
 import dev.baseline.ui.theme.BarlowCondensed
+import dev.baseline.ui.theme.Bg
 import dev.baseline.ui.theme.Card
 import dev.baseline.ui.theme.StrainBlueLight
 import dev.baseline.ui.theme.TextBody
@@ -49,8 +49,12 @@ import dev.baseline.ui.theme.TextPrimary
 import java.util.Locale
 
 private val Chips: List<Pair<String, SportFamily?>> = listOf(
-    "All" to null, "Run" to SportFamily.RUN, "Ride" to SportFamily.RIDE,
-    "Strength" to SportFamily.STRENGTH, "Swim" to SportFamily.SWIM, "Other" to SportFamily.OTHER,
+    "All" to null,
+    "Run" to SportFamily.RUN,
+    "Ride" to SportFamily.RIDE,
+    "Strength" to SportFamily.STRENGTH,
+    "Swim" to SportFamily.SWIM,
+    "Other" to SportFamily.OTHER,
 )
 
 private val RecordsBg = Color(0xFF3A2F12)
@@ -65,12 +69,7 @@ fun ActivitiesScreen(vm: ActivitiesViewModel, onOpenActivity: (Long) -> Unit, on
 }
 
 @Composable
-fun ActivitiesContent(
-    state: ActivitiesUiState,
-    onFilter: (SportFamily?) -> Unit,
-    onOpenRecords: () -> Unit,
-    onOpenActivity: (Long) -> Unit,
-) {
+fun ActivitiesContent(state: ActivitiesUiState, onFilter: (SportFamily?) -> Unit, onOpenRecords: () -> Unit, onOpenActivity: (Long) -> Unit) {
     LazyColumn(
         Modifier.fillMaxSize().testTag("screen-activities"),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp),
@@ -82,7 +81,9 @@ fun ActivitiesContent(
                 Text(
                     Formatters.dayHeader(group.date, state.today),
                     Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp),
-                    fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextMuted,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextMuted,
                 )
             }
             items(group.items, key = { it.id }) { a ->
@@ -103,7 +104,8 @@ private fun Header(selected: SportFamily?, onFilter: (SportFamily?) -> Unit, onO
                     .semantics { contentDescription = "Records" }
                     .clickable(onClickLabel = "Open records", role = Role.Button, onClick = onOpenRecords)
                     .padding(horizontal = 14.dp),
-                Arrangement.spacedBy(6.dp), Alignment.CenterVertically,
+                Arrangement.spacedBy(6.dp),
+                Alignment.CenterVertically,
             ) {
                 Icon(painterResource(R.drawable.ic_trophy), contentDescription = null, Modifier.size(16.dp), tint = RecordsFg)
                 Text("Records", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = RecordsFg)
@@ -113,13 +115,20 @@ private fun Header(selected: SportFamily?, onFilter: (SportFamily?) -> Unit, onO
             Chips.forEach { (label, family) ->
                 val on = family == selected
                 FilterChip(
-                    on, { onFilter(family) }, { Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium) },
+                    on,
+                    { onFilter(family) },
+                    { Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium) },
                     colors = FilterChipDefaults.filterChipColors(
-                        containerColor = Color.Transparent, labelColor = TextBody,
-                        selectedContainerColor = TextPrimary, selectedLabelColor = Bg,
+                        containerColor = Color.Transparent,
+                        labelColor = TextBody,
+                        selectedContainerColor = TextPrimary,
+                        selectedLabelColor = Bg,
                     ),
                     border = FilterChipDefaults.filterChipBorder(
-                        enabled = true, selected = on, borderColor = ChipBorder, selectedBorderColor = TextPrimary,
+                        enabled = true,
+                        selected = on,
+                        borderColor = ChipBorder,
+                        selectedBorderColor = TextPrimary,
                     ),
                     shape = RoundedCornerShape(18.dp),
                 )

@@ -16,7 +16,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-class BaselineApp : Application(), Configuration.Provider {
+class BaselineApp :
+    Application(),
+    Configuration.Provider {
     override val workManagerConfiguration: Configuration = Configuration.Builder().build()
 
     lateinit var container: AppContainer
@@ -27,11 +29,13 @@ class BaselineApp : Application(), Configuration.Provider {
         container = AppContainer(this)
         SyncWorker.createChannel(this)
         // Midnight and clock/timezone changes while the process is alive; MainActivity.onResume covers the rest.
-        val dateChanged = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) = container.dateTicker.refresh()
-        }
+        val dateChanged =
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) = container.dateTicker.refresh()
+            }
         ContextCompat.registerReceiver(
-            this, dateChanged,
+            this,
+            dateChanged,
             IntentFilter().apply {
                 addAction(Intent.ACTION_DATE_CHANGED)
                 addAction(Intent.ACTION_TIME_CHANGED)
@@ -47,12 +51,15 @@ class BaselineApp : Application(), Configuration.Provider {
                     container.scheduler.apply(it)
                 } catch (e: CancellationException) {
                     throw e
-                } catch (e: Exception) { // one bad apply must not end the collector
+                } catch (e: Exception) {
+                    // one bad apply must not end the collector
                     Log.w(TAG, "schedule: ${e.javaClass.simpleName}: ${e.message}")
                 }
             }
         }
     }
 
-    private companion object { const val TAG = "BaselineApp" }
+    private companion object {
+        const val TAG = "BaselineApp"
+    }
 }

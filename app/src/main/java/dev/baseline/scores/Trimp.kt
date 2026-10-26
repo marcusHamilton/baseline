@@ -8,8 +8,7 @@ import kotlin.math.exp
 import kotlin.math.min
 
 /** Samples with a missing (-1) or non-positive bpm are dropped. */
-fun ActivityStreams.toHrPoints(): List<HrPoint> =
-    epochSec.indices.filter { hr[it] > 0 }.map { HrPoint(epochSec[it], hr[it]) }
+fun ActivityStreams.toHrPoints(): List<HrPoint> = epochSec.indices.filter { hr[it] > 0 }.map { HrPoint(epochSec[it], hr[it]) }
 
 object Trimp {
     /**
@@ -18,13 +17,11 @@ object Trimp {
      * included, contributes that fixed step. Samples below [floorBpm] are dropped before pairing.
      * Contract: hrMax <= hrRest returns 0.0; callers must validate the HR zones.
      */
-    fun load(
-        points: List<HrPoint>, hrRest: Int, hrMax: Int, set: BanisterSet,
-        maxGapSec: Int = 10, floorBpm: Int? = null, fixedDtSec: Int? = null,
-    ): Double {
+    fun load(points: List<HrPoint>, hrRest: Int, hrMax: Int, set: BanisterSet, maxGapSec: Int = 10, floorBpm: Int? = null, fixedDtSec: Int? = null): Double {
         val pts = if (floorBpm == null) points else points.filter { it.bpm >= floorBpm }
         val reserve = (hrMax - hrRest).toDouble()
         if (reserve <= 0.0) return 0.0
+
         fun effort(a: HrPoint): Double {
             val r = ((a.bpm - hrRest) / reserve).coerceIn(0.0, 1.0)
             return r * set.a * exp(set.b * r)
@@ -43,11 +40,13 @@ object Trimp {
 
 object NonActivityLoad {
     /** All-day 2-min HR; samples inside any (inclusive) window or below [zone1FloorBpm] are excluded, each counts 120 s. */
-    fun compute(
-        day: List<HrPoint>, activityWindows: List<LongRange>, zone1FloorBpm: Int, hrRest: Int, hrMax: Int, set: BanisterSet,
-    ): Double = Trimp.load(
+    fun compute(day: List<HrPoint>, activityWindows: List<LongRange>, zone1FloorBpm: Int, hrRest: Int, hrMax: Int, set: BanisterSet): Double = Trimp.load(
         day.filter { p -> activityWindows.none { p.epochSec in it } },
-        hrRest, hrMax, set, floorBpm = zone1FloorBpm, fixedDtSec = 120,
+        hrRest,
+        hrMax,
+        set,
+        floorBpm = zone1FloorBpm,
+        fixedDtSec = 120,
     )
 }
 
@@ -71,8 +70,10 @@ object ActivityLoad {
      * caller then falls back to k = 1.0 (Task 14).
      */
     fun scalingFactors(samples: List<LoadSample>): Map<SportFamily, Double> {
-        val ratios = samples.filter { it.coverage >= MIN_COVERAGE && (it.garminLoad ?: 0.0) > 10.0 }
-            .map { it.family to it.trimp / it.garminLoad!! }
+        val ratios =
+            samples
+                .filter { it.coverage >= MIN_COVERAGE && (it.garminLoad ?: 0.0) > 10.0 }
+                .map { it.family to it.trimp / it.garminLoad!! }
         if (ratios.isEmpty()) return emptyMap()
         val global = median(ratios.map { it.second })
         val perFamily = ratios.groupBy({ it.first }, { it.second }).mapValues { median(it.value) }
@@ -80,7 +81,8 @@ object ActivityLoad {
     }
 
     private fun median(v: List<Double>): Double {
-        val s = v.sorted(); val m = s.size / 2
+        val s = v.sorted()
+        val m = s.size / 2
         return if (s.size % 2 == 1) s[m] else (s[m - 1] + s[m]) / 2
     }
 }

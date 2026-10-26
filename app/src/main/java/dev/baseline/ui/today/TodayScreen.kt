@@ -5,22 +5,13 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.runtime.key
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.semantics.CustomAccessibilityAction
-import androidx.compose.ui.semantics.customActions
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +24,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,56 +34,63 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.zIndex
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.baseline.R
 import dev.baseline.garmin.KeyStatus
 import dev.baseline.ui.activity.NOTE_UNREADABLE
-import dev.baseline.ui.components.KeyBanner
-import dev.baseline.ui.theme.Outline
-import dev.baseline.ui.theme.RecoveryAmber
 import dev.baseline.ui.components.ActivityCard
 import dev.baseline.ui.components.BodyBatteryCard
 import dev.baseline.ui.components.CircleButton
 import dev.baseline.ui.components.Dial
+import dev.baseline.ui.components.KeyBanner
 import dev.baseline.ui.components.StatRow
 import dev.baseline.ui.components.zoneColor
 import dev.baseline.ui.format.Formatters
 import dev.baseline.ui.theme.BarlowCondensed
 import dev.baseline.ui.theme.Card
+import dev.baseline.ui.theme.Outline
+import dev.baseline.ui.theme.RecoveryAmber
 import dev.baseline.ui.theme.SleepPurple
 import dev.baseline.ui.theme.SleepPurpleLight
 import dev.baseline.ui.theme.StrainBlue
@@ -110,13 +110,7 @@ import kotlin.math.roundToInt
 
 /** Today: the permission prompt, pull-to-refresh and the sync line around the stateless [TodayContent]. */
 @Composable
-fun TodayScreen(
-    vm: TodayViewModel,
-    onOpenCalendar: () -> Unit,
-    onOpenSleep: (LocalDate) -> Unit,
-    onOpenActivity: (Long) -> Unit,
-    zone: StateFlow<ZoneId>,
-) {
+fun TodayScreen(vm: TodayViewModel, onOpenCalendar: () -> Unit, onOpenSleep: (LocalDate) -> Unit, onOpenActivity: (Long) -> Unit, zone: StateFlow<ZoneId>) {
     val context = LocalContext.current
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     LaunchedEffect(Unit) {
@@ -124,7 +118,9 @@ fun TodayScreen(
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
             vm.claimNotificationPrompt()
-        ) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        ) {
+            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
     val state by vm.state.collectAsStateWithLifecycle()
     val sync by vm.sync.collectAsStateWithLifecycle()
@@ -157,13 +153,20 @@ fun TodayContent(
 ) {
     val scroll = rememberScrollState()
     var viewport by remember { mutableStateOf(Rect.Zero) }
-    Column(Modifier.fillMaxSize().testTag("screen-today").onGloballyPositioned { viewport = it.boundsInWindow() }.verticalScroll(scroll).padding(bottom = 16.dp)) {
+    Column(
+        Modifier.fillMaxSize().testTag("screen-today").onGloballyPositioned {
+            viewport = it.boundsInWindow()
+        }.verticalScroll(scroll).padding(bottom = 16.dp),
+    ) {
         Header(state, zone, onPrevDay, onNextDay, onOpenCalendar)
         KeyBanner(keyStatus, Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
         if (state.unreadable) {
             Text(
-                NOTE_UNREADABLE, Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
-                fontSize = 13.sp, color = RecoveryAmber, textAlign = TextAlign.Center,
+                NOTE_UNREADABLE,
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+                fontSize = 13.sp,
+                color = RecoveryAmber,
+                textAlign = TextAlign.Center,
             )
         }
         syncLine?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 20.dp), fontSize = 12.sp, color = TextMuted, textAlign = TextAlign.Center) }
@@ -190,7 +193,14 @@ private fun BaselineSection(
 ) {
     Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp), Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-            Text("VS. 30-DAY BASELINE", fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, letterSpacing = 1.28.sp, color = TextMuted)
+            Text(
+                "VS. 30-DAY BASELINE",
+                fontFamily = BarlowCondensed,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp,
+                letterSpacing = 1.28.sp,
+                color = TextMuted,
+            )
             // 48 dp touch target around the 36 dp pill of the mockup.
             Box(
                 Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clickable(role = Role.Button, onClick = onToggleEdit)
@@ -199,8 +209,11 @@ private fun BaselineSection(
             ) {
                 Text(
                     if (state.editing) "Done" else "Edit",
-                    Modifier.height(36.dp).border(1.dp, Outline, RoundedCornerShape(18.dp)).padding(horizontal = 14.dp).wrapContentHeight(Alignment.CenterVertically),
-                    fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                    Modifier.height(
+                        36.dp,
+                    ).border(1.dp, Outline, RoundedCornerShape(18.dp)).padding(horizontal = 14.dp).wrapContentHeight(Alignment.CenterVertically),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
         }
@@ -248,7 +261,13 @@ private fun BaselineSection(
                     val dragging = index == from
                     EditableRow(
                         row, index, shownRows.lastIndex, onMoveRow, onToggleHidden,
-                        offset = if (dragging) drag.offset else if (from != null && target != null) makeRoom(heights, gap, from, target, index) else 0f,
+                        offset = if (dragging) {
+                            drag.offset
+                        } else if (from != null && target != null) {
+                            makeRoom(heights, gap, from, target, index)
+                        } else {
+                            0f
+                        },
                         dragging = dragging,
                         active = from != null,
                         modifier = Modifier.onSizeChanged { drag.heights[row.id] = it.height.toFloat() },
@@ -258,11 +277,25 @@ private fun BaselineSection(
                                 onDragEnd = {
                                     val f = drag.from
                                     val hs = rows.map { drag.heights[it.id] ?: 0f }
-                                    if (f != null && f <= hs.lastIndex) dragTarget(hs, gap, f, drag.offset).let { if (it != f) { dropped = Triple(savedRows, f, it); onMoveRow(f, it) } }
+                                    if (f != null &&
+                                        f <= hs.lastIndex
+                                    ) {
+                                        dragTarget(hs, gap, f, drag.offset).let {
+                                            if (it !=
+                                                f
+                                            ) {
+                                                dropped = Triple(savedRows, f, it)
+                                                onMoveRow(f, it)
+                                            }
+                                        }
+                                    }
                                     drag.reset()
                                 },
                                 onDragCancel = { drag.reset() },
-                            ) { change, amount -> change.consume(); drag.delta += amount.y }
+                            ) { change, amount ->
+                                change.consume()
+                                drag.delta += amount.y
+                            }
                         },
                     )
                 }
@@ -288,18 +321,41 @@ private fun EditableRow(
     // Rows making room slide while a drag is on; the dragged row follows the finger exactly, and a drop snaps (no slide).
     val shown by animateFloatAsState(offset, label = "row-shift")
     Row(
-        modifier.zIndex(if (dragging) 1f else 0f).graphicsLayer { translationY = if (dragging) offset else if (active) shown else 0f }
+        modifier.zIndex(if (dragging) 1f else 0f).graphicsLayer {
+            translationY = if (dragging) {
+                offset
+            } else if (active) {
+                shown
+            } else {
+                0f
+            }
+        }
             .fillMaxWidth().alpha(if (row.hidden) 0.45f else 1f).dashedBorder(shape),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            painterResource(R.drawable.ic_drag_handle), contentDescription = "Drag to reorder ${row.label}",
+            painterResource(R.drawable.ic_drag_handle),
+            contentDescription = "Drag to reorder ${row.label}",
             Modifier.size(width = 48.dp, height = 48.dp).then(handle).padding(horizontal = 16.dp, vertical = 16.dp)
                 .semantics {
                     // Drag is hard with a screen reader or a keyboard; these do the same through accessibility actions.
                     customActions = listOfNotNull(
-                        if (index > 0) CustomAccessibilityAction("Move up") { onMove(index, index - 1); true } else null,
-                        if (index < last) CustomAccessibilityAction("Move down") { onMove(index, index + 1); true } else null,
+                        if (index > 0) {
+                            CustomAccessibilityAction("Move up") {
+                                onMove(index, index - 1)
+                                true
+                            }
+                        } else {
+                            null
+                        },
+                        if (index < last) {
+                            CustomAccessibilityAction("Move down") {
+                                onMove(index, index + 1)
+                                true
+                            }
+                        } else {
+                            null
+                        },
                     )
                 },
             tint = TextMuted,
@@ -307,12 +363,16 @@ private fun EditableRow(
         StatRow(row, Modifier.weight(1f))
         Box(
             Modifier.size(48.dp).clickable(role = Role.Button, onClick = { onToggleHidden(row.id) })
-                .semantics { toggleableState = if (row.hidden) androidx.compose.ui.state.ToggleableState.On else androidx.compose.ui.state.ToggleableState.Off },
+                .semantics {
+                    toggleableState = if (row.hidden) androidx.compose.ui.state.ToggleableState.On else androidx.compose.ui.state.ToggleableState.Off
+                },
             Alignment.Center,
         ) {
             Icon(
                 painterResource(if (row.hidden) R.drawable.ic_eye_off else R.drawable.ic_eye),
-                contentDescription = (if (row.hidden) "Show " else "Hide ") + row.label, Modifier.size(20.dp), tint = TextBody,
+                contentDescription = (if (row.hidden) "Show " else "Hide ") + row.label,
+                Modifier.size(20.dp),
+                tint = TextBody,
             )
         }
     }
@@ -322,23 +382,36 @@ private fun Modifier.dashedBorder(shape: RoundedCornerShape) = drawWithContent {
     drawContent()
     val r = shape.topStart.toPx(size, this)
     drawRoundRect(
-        Outline, cornerRadius = CornerRadius(r), style = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))),
+        Outline,
+        cornerRadius = CornerRadius(r),
+        style = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))),
     )
 }
 
 @Composable
 private fun Section(title: String, content: @Composable () -> Unit) {
     Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp), Arrangement.spacedBy(8.dp)) {
-        Text(title, Modifier.padding(bottom = 4.dp), fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, letterSpacing = 1.28.sp, color = TextMuted)
+        Text(
+            title,
+            Modifier.padding(bottom = 4.dp),
+            fontFamily = BarlowCondensed,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 16.sp,
+            letterSpacing = 1.28.sp,
+            color = TextMuted,
+        )
         content()
     }
 }
 
 private val DateLine = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)
 
-private fun subtitle(date: LocalDate, lastSynced: Instant?, zone: ZoneId): String {
-    return listOfNotNull(date.format(DateLine), lastSynced?.let { Formatters.synced(it, LocalDate.now(zone), zone) }).joinToString(" · ")
-}
+private fun subtitle(date: LocalDate, lastSynced: Instant?, zone: ZoneId): String = listOfNotNull(
+    date.format(DateLine),
+    lastSynced?.let {
+        Formatters.synced(it, LocalDate.now(zone), zone)
+    },
+).joinToString(" · ")
 
 @Composable
 private fun Header(state: TodayUiState, zone: ZoneId, onPrev: () -> Unit, onNext: () -> Unit, onCalendar: () -> Unit) {
@@ -347,13 +420,17 @@ private fun Header(state: TodayUiState, zone: ZoneId, onPrev: () -> Unit, onNext
         Column(
             Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Open calendar", role = Role.Button, onClick = onCalendar)
                 .padding(horizontal = 12.dp, vertical = 4.dp),
-            Arrangement.spacedBy(2.dp), Alignment.CenterHorizontally,
+            Arrangement.spacedBy(2.dp),
+            Alignment.CenterHorizontally,
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(painterResource(R.drawable.ic_calendar), contentDescription = null, Modifier.size(18.dp))
                 Text(
                     if (state.isToday) "TODAY" else state.date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.US).uppercase(),
-                    fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, letterSpacing = 0.88.sp,
+                    fontFamily = BarlowCondensed,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 22.sp,
+                    letterSpacing = 0.88.sp,
                 )
             }
             Text(subtitle(state.date, state.lastSynced, zone), fontSize = 13.sp, color = TextMuted)
@@ -369,11 +446,18 @@ private fun Dials(state: TodayUiState, onOpenSleep: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp), Arrangement.SpaceBetween, Alignment.Bottom) {
         Column(
             Modifier.width(96.dp).clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClick = onOpenSleep),
-            Arrangement.spacedBy(8.dp), Alignment.CenterHorizontally,
+            Arrangement.spacedBy(8.dp),
+            Alignment.CenterHorizontally,
         ) {
             Dial(
-                state.sleepPct?.let { it / 100f }, state.sleepPct?.toString() ?: "—", if (state.sleepPct != null) "%" else "", SleepPurple,
-                96.dp, 8.dp, 30, state.sleepPct?.let { "Sleep performance $it percent" } ?: "Sleep unavailable",
+                state.sleepPct?.let { it / 100f },
+                state.sleepPct?.toString() ?: "—",
+                if (state.sleepPct != null) "%" else "",
+                SleepPurple,
+                96.dp,
+                8.dp,
+                30,
+                state.sleepPct?.let { "Sleep performance $it percent" } ?: "Sleep unavailable",
             )
             DialLabel("SLEEP", SleepPurpleLight)
         }
@@ -388,8 +472,14 @@ private fun Dials(state: TodayUiState, onOpenSleep: () -> Unit) {
         Column(Modifier.width(96.dp), Arrangement.spacedBy(8.dp), Alignment.CenterHorizontally) {
             val strain = state.strain
             Dial(
-                strain?.let { (it / 21.0).coerceIn(0.0, 1.0).toFloat() }, strain?.let { "%.1f".format(Locale.US, it) } ?: "—", "", StrainBlue,
-                96.dp, 8.dp, 30, strain?.let { "Strain ${"%.1f".format(Locale.US, it)} of 21" } ?: "Strain unavailable",
+                strain?.let { (it / 21.0).coerceIn(0.0, 1.0).toFloat() },
+                strain?.let { "%.1f".format(Locale.US, it) } ?: "—",
+                "",
+                StrainBlue,
+                96.dp,
+                8.dp,
+                30,
+                strain?.let { "Strain ${"%.1f".format(Locale.US, it)} of 21" } ?: "Strain unavailable",
             )
             DialLabel("STRAIN", StrainBlueLight)
         }
@@ -397,8 +487,7 @@ private fun Dials(state: TodayUiState, onOpenSleep: () -> Unit) {
 }
 
 @Composable
-private fun DialLabel(text: String, color: Color) =
-    Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.96.sp, color = color)
+private fun DialLabel(text: String, color: Color) = Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.96.sp, color = color)
 
 private fun targetText(r: ClosedFloatingPointRange<Double>) = "${r.start.roundToInt()} – ${r.endInclusive.roundToInt()}"
 
@@ -415,7 +504,10 @@ private fun InsightCard(state: TodayUiState, modifier: Modifier = Modifier) {
             Spacer(Modifier.size(10.dp).clip(CircleShape).background(color))
             Text(
                 (recovery?.let { zoneTitle(it.zone) } ?: "Not enough data for Recovery yet").uppercase(),
-                fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, letterSpacing = 0.54.sp,
+                fontFamily = BarlowCondensed,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 18.sp,
+                letterSpacing = 0.54.sp,
             )
         }
         val body = recovery?.let { insightSentence(it.top) } ?: state.recoveryReason?.replaceFirstChar(Char::uppercase)

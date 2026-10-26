@@ -14,13 +14,16 @@ typealias KeyTest = suspend (String, suspend () -> Unit) -> GarminResult
  * success saves the key and then calls [clearToken] (so the next sync mints with it), both inside [testKey]'s request lock. Returns null on success, else a message
  * for the user. Messages never include the key.
  */
-suspend fun ApiKeyVault.saveAndTest(
-    key: String,
-    lifetimeDays: Int,
-    testKey: KeyTest,
-    clearToken: suspend () -> Unit,
-): String? = try {
-    when (val r = testKey(key) { withContext(NonCancellable) { save(key, lifetimeDays); clearToken() } }) {
+suspend fun ApiKeyVault.saveAndTest(key: String, lifetimeDays: Int, testKey: KeyTest, clearToken: suspend () -> Unit): String? = try {
+    when (
+        val r =
+            testKey(key) {
+                withContext(NonCancellable) {
+                    save(key, lifetimeDays)
+                    clearToken()
+                }
+            }
+    ) {
         is GarminResult.Ok, GarminResult.Empty -> null
         GarminResult.KeyInvalid -> "Garmin didn't accept this key. Check you copied all of it."
         is GarminResult.RateLimited -> "Garmin is busy right now. Try again in a minute."

@@ -1,10 +1,10 @@
 package dev.baseline.sync
 
 import android.content.Context
-import androidx.room3.Room
-import androidx.test.core.app.ApplicationProvider
 import android.content.pm.ServiceInfo
 import androidx.concurrent.futures.CallbackToFutureAdapter
+import androidx.room3.Room
+import androidx.test.core.app.ApplicationProvider
 import androidx.work.ForegroundInfo
 import androidx.work.ForegroundUpdater
 import androidx.work.ListenableWorker
@@ -12,16 +12,15 @@ import androidx.work.ListenableWorker.Result
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
+import com.google.common.util.concurrent.ListenableFuture
 import dev.baseline.data.db.AppDatabase
 import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.db.SyncTaskEntity
 import dev.baseline.data.db.TaskStatus
 import dev.baseline.garmin.GarminEndpoint
 import dev.baseline.garmin.GarminResult
-import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
-import java.util.UUID
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -34,6 +33,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 class SyncWorkerTest {
@@ -70,23 +70,46 @@ class SyncWorkerTest {
         fetch: suspend (GarminEndpoint, String) -> GarminResult,
     ): Result = runBlocking {
         val engine = SyncEngine(fetch, db, clk) {}
-        val deps = SyncWorkerDeps(
-            engine, clk, { afterSyncCalls += it; events += "afterSync:$it" },
-            { if (failMarkSynced) throw IllegalStateException("disk full"); synced += it; events += "markSynced" },
-            { reschedules++; events += "reschedule" }, { continues++; events += "continueSoon:$it" },
-        )
-        val factory = object : WorkerFactory() {
-            override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters): ListenableWorker = SyncWorker(appContext, workerParameters, deps)
-        }
-        TestListenableWorkerBuilder<SyncWorker>(context).setWorkerFactory(factory)
+        val deps =
+            SyncWorkerDeps(
+                engine,
+                clk,
+                {
+                    afterSyncCalls += it
+                    events += "afterSync:$it"
+                },
+                {
+                    if (failMarkSynced) throw IllegalStateException("disk full")
+                    synced += it
+                    events += "markSynced"
+                },
+                {
+                    reschedules++
+                    events += "reschedule"
+                },
+                {
+                    continues++
+                    events += "continueSoon:$it"
+                },
+            )
+        val factory =
+            object : WorkerFactory() {
+                override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters): ListenableWorker =
+                    SyncWorker(appContext, workerParameters, deps)
+            }
+        TestListenableWorkerBuilder<SyncWorker>(context)
+            .setWorkerFactory(factory)
             .setTags(tags)
             .apply { if (updater != null) setForegroundUpdater(updater) }
-            .build().doWork()
+            .build()
+            .doWork()
     }
 
-    private val steps = GarminResult.Ok(
-        """[{"calendarDate":"2026-10-21","totalSteps":1},{"calendarDate":"2026-10-19","totalSteps":2}]""".toByteArray(), null,
-    )
+    private val steps =
+        GarminResult.Ok(
+            """[{"calendarDate":"2026-10-21","totalSteps":1},{"calendarDate":"2026-10-19","totalSteps":2}]""".toByteArray(),
+            null,
+        )
 
     @Test
     fun completedIsSuccessAndAfterSyncGetsChangedFrom() {
@@ -101,14 +124,18 @@ class SyncWorkerTest {
     /** A clock the test moves by hand. */
     private class StepClock(var now: Instant) : Clock() {
         override fun getZone() = ZoneOffset.UTC
+
         override fun withZone(zone: java.time.ZoneId?): Clock = this
+
         override fun instant() = now
     }
 
     // Every per-day endpoint gets a body all three parsers accept.
-    private val day = GarminResult.Ok(
-        """{"calendarDate":"2026-10-24","sleepTimeSeconds":28000,"heartRateValues":[],"hrvSummary":{"calendarDate":"2026-10-24"}}""".toByteArray(), null,
-    )
+    private val day =
+        GarminResult.Ok(
+            """{"calendarDate":"2026-10-24","sleepTimeSeconds":28000,"heartRateValues":[],"hrvSummary":{"calendarDate":"2026-10-24"}}""".toByteArray(),
+            null,
+        )
 
     /** Each request costs 9 minutes, so the 8-minute budget ends the run after one task. */
     private fun runPartial(tags: List<String> = emptyList()): Result {
@@ -142,14 +169,22 @@ class SyncWorkerTest {
     fun timeWaitingForTheLockIsSpentFromTheBudget() {
         // The first clock read (before the lock) is 9 minutes older than every later one, as if another run held the lock that long.
         val t0 = clock.instant()
-        val clk = object : Clock() {
-            var reads = 0
-            override fun getZone() = ZoneOffset.UTC
-            override fun withZone(zone: java.time.ZoneId?): Clock = this
-            override fun instant(): Instant = if (reads++ == 0) t0 else t0.plusSeconds(540)
-        }
+        val clk =
+            object : Clock() {
+                var reads = 0
+
+                override fun getZone() = ZoneOffset.UTC
+
+                override fun withZone(zone: java.time.ZoneId?): Clock = this
+
+                override fun instant(): Instant = if (reads++ == 0) t0 else t0.plusSeconds(540)
+            }
         var fetches = 0
-        val r = run(clk = clk) { _, _ -> fetches++; GarminResult.Empty }
+        val r =
+            run(clk = clk) { _, _ ->
+                fetches++
+                GarminResult.Empty
+            }
         assertEquals(Result.success(), r)
         assertEquals(0, fetches) // a zero budget stops before the first request
         assertEquals(1, continues)
@@ -167,12 +202,22 @@ class SyncWorkerTest {
     /** Seeds [n] more PENDING tasks so more than 20 remain after the first one runs. */
     private fun seed(n: Int) = runBlocking {
         db.taskDao().insertIgnore(
-            (1..n).map { SyncTaskEntity(GarminEndpoint.STEPS.name, "2026-01-%02d..2026-01-%02d".format(it % 28 + 1, it % 28 + 1) + "-$it", 4, TaskStatus.PENDING, 0, null) },
+            (1..n).map {
+                SyncTaskEntity(
+                    GarminEndpoint.STEPS.name,
+                    "2026-01-%02d..2026-01-%02d".format(it % 28 + 1, it % 28 + 1) + "-$it",
+                    4,
+                    TaskStatus.PENDING,
+                    0,
+                    null,
+                )
+            },
         )
     }
 
     private class FakeUpdater(val refuse: Boolean) : ForegroundUpdater {
         val infos = mutableListOf<ForegroundInfo>()
+
         override fun setForegroundAsync(context: Context, id: UUID, foregroundInfo: ForegroundInfo): ListenableFuture<Void?> {
             infos += foregroundInfo
             return CallbackToFutureAdapter.getFuture { c ->
@@ -186,7 +231,11 @@ class SyncWorkerTest {
     fun aRefusedForegroundIsNotRetried() {
         seed(30)
         val updater = FakeUpdater(refuse = true)
-        val r = run(updater) { _, _ -> yield(); GarminResult.Empty }
+        val r =
+            run(updater) { _, _ ->
+                yield()
+                GarminResult.Empty
+            }
         assertEquals(Result.success(), r)
         assertEquals(1, updater.infos.size)
     }
@@ -195,16 +244,27 @@ class SyncWorkerTest {
     fun longBackfillGoesForegroundAsDataSync() {
         seed(30)
         val updater = FakeUpdater(refuse = false)
-        run(updater) { _, _ -> yield(); GarminResult.Empty }
+        run(updater) { _, _ ->
+            yield()
+            GarminResult.Empty
+        }
         val info = updater.infos.first()
         assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC, info.foregroundServiceType)
-        assertTrue(info.notification.extras.getCharSequence("android.text").toString().startsWith("Syncing history "))
+        assertTrue(
+            info.notification.extras
+                .getCharSequence("android.text")
+                .toString()
+                .startsWith("Syncing history "),
+        )
     }
 
     @Test
     fun shortRunStaysInTheBackground() {
         val updater = FakeUpdater(refuse = false)
-        run(updater) { _, _ -> yield(); GarminResult.Empty } // 1 seeded + 13 incremental, never above 20 remaining
+        run(updater) { _, _ ->
+            yield()
+            GarminResult.Empty
+        } // 1 seeded + 13 incremental, never above 20 remaining
         assertEquals(0, updater.infos.size)
     }
 

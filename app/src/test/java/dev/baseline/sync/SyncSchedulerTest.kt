@@ -15,12 +15,12 @@ import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.db.SyncTaskEntity
 import dev.baseline.data.db.TaskStatus
 import dev.baseline.prefs.SyncInterval
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
-import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -41,7 +41,9 @@ class SyncSchedulerTest {
             tasks.mapIndexed { i, (priority, status) -> SyncTaskEntity("STEPS", "k$i", priority, status, 0, null) },
         )
     }
+
     private fun seedBackfillPending() = seed(4 to TaskStatus.PENDING)
+
     private fun seedBackfillDone() = seed(1 to TaskStatus.DONE, 6 to TaskStatus.DONE, 0 to TaskStatus.PENDING, 7 to TaskStatus.PENDING)
 
     @After
@@ -54,12 +56,17 @@ class SyncSchedulerTest {
     fun setUp() {
         WorkManagerTestInitHelper.initializeTestWorkManager(ApplicationProvider.getApplicationContext())
         wm = WorkManager.getInstance(ApplicationProvider.getApplicationContext())
-        db = Room.inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
-            .allowMainThreadQueries().build()
+        db =
+            Room
+                .inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
+                .allowMainThreadQueries()
+                .build()
     }
 
     private fun scheduler() = SyncScheduler(wm) { db.taskDao().backfillPending() }
+
     private fun infos(name: String) = wm.getWorkInfosForUniqueWork(name).get()
+
     private fun network(name: String) = infos(name).single().constraints.requiredNetworkType
 
     @Test
@@ -260,10 +267,18 @@ class SyncSchedulerTest {
     fun workInfosIncludesTheUserChainAndFeedsTheStatusLine() = runBlocking {
         seedBackfillPending()
         scheduler().continueSoon(user = false)
-        val key = dev.baseline.garmin.KeyStatus.Ok(java.time.LocalDate.of(2027, 1, 1), 90)
-        val counts = dev.baseline.data.db.TaskCounts(1, 10)
+        val key =
+            dev.baseline.garmin.KeyStatus
+                .Ok(java.time.LocalDate.of(2027, 1, 1), 90)
+        val counts =
+            dev.baseline.data.db
+                .TaskCounts(1, 10)
         val waiting = scheduler().workInfos.first { it.size >= 1 }
-        assertEquals("Waiting for Wi-Fi", dev.baseline.ui.today.syncStatus(waiting, counts, true, key))
+        assertEquals(
+            "Waiting for Wi-Fi",
+            dev.baseline.ui.today
+                .syncStatus(waiting, counts, true, key),
+        )
 
         scheduler().continueSoon(user = true)
         val all = kotlinx.coroutines.withTimeout(5_000) { scheduler().workInfos.first { it.size >= 2 } }
@@ -271,7 +286,10 @@ class SyncSchedulerTest {
         assertEquals(infos("sync-continue-user").single().id, user.id)
         assertEquals(infos("sync-continue").single().id, all.single { "user" !in it.tags }.id)
         // The user's any-network request is queued, so the line must not claim to be waiting for Wi-Fi.
-        assertNull(dev.baseline.ui.today.syncStatus(all, counts, true, key))
+        assertNull(
+            dev.baseline.ui.today
+                .syncStatus(all, counts, true, key),
+        )
     }
 
     @Test
@@ -286,19 +304,22 @@ class SyncSchedulerTest {
     private fun useBlockingWorker(started: CountDownLatch, release: CountDownLatch) {
         val ctx: android.content.Context = ApplicationProvider.getApplicationContext()
         closeWorkManagerDb(ctx)
-        val config = Configuration.Builder()
-            .setExecutor(Executors.newFixedThreadPool(2))
-            .setWorkerFactory(object : WorkerFactory() {
-                override fun createWorker(appContext: android.content.Context, workerClassName: String, workerParameters: WorkerParameters) =
-                    object : Worker(appContext, workerParameters) {
-                        override fun doWork(): Result {
-                            started.countDown()
-                            release.await(10, TimeUnit.SECONDS)
-                            return Result.success()
-                        }
-                    }
-            })
-            .build()
+        val config =
+            Configuration
+                .Builder()
+                .setExecutor(Executors.newFixedThreadPool(2))
+                .setWorkerFactory(
+                    object : WorkerFactory() {
+                        override fun createWorker(appContext: android.content.Context, workerClassName: String, workerParameters: WorkerParameters) =
+                            object : Worker(appContext, workerParameters) {
+                                override fun doWork(): Result {
+                                    started.countDown()
+                                    release.await(10, TimeUnit.SECONDS)
+                                    return Result.success()
+                                }
+                            }
+                    },
+                ).build()
         WorkManagerTestInitHelper.initializeTestWorkManager(ctx, config)
         wm = WorkManager.getInstance(ctx)
     }
@@ -317,19 +338,22 @@ class SyncSchedulerTest {
         val release = CountDownLatch(1)
         val ctx: android.content.Context = ApplicationProvider.getApplicationContext()
         closeWorkManagerDb(ctx)
-        val config = Configuration.Builder()
-            .setExecutor(Executors.newFixedThreadPool(2))
-            .setWorkerFactory(object : WorkerFactory() {
-                override fun createWorker(appContext: android.content.Context, workerClassName: String, workerParameters: WorkerParameters) =
-                    object : Worker(appContext, workerParameters) {
-                        override fun doWork(): Result {
-                            started.countDown()
-                            release.await(10, TimeUnit.SECONDS)
-                            return Result.success()
-                        }
-                    }
-            })
-            .build()
+        val config =
+            Configuration
+                .Builder()
+                .setExecutor(Executors.newFixedThreadPool(2))
+                .setWorkerFactory(
+                    object : WorkerFactory() {
+                        override fun createWorker(appContext: android.content.Context, workerClassName: String, workerParameters: WorkerParameters) =
+                            object : Worker(appContext, workerParameters) {
+                                override fun doWork(): Result {
+                                    started.countDown()
+                                    release.await(10, TimeUnit.SECONDS)
+                                    return Result.success()
+                                }
+                            }
+                    },
+                ).build()
         WorkManagerTestInitHelper.initializeTestWorkManager(ctx, config)
         wm = WorkManager.getInstance(ctx)
 

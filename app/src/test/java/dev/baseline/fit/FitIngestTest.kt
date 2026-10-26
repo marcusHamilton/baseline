@@ -32,9 +32,11 @@ class FitIngestTest {
 
     @Before
     fun setUp() {
-        db = Room.inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
-            .allowMainThreadQueries()
-            .build()
+        db =
+            Room
+                .inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
+                .allowMainThreadQueries()
+                .build()
         ingest = FitIngest(tmp.root, db)
     }
 
@@ -43,9 +45,30 @@ class FitIngestTest {
 
     private suspend fun activity(id: Long, pool: Double? = null) = db.activityDao().upsert(
         ActivityEntity(
-            id, "x", "running", SportFamily.RUN, LocalDateTime.of(2026, 10, 23, 7, 0), LocalDate.of(2026, 10, 23),
-            Instant.ofEpochSecond(1_761_202_800), 3600.0, null, null, null, null, null, null, null, null, null, null, null,
-            null, null, null, null, pool,
+            id,
+            "x",
+            "running",
+            SportFamily.RUN,
+            LocalDateTime.of(2026, 10, 23, 7, 0),
+            LocalDate.of(2026, 10, 23),
+            Instant.ofEpochSecond(1_761_202_800),
+            3600.0,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            pool,
         ),
     )
 
@@ -79,7 +102,14 @@ class FitIngestTest {
     fun strengthSetsStored() = runBlocking {
         activity(8)
         ingest.ingest(8, zipOf("a.fit", fitFixture("strength")))
-        assertEquals(7, db.strengthSetDao().forActivity(8).single().reps)
+        assertEquals(
+            7,
+            db
+                .strengthSetDao()
+                .forActivity(8)
+                .single()
+                .reps,
+        )
     }
 
     @Test

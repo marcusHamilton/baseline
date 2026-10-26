@@ -6,8 +6,8 @@ import dev.baseline.data.db.AppDatabase
 import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.db.DayEntity
 import dev.baseline.data.db.HrPacking
-import dev.baseline.data.db.SyncTaskEntity
 import dev.baseline.data.db.PARSE_ERROR_PREFIX
+import dev.baseline.data.db.SyncTaskEntity
 import dev.baseline.data.db.TaskStatus
 import dev.baseline.data.parse.fixture
 import dev.baseline.garmin.GarminEndpoint
@@ -59,8 +59,10 @@ class SyncEngineTest {
     private fun task(e: GarminEndpoint, key: String, priority: Int, attempts: Int = 0, status: TaskStatus = TaskStatus.PENDING) =
         SyncTaskEntity(e.name, key, priority, status, attempts, null)
 
-    private fun engine(clk: Clock = clock, f: suspend (GarminEndpoint, String) -> GarminResult) =
-        SyncEngine({ e, k -> calls += e to k; f(e, k) }, db, clk) { pauses += it }
+    private fun engine(clk: Clock = clock, f: suspend (GarminEndpoint, String) -> GarminResult) = SyncEngine({ e, k ->
+        calls += e to k
+        f(e, k)
+    }, db, clk) { pauses += it }
 
     /** A clock the test moves by hand. */
     private class StepClock(var now: Instant) : Clock() {
@@ -72,9 +74,8 @@ class SyncEngineTest {
     private suspend fun tasks() = db.taskDao().all()
     private suspend fun task(e: GarminEndpoint, key: String) = tasks().single { it.endpoint == e.name && it.key == key }
 
-    private fun activity(id: Long, day: String) =
-        """{"activityId":$id,"activityName":"a$id","activityType":{"typeKey":"running"},""" +
-            """"startTimeGMT":"$day 14:00:00","startTimeLocal":"$day 07:00:00","duration":100.0}"""
+    private fun activity(id: Long, day: String) = """{"activityId":$id,"activityName":"a$id","activityType":{"typeKey":"running"},""" +
+        """"startTimeGMT":"$day 14:00:00","startTimeLocal":"$day 07:00:00","duration":100.0}"""
 
     @Test
     fun sleepDayPlaceholderIsEmptyNotFailed() = runBlocking {
@@ -93,7 +94,10 @@ class SyncEngineTest {
     fun runPendingStopsAtBudgetWithPartial() = runBlocking {
         db.taskDao().insertIgnore((1..5).map { task(ACTIVITY_DETAIL, "$it", it) })
         val clk = StepClock(clock.instant())
-        val r = engine(clk) { _, _ -> clk.now = clk.now.plusSeconds(60); ok("{}") }.runPending(3.minutes) {}
+        val r = engine(clk) { _, _ ->
+            clk.now = clk.now.plusSeconds(60)
+            ok("{}")
+        }.runPending(3.minutes) {}
         assertEquals(SyncOutcome.PARTIAL, r.outcome)
         assertEquals(3, tasks().count { it.status == TaskStatus.DONE })
         assertEquals(2, tasks().count { it.status == TaskStatus.PENDING })
@@ -111,7 +115,10 @@ class SyncEngineTest {
     fun backoffThatWouldOutlastTheBudgetStopsTheRun() = runBlocking {
         db.taskDao().insertIgnore(listOf(task(STEPS, "2026-10-01..2026-10-07", 4)))
         val clk = StepClock(clock.instant())
-        val r = engine(clk) { _, _ -> clk.now = clk.now.plusSeconds(420); GarminResult.RateLimited(429) }.runPending {}
+        val r = engine(clk) { _, _ ->
+            clk.now = clk.now.plusSeconds(420)
+            GarminResult.RateLimited(429)
+        }.runPending {}
         assertEquals(SyncOutcome.RATE_LIMITED, r.outcome) // 7 min used, a 60 s back-off would reach the 8-minute budget
         assertTrue(pauses.none { it >= 60_000 })
         assertEquals(TaskStatus.PENDING, tasks().single().status)
@@ -121,19 +128,24 @@ class SyncEngineTest {
     fun budgetUsedUpWithNothingLeftIsCompleted() = runBlocking {
         db.taskDao().insertIgnore(listOf(task(ACTIVITY_DETAIL, "1", 1)))
         val clk = StepClock(clock.instant())
-        val r = engine(clk) { _, _ -> clk.now = clk.now.plusSeconds(600); ok("{}") }.runPending(3.minutes) {}
+        val r = engine(clk) { _, _ ->
+            clk.now = clk.now.plusSeconds(600)
+            ok("{}")
+        }.runPending(3.minutes) {}
         assertEquals(SyncOutcome.COMPLETED, r.outcome)
     }
 
     @Test
     fun repairSleepPlaceholdersMarksThemEmpty() = runBlocking {
         fun failed(e: GarminEndpoint, key: String, err: String) = SyncTaskEntity(e.name, key, 6, TaskStatus.FAILED, 0, err)
-        db.taskDao().insertIgnore(listOf(
-            failed(SLEEP_DAY, "2026-10-05", "missing calendarDate"),
-            failed(SLEEP_DAY, "2026-10-06", "400"),
-            failed(HRV_DAY, "2026-10-05", "missing calendarDate"),
-            task(SLEEP_DAY, "2026-10-07", 6, status = TaskStatus.DONE),
-        ))
+        db.taskDao().insertIgnore(
+            listOf(
+                failed(SLEEP_DAY, "2026-10-05", "missing calendarDate"),
+                failed(SLEEP_DAY, "2026-10-06", "400"),
+                failed(HRV_DAY, "2026-10-05", "missing calendarDate"),
+                task(SLEEP_DAY, "2026-10-07", 6, status = TaskStatus.DONE),
+            ),
+        )
         db.taskDao().repairSleepPlaceholders()
         assertEquals(TaskStatus.EMPTY, task(SLEEP_DAY, "2026-10-05").status)
         assertEquals(TaskStatus.FAILED, task(SLEEP_DAY, "2026-10-06").status)
@@ -390,11 +402,16 @@ class SyncEngineTest {
         RawIngest(db).apply(BODY_BATTERY, "2026-10-23..2026-10-23", "[$bbItem]".toByteArray())
         assertNull(db.dayDao().get(oct23)!!.bodyBatteryWake)
         RawIngest(db).apply(
-            SLEEP_SUMMARIES, "2026-10-23..2026-10-23",
-            """[{"calendarDate":"2026-10-23","sleepEndTimestampGMT":1792766501000},{"calendarDate":"2026-10-20","sleepEndTimestampGMT":1792766501000}]""".toByteArray(),
+            SLEEP_SUMMARIES,
+            "2026-10-23..2026-10-23",
+            """
+            [{"calendarDate":"2026-10-23","sleepEndTimestampGMT":1792766501000},
+            {"calendarDate":"2026-10-20","sleepEndTimestampGMT":1792766501000}]
+            """.trimIndent().toByteArray(),
         )
         assertEquals(91, db.dayDao().get(oct23)!!.bodyBatteryWake)
-        assertNull(db.dayDao().get(LocalDate.of(2026, 10, 20))!!.bodyBatteryWake) // no curve stored for that day
+        // No curve stored for that day.
+        assertNull(db.dayDao().get(LocalDate.of(2026, 10, 20))!!.bodyBatteryWake)
     }
 
     @Test
@@ -426,7 +443,8 @@ class SyncEngineTest {
         val keys = pending.map { it.endpoint to it.key }.toSet()
         assertTrue(keys.containsAll(listOf("SLEEP_DAY" to "2026-10-24", "SLEEP_DAY" to "2026-10-23")))
         assertTrue(keys.containsAll(listOf("HEART_RATE_DAY" to "2026-10-24", "HRV_DAY" to "2026-10-23")))
-        assertTrue(keys.containsAll(listOf(STEPS, STRESS, DAILY_SUMMARIES, HRV_RANGE, SLEEP_SUMMARIES, BODY_BATTERY, ACTIVITY_RANGE).map { it.name to "2026-10-18..2026-10-24" }))
+        val ranged = listOf(STEPS, STRESS, DAILY_SUMMARIES, HRV_RANGE, SLEEP_SUMMARIES, BODY_BATTERY, ACTIVITY_RANGE)
+        assertTrue(keys.containsAll(ranged.map { it.name to "2026-10-18..2026-10-24" }))
         assertEquals(13, pending.size)
     }
 
@@ -448,9 +466,11 @@ class SyncEngineTest {
 
     @Test
     fun incrementalKeepsHttpFailedOverlappingWindowsFailed() = runBlocking {
-        db.taskDao().insertIgnore(listOf(
-            task(STEPS, "2026-10-17..2026-10-23", 0, attempts = 0, status = TaskStatus.FAILED).copy(lastError = "403 Forbidden"),
-        ))
+        db.taskDao().insertIgnore(
+            listOf(
+                task(STEPS, "2026-10-17..2026-10-23", 0, attempts = 0, status = TaskStatus.FAILED).copy(lastError = "403 Forbidden"),
+            ),
+        )
         engine { _, _ -> GarminResult.Empty }.planIncremental(LocalDate.of(2026, 10, 24))
 
         val t = tasks().first { it.key == "2026-10-17..2026-10-23" }
@@ -504,8 +524,11 @@ class SyncEngineTest {
     fun changedFromIsEarliestTouchedDay() = runBlocking {
         db.taskDao().insertIgnore(listOf(task(STEPS, "2026-10-17..2026-10-23", 4), task(STRESS, "2026-10-17..2026-10-23", 4)))
         val r = engine { e, _ ->
-            if (e == STEPS) ok("""[{"calendarDate":"2026-10-21","totalSteps":1},{"calendarDate":"2026-10-19","totalSteps":2}]""")
-            else ok("""[{"calendarDate":"2026-10-20","values":{"overallStressLevel":30}}]""")
+            if (e == STEPS) {
+                ok("""[{"calendarDate":"2026-10-21","totalSteps":1},{"calendarDate":"2026-10-19","totalSteps":2}]""")
+            } else {
+                ok("""[{"calendarDate":"2026-10-20","values":{"overallStressLevel":30}}]""")
+            }
         }.runPending {}
         assertEquals(LocalDate.of(2026, 10, 19), r.changedFrom)
 
@@ -524,8 +547,11 @@ class SyncEngineTest {
         // Whole-history bodies are served for the short window: every item carries its own calendarDate.
         db.taskDao().insertIgnore(BackfillPlanner.plan(LocalDate.of(2026, 10, 17), oct23))
         val e = engine { endpoint, key ->
-            if (endpoint == ACTIVITY_PAGE && key != "0") GarminResult.Empty
-            else bodies[endpoint]?.let(::okFixture) ?: GarminResult.Empty
+            if (endpoint == ACTIVITY_PAGE && key != "0") {
+                GarminResult.Empty
+            } else {
+                bodies[endpoint]?.let(::okFixture) ?: GarminResult.Empty
+            }
         }
         val r = e.runPending {}
 

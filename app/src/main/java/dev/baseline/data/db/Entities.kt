@@ -17,22 +17,10 @@ const val PARSE_ERROR_PREFIX = "unreadable: "
 enum class LoadSource { HR, GARMIN_SCALED }
 
 @Entity(tableName = "raw_response", primaryKeys = ["endpoint", "key"])
-class RawResponse(
-    val endpoint: String,
-    val key: String,
-    val json: ByteArray,
-    val fetchedAt: Instant,
-)
+class RawResponse(val endpoint: String, val key: String, val json: ByteArray, val fetchedAt: Instant)
 
 @Entity(tableName = "sync_task", primaryKeys = ["endpoint", "key"])
-data class SyncTaskEntity(
-    val endpoint: String,
-    val key: String,
-    val priority: Int,
-    val status: TaskStatus,
-    val attempts: Int,
-    val lastError: String?,
-)
+data class SyncTaskEntity(val endpoint: String, val key: String, val priority: Int, val status: TaskStatus, val attempts: Int, val lastError: String?)
 
 /** Everything except [date] is nullable: Garmin omits fields freely and nothing may be faked. */
 @Entity(tableName = "day")
@@ -180,22 +168,11 @@ data class ScoreEntity(
 )
 
 @Entity(tableName = "activity_score", foreignKeys = [ForeignKey(ActivityEntity::class, ["id"], ["activityId"], onDelete = ForeignKey.CASCADE)])
-data class ActivityScoreEntity(
-    @PrimaryKey val activityId: Long,
-    val load: Double,
-    val loadSource: LoadSource,
-    val strain: Double,
-)
+data class ActivityScoreEntity(@PrimaryKey val activityId: Long, val load: Double, val loadSource: LoadSource, val strain: Double)
 
 /**
  * [effort] is e.g. "5000m" or "power_1200s". [valueSec] is seconds for the distance efforts, but WATTS (higher is better)
  * for the "power_*" ones.
  */
 @Entity(tableName = "best_effort", primaryKeys = ["sport", "effort"])
-data class BestEffortEntity(
-    val sport: SportFamily,
-    val effort: String,
-    val valueSec: Double,
-    val activityId: Long,
-    val achievedOn: LocalDate,
-)
+data class BestEffortEntity(val sport: SportFamily, val effort: String, val valueSec: Double, val activityId: Long, val achievedOn: LocalDate)

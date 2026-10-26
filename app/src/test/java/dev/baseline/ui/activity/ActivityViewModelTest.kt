@@ -23,23 +23,23 @@ import dev.baseline.data.db.AppDatabase
 import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.db.LoadSource
 import dev.baseline.data.db.StrengthSetEntity
-import dev.baseline.data.db.SyncTaskEntity
 import dev.baseline.data.db.SwimLengthEntity
+import dev.baseline.data.db.SyncTaskEntity
 import dev.baseline.data.db.TaskStatus
 import dev.baseline.fit.ActivityStreams
 import dev.baseline.fit.FitReader
 import dev.baseline.fit.fitFixture
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.prefs.UserPrefs
-import dev.baseline.testutil.ScopeCleanup
 import dev.baseline.sync.SyncScheduler
 import dev.baseline.sync.closeWorkManagerDb
+import dev.baseline.testutil.ScopeCleanup
 import dev.baseline.ui.activities.act
 import dev.baseline.ui.format.Formatters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -61,14 +61,21 @@ import kotlin.math.floor
 
 private class CountingScheduler(wm: WorkManager) : SyncScheduler(wm, { false }) {
     val syncNows = AtomicInteger()
-    override suspend fun syncNow() { syncNows.incrementAndGet() }
+
+    override suspend fun syncNow() {
+        syncNows.incrementAndGet()
+    }
 }
 
 private val RUN_FIT = FitReader.read(fitFixture("run")).streams
+
 private fun streamOf(s: ActivityStreams) = ActivityStreamEntity(1, s.pack())
 
 /** Last valid distance of a stream. */
-private fun totalM(s: ActivityStreams) = s.distanceM!!.filter { it > -1e8f }.max().toDouble()
+private fun totalM(s: ActivityStreams) = s.distanceM!!
+    .filter { it > -1e8f }
+    .max()
+    .toDouble()
 
 private fun build(
     a: ActivityEntity = act(1),
@@ -115,11 +122,13 @@ class ActivityViewModelTest {
     }
 
     private fun vm(id: Long = 1) = scopes.track(ActivityViewModel(repo, scheduler, id))
+
     private suspend fun ActivityViewModel.await(p: (ActivityUiState) -> Boolean) = withTimeout(10_000) { state.first(p) }
 
     @Test
     fun sectionsPerFamily() {
         val k = SectionKind.entries.associateBy { it.name }
+
         fun s(vararg n: String) = n.map { k.getValue(it) }
         assertEquals(s("MAP", "HR", "ZONES", "SPLITS", "RUNNING"), sectionsFor(RUN, hasGps = true, hasPower = true))
         assertEquals(s("HR", "ZONES", "SPLITS", "RUNNING"), sectionsFor(RUN, hasGps = false, hasPower = false))
@@ -156,20 +165,41 @@ class ActivityViewModelTest {
         assertEquals("mi", splits.unit)
         assertEquals(floor(miles).toInt() + 1, splits.rows.size)
         // Pace per mile is 1.609x pace per km.
-        val metric = build().section<Section.Splits>()!!.rows.first().paceSec
+        val metric =
+            build()
+                .section<Section.Splits>()!!
+                .rows
+                .first()
+                .paceSec
         assertEquals(metric * 1.609344, splits.rows.first().paceSec, metric * 0.25)
-        assertEquals("ft", build(imperial = true).summary.single { it.label.startsWith("elev") }.label.substringAfterLast(' '))
+        assertEquals(
+            "ft",
+            build(imperial = true)
+                .summary
+                .single { it.label.startsWith("elev") }
+                .label
+                .substringAfterLast(' '),
+        )
     }
 
     @Test
     fun swimPacePer100FromLengths() {
-        fun len(i: Int, active: Boolean, sec: Double, stroke: String? = "freestyle", n: Int? = 18) =
-            SwimLengthEntity(activityId = 1, lengthIndex = i, startOffsetSec = i * 40.0, active = active, durationSec = sec, strokeType = if (active) stroke else null, strokeCount = if (active) n else null)
-        val a = act(1, "lap_swimming", distanceM = 75.0, durationSec = 150.0).copy(poolLengthM = 25.0)
-        val state = build(
-            a, stream = null,
-            lengths = listOf(len(0, true, 30.0), len(1, true, 31.25, "backstroke", 16), len(2, false, 20.0), len(3, true, 28.75)),
+        fun len(i: Int, active: Boolean, sec: Double, stroke: String? = "freestyle", n: Int? = 18) = SwimLengthEntity(
+            activityId = 1,
+            lengthIndex = i,
+            startOffsetSec = i * 40.0,
+            active = active,
+            durationSec = sec,
+            strokeType = if (active) stroke else null,
+            strokeCount = if (active) n else null,
         )
+        val a = act(1, "lap_swimming", distanceM = 75.0, durationSec = 150.0).copy(poolLengthM = 25.0)
+        val state =
+            build(
+                a,
+                stream = null,
+                lengths = listOf(len(0, true, 30.0), len(1, true, 31.25, "backstroke", 16), len(2, false, 20.0), len(3, true, 28.75)),
+            )
         val swim = state.section<Section.Swim>()!!
         assertEquals(3, swim.lengths.size) // the rest length is not listed
         assertArrayEquals(doubleArrayOf(120.0, 125.0, 115.0), swim.lengths.map { it.paceSec100!! }.toDoubleArray(), 1e-9)
@@ -188,18 +218,33 @@ class ActivityViewModelTest {
 
     @Test
     fun strengthGroupsSetsByCategory() {
-        fun set(i: Int, cat: Int?, reps: Int?, kg: Double?, active: Boolean = true, sec: Double = 40.0) =
-            StrengthSetEntity(activityId = 1, setIndex = i, startOffsetSec = i * 60.0, exerciseName = null, setType = if (active) "ACTIVE" else "REST", category = cat, reps = reps, weightKg = kg, durationSec = sec)
+        fun set(i: Int, cat: Int?, reps: Int?, kg: Double?, active: Boolean = true, sec: Double = 40.0) = StrengthSetEntity(
+            activityId = 1,
+            setIndex = i,
+            startOffsetSec = i * 60.0,
+            exerciseName = null,
+            setType = if (active) "ACTIVE" else "REST",
+            category = cat,
+            reps = reps,
+            weightKg = kg,
+            durationSec = sec,
+        )
         val bench = ExerciseCategory.BENCH_PRESS
         val squat = ExerciseCategory.SQUAT
         val plank = ExerciseCategory.PLANK
-        val sets = listOf(
-            set(0, bench, 6, 100.0), set(1, bench, 6, 100.0, active = false), set(2, bench, 6, 100.0),
-            set(3, squat, 8, 52.5), set(4, bench, 6, 100.0),
-            set(5, ExerciseCategory.PULL_UP, 8, null), set(6, ExerciseCategory.PULL_UP, 7, 0.0),
-            set(7, plank, null, null, sec = 45.0),
-            set(8, null, 5, 20.0), set(9, 65534, 5, 20.0),
-        )
+        val sets =
+            listOf(
+                set(0, bench, 6, 100.0),
+                set(1, bench, 6, 100.0, active = false),
+                set(2, bench, 6, 100.0),
+                set(3, squat, 8, 52.5),
+                set(4, bench, 6, 100.0),
+                set(5, ExerciseCategory.PULL_UP, 8, null),
+                set(6, ExerciseCategory.PULL_UP, 7, 0.0),
+                set(7, plank, null, null, sec = 45.0),
+                set(8, null, 5, 20.0),
+                set(9, 65534, 5, 20.0),
+            )
         val ex = build(act(1, "strength_training", distanceM = null), stream = null, sets = sets).section<Section.Strength>()!!.exercises
         assertEquals(listOf("Bench Press", "Squat", "Pull Up", "Plank", "Exercise"), ex.map { it.name })
         assertEquals(listOf("6 × 100", "6 × 100", "6 × 100"), ex[0].sets) // the REST set is not shown
@@ -225,9 +270,18 @@ class ActivityViewModelTest {
         val ride = build(act(1, "road_biking", distanceM = null, durationSec = 0.0), stream = null).summary
         assertTrue(ride.all { it.value == "—" })
         // A run FIT without altitude, HR or cadence streams still renders with dashes and no NaN.
-        val bare = ActivityStreams(
-            longArrayOf(0, 1, 2, 3), intArrayOf(-1, -1, -1, -1), floatArrayOf(0f, 400f, 800f, 1200f), null, null, null, null, null, null,
-        )
+        val bare =
+            ActivityStreams(
+                longArrayOf(0, 1, 2, 3),
+                intArrayOf(-1, -1, -1, -1),
+                floatArrayOf(0f, 400f, 800f, 1200f),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+            )
         val state = build(stream = streamOf(bare))
         val splits = state.section<Section.Splits>()!!
         assertTrue(splits.rows.all { it.hr == "—" && it.elev == "—" })
@@ -259,7 +313,16 @@ class ActivityViewModelTest {
 
     @Test
     fun downsampleKeepsShapeAndBounds() {
-        val values = List(5_000) { if (it == 1234) 500.0 else if (it == 4321) -300.0 else 100.0 + 50 * kotlin.math.sin(it / 40.0) }
+        val values =
+            List(5_000) {
+                if (it == 1234) {
+                    500.0
+                } else if (it == 4321) {
+                    -300.0
+                } else {
+                    100.0 + 50 * kotlin.math.sin(it / 40.0)
+                }
+            }
         val out = downsample(values, 600) { it }
         assertTrue(out.size in 2..600)
         assertEquals(values.first(), out.first(), 0.0)
@@ -322,7 +385,14 @@ class ActivityViewModelTest {
         assertEquals(NOTE_NONE, v.await { !it.loading }.note)
         delay(500) // the init block has had time to queue if it were going to
         assertEquals(0, scheduler.syncNows.get())
-        assertEquals(TaskStatus.EMPTY, db.taskDao().all().single().status)
+        assertEquals(
+            TaskStatus.EMPTY,
+            db
+                .taskDao()
+                .all()
+                .single()
+                .status,
+        )
     }
 
     @Test
@@ -340,24 +410,46 @@ class ActivityViewModelTest {
     @Test
     fun firstSplitElevationStartsFromTheFirstValidAltitude() {
         val miss = ActivityStreams.MISSING
-        val s = ActivityStreams(
-            longArrayOf(0, 100, 200, 300, 400), intArrayOf(150, 150, 150, 150, 150), floatArrayOf(0f, 500f, 1000f, 1500f, 2000f),
-            null, null, floatArrayOf(miss, 100f, 110f, 120f, 130f), null, null, null,
-        )
+        val s =
+            ActivityStreams(
+                longArrayOf(0, 100, 200, 300, 400),
+                intArrayOf(150, 150, 150, 150, 150),
+                floatArrayOf(0f, 500f, 1000f, 1500f, 2000f),
+                null,
+                null,
+                floatArrayOf(miss, 100f, 110f, 120f, 130f),
+                null,
+                null,
+                null,
+            )
         val rows = build(stream = streamOf(s)).section<Section.Splits>()!!.rows
         assertEquals(listOf("+10", "+20"), rows.map { it.elev }) // 100 -> 110 and 110 -> 130, never "—" for the first row
     }
 
     @Test
     fun rideWithOnlyPowerStillShowsTheRideSection() {
-        val s = ActivityStreams(
-            longArrayOf(0, 1, 2, 3), intArrayOf(-1, -1, -1, -1), null, null, intArrayOf(100, 200, 150, 250), null, null, null, null,
-        )
+        val s =
+            ActivityStreams(
+                longArrayOf(0, 1, 2, 3),
+                intArrayOf(-1, -1, -1, -1),
+                null,
+                null,
+                intArrayOf(100, 200, 150, 250),
+                null,
+                null,
+                null,
+                null,
+            )
         val ride = build(act(1, "virtual_ride"), stream = streamOf(s)).section<Section.Ride>()!!
         assertNull(ride.speed)
         assertNotNull(ride.power)
         assertNull(ride.elevation)
-        assertNull(build(act(1, "virtual_ride"), stream = streamOf(ActivityStreams(longArrayOf(0, 1), intArrayOf(-1, -1), null, null, null, null, null, null, null))).section<Section.Ride>())
+        assertNull(
+            build(
+                act(1, "virtual_ride"),
+                stream = streamOf(ActivityStreams(longArrayOf(0, 1), intArrayOf(-1, -1), null, null, null, null, null, null, null)),
+            ).section<Section.Ride>(),
+        )
     }
 
     @Test

@@ -36,7 +36,9 @@ fun statRowDescription(row: StatRowUi): String {
         val text = d.removePrefix("▲ ").removePrefix("▼ ")
         when {
             d == "same" -> "same as baseline" + (row.baseline?.let { " $it" } ?: "")
+
             d == "so far" -> "so far today"
+
             else -> {
                 val amount = if ('%' in text || row.unit.isEmpty()) text else "$text ${row.unit}"
                 "$amount ${if (d.startsWith("▲")) "above" else "below"} baseline" + (row.baseline?.let { " $it" } ?: "")
@@ -57,11 +59,16 @@ fun StatRow(row: StatRowUi, modifier: Modifier = Modifier) {
         // Narrow (edit mode on a phone: handle and eye take 96 dp): tighter padding, and the delta goes under the label so the label keeps its width.
         val narrow = maxWidth < NARROW_ROW
         val stacked = narrow && row.delta != null
-        val deltaColor = when (row.better) { true -> BetterGreen; false -> RecoveryRed; null -> TextMuted }
+        val deltaColor = when (row.better) {
+            true -> BetterGreen
+            false -> RecoveryRed
+            null -> TextMuted
+        }
         Row(
             Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).background(Card)
                 .padding(horizontal = if (narrow) 8.dp else 16.dp, vertical = 12.dp).clearAndSetSemantics { contentDescription = description },
-            Arrangement.spacedBy(8.dp), Alignment.CenterVertically,
+            Arrangement.spacedBy(8.dp),
+            Alignment.CenterVertically,
         ) {
             // Tagged for tests: a layout-only Column has no semantics node, and tests assert the width the row gives the label.
             Column(Modifier.weight(1f).testTag("stat-label"), Arrangement.spacedBy(2.dp)) {

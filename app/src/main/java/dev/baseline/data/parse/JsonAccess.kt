@@ -21,5 +21,4 @@ internal fun JsonObject.int(key: String): Int? = dbl(key)?.roundToInt()
 
 internal fun JsonObject.lng(key: String): Long? = dbl(key)?.toLong()
 
-internal fun JsonPrimitive.numberOrNull(): Double? =
-    if (this is JsonNull) null else doubleOrNull?.takeIf { it.isFinite() }
+internal fun JsonPrimitive.numberOrNull(): Double? = if (this is JsonNull) null else doubleOrNull?.takeIf { it.isFinite() }

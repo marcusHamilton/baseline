@@ -6,8 +6,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -48,7 +48,11 @@ fun StatTile(tile: Tile, modifier: Modifier = Modifier, valueSize: Int = 24) {
         Arrangement.spacedBy(2.dp),
     ) {
         Text(
-            tile.value, fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = valueSize.sp, lineHeight = valueSize.sp,
+            tile.value,
+            fontFamily = BarlowCondensed,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = valueSize.sp,
+            lineHeight = valueSize.sp,
             color = if (tile.accent) StrainBlueLight else androidx.compose.ui.graphics.Color.Unspecified,
         )
         Text(tile.label, fontSize = 11.sp, color = TextMuted)

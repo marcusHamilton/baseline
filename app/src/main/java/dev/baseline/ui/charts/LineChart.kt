@@ -61,7 +61,9 @@ fun LineChart(
             getXStep = { _, _, _ -> 1.0 },
         )
         CartesianChartHost(
-            chart, model, chartModifier,
+            chart,
+            model,
+            chartModifier,
             scrollState = rememberVicoScrollState(scrollEnabled = false),
             zoomState = rememberVicoZoomState(zoomEnabled = false, initialZoom = Zoom.Content, minZoom = Zoom.Content, maxZoom = Zoom.Content),
         )

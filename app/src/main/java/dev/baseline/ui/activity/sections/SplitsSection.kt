@@ -36,8 +36,14 @@ private val HrW = 40.dp
 private val ElevW = 44.dp
 
 @Composable
-private fun Right(text: String, width: androidx.compose.ui.unit.Dp, size: Int, modifier: Modifier = Modifier, color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified, weight: FontWeight? = null) =
-    Text(text, modifier.width(width), fontSize = size.sp, color = color, fontWeight = weight, textAlign = TextAlign.End, maxLines = 1)
+private fun Right(
+    text: String,
+    width: androidx.compose.ui.unit.Dp,
+    size: Int,
+    modifier: Modifier = Modifier,
+    color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified,
+    weight: FontWeight? = null,
+) = Text(text, modifier.width(width), fontSize = size.sp, color = color, fontWeight = weight, textAlign = TextAlign.End, maxLines = 1)
 
 @Composable
 fun SplitsSection(splits: Section.Splits) {
@@ -54,7 +60,8 @@ fun SplitsSection(splits: Section.Splits) {
                 Modifier.fillMaxWidth().heightIn(min = 30.dp).semantics(mergeDescendants = true) {
                     contentDescription = "${splits.unit} ${r.label}, pace ${r.pace} per ${splits.unit}, heart rate ${r.hr}, elevation ${r.elev}"
                 },
-                Arrangement.spacedBy(8.dp), Alignment.CenterVertically,
+                Arrangement.spacedBy(8.dp),
+                Alignment.CenterVertically,
             ) {
                 Text(r.label, Modifier.width(LabelW), fontSize = 13.sp, color = TextMuted)
                 Box(Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(4.dp)).background(Surface2)) {

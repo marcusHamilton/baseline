@@ -21,6 +21,8 @@ work = "2.12.0"
 vico = "3.3.1"
 maplibre = "13.7.1"
 profileinstaller = "1.4.1"
+spotless = "8.10.4"
+ktlint = "1.8.0"
 
 [libraries]
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
@@ -59,3 +61,4 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 androidx-room = { id = "androidx.room3", version.ref = "room" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }

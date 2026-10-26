@@ -16,16 +16,18 @@ val HISTORY_START: LocalDate = LocalDate.of(2025, 8, 30)
  */
 object BackfillPlanner {
     private val rangePriorities = listOf(
-        DAILY_SUMMARIES to 2, HRV_RANGE to 2,
-        SLEEP_SUMMARIES to 3, BODY_BATTERY to 3,
-        STRESS to 4, STEPS to 4,
+        DAILY_SUMMARIES to 2,
+        HRV_RANGE to 2,
+        SLEEP_SUMMARIES to 3,
+        BODY_BATTERY to 3,
+        STRESS to 4,
+        STEPS to 4,
     )
 
     /** Both [start] and [end] inclusive. */
     fun plan(start: LocalDate, end: LocalDate): List<SyncTaskEntity> {
         require(!start.isAfter(end)) { "start $start is after end $end" }
-        fun task(e: GarminEndpoint, key: String, priority: Int) =
-            SyncTaskEntity(e.name, key, priority, TaskStatus.PENDING, 0, null)
+        fun task(e: GarminEndpoint, key: String, priority: Int) = SyncTaskEntity(e.name, key, priority, TaskStatus.PENDING, 0, null)
 
         val tasks = mutableListOf(task(PROFILE, "-", 1), task(HR_ZONES, "-", 1), task(ACTIVITY_PAGE, "0", 5))
         for ((e, priority) in rangePriorities) {

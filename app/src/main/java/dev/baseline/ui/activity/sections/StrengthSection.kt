@@ -33,7 +33,15 @@ private val ChipText = Color(0xFFE2E6EA)
 @Composable
 fun StrengthSection(strength: Section.Strength) {
     Column(Modifier.fillMaxWidth().testTag("section-strength"), Arrangement.spacedBy(8.dp)) {
-        Text("EXERCISES", Modifier.padding(bottom = 4.dp), fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, letterSpacing = 1.28.sp, color = TextMuted)
+        Text(
+            "EXERCISES",
+            Modifier.padding(bottom = 4.dp),
+            fontFamily = BarlowCondensed,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 16.sp,
+            letterSpacing = 1.28.sp,
+            color = TextMuted,
+        )
         strength.exercises.forEach { ex ->
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Card).padding(horizontal = 16.dp, vertical = 14.dp)
@@ -45,7 +53,14 @@ fun StrengthSection(strength: Section.Strength) {
                     Text(ex.summary, fontSize = 13.sp, color = TextMuted)
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ex.sets.forEach { Text(it, Modifier.clip(RoundedCornerShape(8.dp)).background(ChipBg).padding(horizontal = 10.dp, vertical = 4.dp), fontSize = 13.sp, color = ChipText) }
+                    ex.sets.forEach {
+                        Text(
+                            it,
+                            Modifier.clip(RoundedCornerShape(8.dp)).background(ChipBg).padding(horizontal = 10.dp, vertical = 4.dp),
+                            fontSize = 13.sp,
+                            color = ChipText,
+                        )
+                    }
                 }
             }
         }

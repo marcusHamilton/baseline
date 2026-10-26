@@ -66,7 +66,8 @@ internal fun TrendLine(
     ChartBox(values.any { it != null }, height, description, modifier) {
         Canvas(Modifier.fillMaxWidth().height(height)) {
             val all = values.filterNotNull() + band.filterNotNull().flatMap { listOf(it.start, it.endInclusive) } + listOfNotNull(midline)
-            val lo = all.min().toFloat(); val hi = all.max().toFloat()
+            val lo = all.min().toFloat()
+            val hi = all.max().toFloat()
             val pad = 6.dp.toPx()
             fun x(i: Int) = if (values.size == 1) size.width / 2 else i * size.width / (values.size - 1)
             fun y(v: Int) = if (hi == lo) size.height / 2 else size.height - pad - (v - lo) / (hi - lo) * (size.height - 2 * pad)
@@ -76,8 +77,25 @@ internal fun TrendLine(
             }
             val stroke = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
             runs(values.map { it != null }).forEach { run ->
-                if (run.size == 1) drawCircle(color, 2.5.dp.toPx(), Offset(x(run[0]), y(values[run[0]]!!)))
-                else drawPath(Path().apply { run.forEachIndexed { k, i -> if (k == 0) moveTo(x(i), y(values[i]!!)) else lineTo(x(i), y(values[i]!!)) } }, color, style = stroke)
+                if (run.size == 1) {
+                    drawCircle(color, 2.5.dp.toPx(), Offset(x(run[0]), y(values[run[0]]!!)))
+                } else {
+                    drawPath(
+                        Path().apply {
+                            run.forEachIndexed { k, i ->
+                                if (k ==
+                                    0
+                                ) {
+                                    moveTo(x(i), y(values[i]!!))
+                                } else {
+                                    lineTo(x(i), y(values[i]!!))
+                                }
+                            }
+                        },
+                        color,
+                        style = stroke,
+                    )
+                }
             }
         }
     }
@@ -102,7 +120,11 @@ private fun DrawScope.drawBand(band: List<ClosedRange<Int>?>, x: (Int) -> Float,
 /** Indices of each maximal stretch of consecutive true entries. */
 internal fun runs(present: List<Boolean>): List<List<Int>> {
     val out = mutableListOf<MutableList<Int>>()
-    present.forEachIndexed { i, p -> if (p) { if (i > 0 && present[i - 1]) out.last().add(i) else out.add(mutableListOf(i)) } }
+    present.forEachIndexed { i, p ->
+        if (p) {
+            if (i > 0 && present[i - 1]) out.last().add(i) else out.add(mutableListOf(i))
+        }
+    }
     return out
 }
 

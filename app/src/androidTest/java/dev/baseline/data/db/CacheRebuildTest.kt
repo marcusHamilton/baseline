@@ -31,10 +31,12 @@ class CacheRebuildTest {
 
     @Test
     fun schemaMismatchRebuildsCache() = runBlocking {
-        val old = object : SQLiteOpenHelper(context, name, null, 1) {
-            override fun onCreate(db: SQLiteDatabase) = db.execSQL("CREATE TABLE junk (x INTEGER)")
-            override fun onUpgrade(db: SQLiteDatabase, o: Int, n: Int) = Unit
-        }
+        val old =
+            object : SQLiteOpenHelper(context, name, null, 1) {
+                override fun onCreate(db: SQLiteDatabase) = db.execSQL("CREATE TABLE junk (x INTEGER)")
+
+                override fun onUpgrade(db: SQLiteDatabase, o: Int, n: Int) = Unit
+            }
         old.writableDatabase.use { it.execSQL("INSERT INTO junk VALUES (1)") }
         old.close()
 

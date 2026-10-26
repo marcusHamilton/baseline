@@ -4,9 +4,9 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
@@ -23,6 +23,7 @@ class ConnectivityTest {
         val cm = ApplicationProvider.getApplicationContext<Context>().getSystemService(ConnectivityManager::class.java)
         val shadow = shadowOf(cm)
         val network = cm.activeNetwork!!
+
         fun caps(validated: Boolean) = ShadowNetworkCapabilities.newInstance().also {
             shadowOf(it).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             if (validated) shadowOf(it).addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
@@ -37,6 +38,6 @@ class ConnectivityTest {
         callback.onCapabilitiesChanged(network, caps(validated = true))
 
         val states = withTimeout(10_000) { collected.await() }
-        assertEquals(listOf(true, false, true), states) 
+        assertEquals(listOf(true, false, true), states)
     }
 }

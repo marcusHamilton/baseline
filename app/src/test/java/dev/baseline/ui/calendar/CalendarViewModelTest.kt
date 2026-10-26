@@ -16,8 +16,8 @@ import dev.baseline.data.db.RawResponse
 import dev.baseline.data.db.ScoreEntity
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.prefs.UserPrefs
-import dev.baseline.testutil.ScopeCleanup
 import dev.baseline.scores.RecoveryZone
+import dev.baseline.testutil.ScopeCleanup
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -163,7 +163,29 @@ class CalendarViewModelTest {
     }
 
     private fun activity(id: Long, day: LocalDate, name: String?) = ActivityEntity(
-        id, name, "running", SportFamily.RUN, LocalDateTime.of(day, java.time.LocalTime.of(7, 0)), day, Instant.ofEpochSecond(1_792_000_000L + id),
-        3000.0, 10_000.0, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        id,
+        name,
+        "running",
+        SportFamily.RUN,
+        LocalDateTime.of(day, java.time.LocalTime.of(7, 0)),
+        day,
+        Instant.ofEpochSecond(1_792_000_000L + id),
+        3000.0,
+        10_000.0,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
     )
 }

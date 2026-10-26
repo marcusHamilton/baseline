@@ -29,7 +29,13 @@ import java.time.temporal.ChronoUnit
 /** [changedFrom]: earliest day whose typed rows were written or deleted, null if none. [empty]: Garmin's no-data placeholder, nothing written. */
 data class IngestResult(val changedFrom: LocalDate?, val empty: Boolean = false)
 
-internal fun earliest(a: LocalDate?, b: LocalDate?): LocalDate? = if (a == null) b else if (b == null) a else minOf(a, b)
+internal fun earliest(a: LocalDate?, b: LocalDate?): LocalDate? = if (a == null) {
+    b
+} else if (b == null) {
+    a
+} else {
+    minOf(a, b)
+}
 
 /**
  * Raw Garmin response -> typed rows (spec §5). The raw row is stored first and kept even if parsing throws;
@@ -54,9 +60,12 @@ class RawIngest(
 
     private suspend fun write(endpoint: GarminEndpoint, key: String, json: JsonElement): LocalDate? = when (endpoint) {
         DAILY_SUMMARIES -> mergeDays(json.jsonObject.items("data"), merge = DayParser::mergeDailySummary)
+
         HRV_RANGE -> mergeDays(json.jsonObject.items("hrvSummaries"), merge = DayParser::mergeHrv)
+
         // Real data has ~200 placeholder items with a null calendarDate.
         SLEEP_SUMMARIES -> mergeDays(json.jsonArray, skipUndated = true, rewake = true, merge = DayParser::mergeSleepSummary)
+
         BODY_BATTERY -> {
             val items = json.jsonArray
             val first = mergeDays(items, "date") { e, item -> DayParser.mergeBodyBattery(e, item, e?.sleepEnd) }
@@ -68,18 +77,27 @@ class RawIngest(
             }
             first
         }
+
         STRESS -> mergeDays(json.jsonArray, merge = DayParser::mergeStress)
+
         STEPS -> mergeDays(json.jsonArray, merge = DayParser::mergeSteps)
+
         // A night with no sleep comes back as a placeholder object without calendarDate. Only that is skipped: a non-object or a bad date still fails.
-        SLEEP_DAY -> if (json is JsonObject && json.str("calendarDate") == null) null
-            else mergeDays(JsonArray(listOf(json)), rewake = true, merge = DayParser::mergeSleepDay)
+        SLEEP_DAY -> if (json is JsonObject && json.str("calendarDate") == null) {
+            null
+        } else {
+            mergeDays(JsonArray(listOf(json)), rewake = true, merge = DayParser::mergeSleepDay)
+        }
+
         HRV_DAY -> (json.jsonObject["hrvSummary"] as? JsonObject)
             ?.let { mergeDays(JsonArray(listOf(it)), merge = DayParser::mergeHrv) }
+
         HEART_RATE_DAY -> {
             val (date, points) = DayParser.parseHeartRateDay(json.jsonObject)
             db.hrDayDao().upsert(HrDayEntity(date, HrPacking.pack(points)))
             date
         }
+
         ACTIVITY_PAGE -> {
             val items = json.jsonArray
             val n = key.toInt()
@@ -88,17 +106,22 @@ class RawIngest(
             }
             upsertActivities(items).first
         }
+
         ACTIVITY_RANGE -> {
             val (a, b) = key.split("..").map(LocalDate::parse)
             val items = json.jsonArray
             val (changed, seen) = upsertActivities(items)
             // The window's oldest day is excluded (Garmin may filter by GMT date, so it can be missing legitimately);
             // a full page may have more pages, so it deletes nothing. Tomorrow's window covers `a` as an interior day.
-            val gone = if (items.size >= PAGE_SIZE) emptyList() else
+            val gone = if (items.size >= PAGE_SIZE) {
+                emptyList()
+            } else {
                 (1..ChronoUnit.DAYS.between(a, b)).flatMap { db.activityDao().byDay(a.plusDays(it)) }.filter { it.id !in seen }
+            }
             db.activityDao().delete(gone.map { it.id })
             earliest(changed, gone.minOfOrNull { it.day })
         }
+
         else -> null
     }
 
@@ -151,11 +174,11 @@ class RawIngest(
         return first to ids
     }
 
-    private fun task(e: GarminEndpoint, key: String, priority: Int) =
-        SyncTaskEntity(e.name, key, priority, TaskStatus.PENDING, 0, null)
+    private fun task(e: GarminEndpoint, key: String, priority: Int) = SyncTaskEntity(e.name, key, priority, TaskStatus.PENDING, 0, null)
 
     private companion object {
         const val PAGE_SIZE = 50
+
         // Parsed later (profile/zones) or not yet used.
         val RAW_ONLY = setOf(PROFILE, HR_ZONES, SPO2_DAY, ACTIVITY_DETAIL)
     }

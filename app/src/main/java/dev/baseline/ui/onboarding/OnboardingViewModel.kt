@@ -12,17 +12,16 @@ import kotlinx.coroutines.launch
 
 sealed interface OnboardingState {
     data object Idle : OnboardingState
+
     data object Testing : OnboardingState
+
     data class Error(val message: String) : OnboardingState
+
     data object Done : OnboardingState
 }
 
 /** First-run key entry: see [saveAndTest]; the key is only stored once the test passes. */
-class OnboardingViewModel(
-    private val vault: ApiKeyVault,
-    private val clearToken: suspend () -> Unit = {},
-    private val testKey: KeyTest,
-) : ViewModel() {
+class OnboardingViewModel(private val vault: ApiKeyVault, private val clearToken: suspend () -> Unit = {}, private val testKey: KeyTest) : ViewModel() {
     private val _state = MutableStateFlow<OnboardingState>(OnboardingState.Idle)
     val state: StateFlow<OnboardingState> = _state
 

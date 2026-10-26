@@ -23,7 +23,10 @@ class ScopeCleanup {
 
     suspend fun close() {
         val all = synchronized(viewModels) { viewModels.toList().also { viewModels.clear() } }
-        all.forEach { it.viewModelScope.coroutineContext.job.cancelAndJoin() }
+        all.forEach {
+            it.viewModelScope.coroutineContext.job
+                .cancelAndJoin()
+        }
         storeScope.coroutineContext.job.cancelAndJoin()
     }
 }

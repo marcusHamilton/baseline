@@ -8,11 +8,11 @@ import dev.baseline.fit.FitReader
 import dev.baseline.fit.fitFixture
 import dev.baseline.prefs.BanisterSet.FEMALE_FITTED
 import dev.baseline.prefs.BanisterSet.MALE_FITTED
-import kotlin.math.exp
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.exp
 
 class TrimpTest {
     private fun effort(bpm: Int, a: Double = 0.64, b: Double = 1.92): Double {
@@ -71,13 +71,14 @@ class TrimpTest {
     }
 
     @Test fun scalingIgnoresTinyGarminLoads() {
-        val s = listOf(
-            LoadSample(SportFamily.STRENGTH, 50.0, 0.98, 3.0), // garmin load too small
-            LoadSample(SportFamily.RUN, 200.0, 0.9, 100.0), // 2.0
-            LoadSample(SportFamily.RUN, 300.0, 0.9, 100.0), // 3.0
-            LoadSample(SportFamily.RUN, 900.0, 0.3, 100.0), // low coverage
-            LoadSample(SportFamily.RIDE, 100.0, 0.9, 50.0), // 2.0
-        )
+        val s =
+            listOf(
+                LoadSample(SportFamily.STRENGTH, 50.0, 0.98, 3.0), // garmin load too small
+                LoadSample(SportFamily.RUN, 200.0, 0.9, 100.0), // 2.0
+                LoadSample(SportFamily.RUN, 300.0, 0.9, 100.0), // 3.0
+                LoadSample(SportFamily.RUN, 900.0, 0.3, 100.0), // low coverage
+                LoadSample(SportFamily.RIDE, 100.0, 0.9, 50.0), // 2.0
+            )
         val f = ActivityLoad.scalingFactors(s)
         assertEquals(2.5, f[SportFamily.RUN]!!, 1e-9) // even-sized median
         assertEquals(2.0, f[SportFamily.RIDE]!!, 1e-9)
@@ -110,12 +111,16 @@ class TrimpTest {
         assertEquals(0.0, Trimp.load(emptyList(), 44, 205, MALE_FITTED), 0.0)
         assertEquals(0.0, Trimp.coverage(emptyList(), 0.0), 0.0)
         val same = List(5) { HrPoint(100, 100) } // identical timestamps and bpm
-        val degenerate = listOf(
-            Trimp.load(same, 44, 205, MALE_FITTED), Trimp.load(same, 100, 100, MALE_FITTED),
-            Trimp.load(same, 44, 205, MALE_FITTED, fixedDtSec = 120), Trimp.coverage(same, 10.0), Trimp.coverage(same, 0.0),
-            NonActivityLoad.compute(emptyList(), emptyList(), 103, 44, 205, MALE_FITTED),
-            NonActivityLoad.compute(same, listOf(0L..1000L), 103, 44, 205, MALE_FITTED),
-        )
+        val degenerate =
+            listOf(
+                Trimp.load(same, 44, 205, MALE_FITTED),
+                Trimp.load(same, 100, 100, MALE_FITTED),
+                Trimp.load(same, 44, 205, MALE_FITTED, fixedDtSec = 120),
+                Trimp.coverage(same, 10.0),
+                Trimp.coverage(same, 0.0),
+                NonActivityLoad.compute(emptyList(), emptyList(), 103, 44, 205, MALE_FITTED),
+                NonActivityLoad.compute(same, listOf(0L..1000L), 103, 44, 205, MALE_FITTED),
+            )
         assertTrue(degenerate.all { it.isFinite() })
         assertTrue(ActivityLoad.scalingFactors(emptyList()).isEmpty())
         assertTrue(ActivityLoad.scalingFactors(List(3) { LoadSample(SportFamily.RUN, 10.0, 1.0, 20.0) }).values.all { it.isFinite() })

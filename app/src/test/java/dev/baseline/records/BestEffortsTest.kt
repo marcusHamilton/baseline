@@ -27,17 +27,22 @@ class BestEffortsTest {
 
     /** One record per second from epoch 0; [dist] and [power] map the second to a value. */
     private fun stream(n: Int, dist: ((Int) -> Float)? = null, power: ((Int) -> Int)? = null) = ActivityStreams(
-        LongArray(n) { it.toLong() }, IntArray(n) { -1 }, dist?.let { f -> FloatArray(n) { f(it) } }, null,
-        power?.let { f -> IntArray(n) { f(it) } }, null, null, null, null,
+        LongArray(n) { it.toLong() },
+        IntArray(n) { -1 },
+        dist?.let { f -> FloatArray(n) { f(it) } },
+        null,
+        power?.let { f -> IntArray(n) { f(it) } },
+        null,
+        null,
+        null,
+        null,
     )
 
     private fun splits(vararg kv: Pair<Int, Double>) = kv.joinToString(",", "{", "}") { "\"fastestSplit_${it.first}\":${it.second}" }
 
-    private fun ride(typeKey: String = "road_biking", splitsJson: String? = null) =
-        act(7, typeKey, distanceM = 50_000.0).copy(fastestSplitsJson = splitsJson)
+    private fun ride(typeKey: String = "road_biking", splitsJson: String? = null) = act(7, typeKey, distanceM = 50_000.0).copy(fastestSplitsJson = splitsJson)
 
-    private fun swimmer(splitsJson: String? = null) =
-        act(8, "lap_swimming", distanceM = 1000.0).copy(poolLengthM = 25.0, fastestSplitsJson = splitsJson)
+    private fun swimmer(splitsJson: String? = null) = act(8, "lap_swimming", distanceM = 1000.0).copy(poolLengthM = 25.0, fastestSplitsJson = splitsJson)
 
     private fun len(sec: Double, active: Boolean = true) = SwimLength(0.0, sec, null, null, active)
 
@@ -62,9 +67,18 @@ class BestEffortsTest {
 
     @Test fun fastestDistanceFindsWindowsThatStartOnASample() {
         // Only the mirrored pass sees this: the best 40 m starts at t=0 and ends 1/3 of the way to the last sample.
-        val s = ActivityStreams(
-            longArrayOf(0, 1, 11), IntArray(3) { -1 }, floatArrayOf(0f, 30f, 60f), null, null, null, null, null, null,
-        )
+        val s =
+            ActivityStreams(
+                longArrayOf(0, 1, 11),
+                IntArray(3) { -1 },
+                floatArrayOf(0f, 30f, 60f),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+            )
         assertEquals(4.333, BestEfforts.fastestDistance(s, 40.0)!!, 0.001)
     }
 
@@ -72,12 +86,20 @@ class BestEffortsTest {
         // 12 km at 5 m/s with the records stopping for 20 minutes at 6 km: any 10 km window spans the stop.
         fun ride(stopSec: Long): ActivityStreams {
             // (time, distance): moving to 6 km, standing still until the timer restarts, then moving again.
-            val pts = (0..1200).map { it.toLong() to 5f * it } +
-                (if (stopSec > 0) listOf(1200 + stopSec to 6000f) else emptyList()) +
-                (1201..2400).map { it + stopSec to 5f * it }
+            val pts =
+                (0..1200).map { it.toLong() to 5f * it } +
+                    (if (stopSec > 0) listOf(1200 + stopSec to 6000f) else emptyList()) +
+                    (1201..2400).map { it + stopSec to 5f * it }
             return ActivityStreams(
-                pts.map { it.first }.toLongArray(), IntArray(pts.size) { -1 }, pts.map { it.second }.toFloatArray(),
-                null, null, null, null, null, null,
+                pts.map { it.first }.toLongArray(),
+                IntArray(pts.size) { -1 },
+                pts.map { it.second }.toFloatArray(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
             )
         }
         assertEquals(2000.0, BestEfforts.fastestDistance(ride(0), 10_000.0)!!, 0.01)
@@ -99,15 +121,32 @@ class BestEffortsTest {
 
     @Test fun powerGapBreaksWindow() {
         // 30 s of data, a 10 s hole, 30 s of data: no 60 s window exists, but two seconds of dropout are carried forward.
-        val gap = ActivityStreams(
-            LongArray(60) { if (it < 30) it.toLong() else it + 10L }, IntArray(60) { -1 }, null, null,
-            IntArray(60) { 300 }, null, null, null, null,
-        )
+        val gap =
+            ActivityStreams(
+                LongArray(60) { if (it < 30) it.toLong() else it + 10L },
+                IntArray(60) { -1 },
+                null,
+                null,
+                IntArray(60) { 300 },
+                null,
+                null,
+                null,
+                null,
+            )
         assertNull(BestEfforts.bestPower(gap, 60))
         assertEquals(300, BestEfforts.bestPower(gap, 30))
-        val every2s = ActivityStreams(
-            LongArray(61) { it * 2L }, IntArray(61) { -1 }, null, null, IntArray(61) { 100 }, null, null, null, null,
-        )
+        val every2s =
+            ActivityStreams(
+                LongArray(61) { it * 2L },
+                IntArray(61) { -1 },
+                null,
+                null,
+                IntArray(61) { 100 },
+                null,
+                null,
+                null,
+                null,
+            )
         assertEquals(100, BestEfforts.bestPower(every2s, 60))
         // Valid zeros count; -1 samples do not.
         assertEquals(200, BestEfforts.bestPower(stream(60, power = { if (it < 30) 400 else 0 }), 60))
@@ -147,9 +186,14 @@ class BestEffortsTest {
 
     @Test fun newBadgeWithin30Days() {
         fun e(effort: String, daysAgo: Long) = BestEffortEntity(SportFamily.RUN, effort, 1476.757, 1, TODAY.minusDays(daysAgo))
-        val s = buildRecordsState(
-            SportFamily.RUN, listOf(e("5000m", 30), e("10000m", 31)), listOf(act(1)), TODAY, Formatters(false),
-        )
+        val s =
+            buildRecordsState(
+                SportFamily.RUN,
+                listOf(e("5000m", 30), e("10000m", 31)),
+                listOf(act(1)),
+                TODAY,
+                Formatters(false),
+            )
         val byLabel = s.rows.associateBy { it.label }
         assertTrue(byLabel.getValue("5K").isNew)
         assertFalse(byLabel.getValue("10K").isNew)

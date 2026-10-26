@@ -28,8 +28,11 @@ import dev.baseline.ui.theme.TextBody
 import kotlin.math.roundToInt
 
 internal val ZONES = listOf(
-    "Z1 Warm" to Color(0xFF64748B), "Z2 Easy" to Color(0xFF60A5FA), "Z3 Aerobic" to Color(0xFF34D399),
-    "Z4 Threshold" to Color(0xFFFBBF24), "Z5 Max" to Color(0xFFF87171),
+    "Z1 Warm" to Color(0xFF64748B),
+    "Z2 Easy" to Color(0xFF60A5FA),
+    "Z3 Aerobic" to Color(0xFF34D399),
+    "Z4 Threshold" to Color(0xFFFBBF24),
+    "Z5 Max" to Color(0xFFF87171),
 )
 
 /** (name, "m:ss", bar fraction of the total time) per zone; "—" when Garmin sent no figure for the zone. */
@@ -47,7 +50,8 @@ fun ZonesSection(zones: Section.Zones) {
         zoneRows(zones.secondsPerZone).forEachIndexed { i, (name, time, share) ->
             Row(
                 Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = "$name $time, ${(share * 100).roundToInt()} percent" },
-                Arrangement.spacedBy(10.dp), Alignment.CenterVertically,
+                Arrangement.spacedBy(10.dp),
+                Alignment.CenterVertically,
             ) {
                 Text(name, Modifier.width(88.dp), fontSize = 13.sp, color = TextBody)
                 Box(Modifier.weight(1f).height(10.dp).clip(RoundedCornerShape(5.dp)).background(Surface2).clearAndSetSemantics {}) {

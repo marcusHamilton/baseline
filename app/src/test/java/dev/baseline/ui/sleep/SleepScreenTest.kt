@@ -25,10 +25,23 @@ class SleepScreenTest {
     private val t0 = Instant.parse("2026-10-23T06:00:00Z")
     private val line = (0..30).map { t0.plusSeconds(it * 300L) to 50 + it }
     private val stages = listOf("Deep", "REM", "Light", "Awake").map { StageUi(it, null, null) }
-    private val empty = SleepUiState(
-        date, false, null, Duration.ZERO, Duration.ZERO, null, null, null, emptyList(), emptyList(), true, stages, null,
-        SleepTiles("—", "—", "—", "—"),
-    )
+    private val empty =
+        SleepUiState(
+            date,
+            false,
+            null,
+            Duration.ZERO,
+            Duration.ZERO,
+            null,
+            null,
+            null,
+            emptyList(),
+            emptyList(),
+            true,
+            stages,
+            null,
+            SleepTiles("—", "—", "—", "—"),
+        )
 
     @Test
     fun loadingThenChartsWithDescriptionsAndDashTiles() {
@@ -41,11 +54,19 @@ class SleepScreenTest {
 
     @Test
     fun readyShowsChartsHeroAndNeedCard() {
-        val ready = empty.copy(
-            sleepPct = 86, asleep = Duration.ofMinutes(462), need = Duration.ofMinutes(538), garminScore = 84,
-            bed = LocalTime.of(23, 2), wake = LocalTime.of(6, 54), hrvSeries = line, hrSeries = line, overnightLoading = false,
-            needCard = SleepNeedUi(Duration.ofMinutes(460), Duration.ofMinutes(78), listOf("HRV ▲"), LocalTime.of(23, 40)),
-        )
+        val ready =
+            empty.copy(
+                sleepPct = 86,
+                asleep = Duration.ofMinutes(462),
+                need = Duration.ofMinutes(538),
+                garminScore = 84,
+                bed = LocalTime.of(23, 2),
+                wake = LocalTime.of(6, 54),
+                hrvSeries = line,
+                hrSeries = line,
+                overnightLoading = false,
+                needCard = SleepNeedUi(Duration.ofMinutes(460), Duration.ofMinutes(78), listOf("HRV ▲"), LocalTime.of(23, 40)),
+            )
         rule.setContent { BaselineTheme { SleepContent(ready, false) {} } }
         rule.onNodeWithContentDescription("Sleep performance 86 percent").assertExists()
         rule.onNodeWithContentDescription("Overnight HRV, from 50 to 80 ms").assertExists()

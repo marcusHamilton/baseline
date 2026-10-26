@@ -52,13 +52,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.baseline.SystemZoneClock
 import dev.baseline.garmin.KeyStatus
 import dev.baseline.prefs.BanisterSet
 import dev.baseline.prefs.SyncInterval
 import dev.baseline.ui.components.KeyBanner
 import dev.baseline.ui.format.Formatters
-import dev.baseline.SystemZoneClock
-import kotlinx.coroutines.flow.StateFlow
 import dev.baseline.ui.theme.BarlowCondensed
 import dev.baseline.ui.theme.Card
 import dev.baseline.ui.theme.ChipActive
@@ -69,6 +68,7 @@ import dev.baseline.ui.theme.RecoveryRed
 import dev.baseline.ui.theme.Surface2
 import dev.baseline.ui.theme.TextBody
 import dev.baseline.ui.theme.TextMuted
+import kotlinx.coroutines.flow.StateFlow
 import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneId
@@ -84,10 +84,26 @@ private val SinceFormat = DateTimeFormatter.ofPattern("MMM yyyy", Locale.US)
 internal data class KeyCardUi(val status: String, val color: Color, val expiry: String, val detail: String, val fill: Float)
 
 internal fun keyCard(status: KeyStatus?): KeyCardUi = when (status) {
-    is KeyStatus.Ok -> KeyCardUi("Connected", RecoveryGreen, status.expires.format(ExpiryFormat), "${days(status.daysLeft)} left · Garmin emails you a week before", fillFor(status.daysLeft))
-    is KeyStatus.ExpiringSoon -> KeyCardUi("Expires soon", RecoveryAmber, status.expires.format(ExpiryFormat), "${days(status.daysLeft)} left", fillFor(status.daysLeft))
+    is KeyStatus.Ok -> KeyCardUi(
+        "Connected",
+        RecoveryGreen,
+        status.expires.format(ExpiryFormat),
+        "${days(status.daysLeft)} left · Garmin emails you a week before",
+        fillFor(status.daysLeft),
+    )
+
+    is KeyStatus.ExpiringSoon -> KeyCardUi(
+        "Expires soon",
+        RecoveryAmber,
+        status.expires.format(ExpiryFormat),
+        "${days(status.daysLeft)} left",
+        fillFor(status.daysLeft),
+    )
+
     is KeyStatus.Expired -> KeyCardUi("Expired", RecoveryRed, status.expires.format(ExpiryFormat), "Sync paused. Cached data is still available.", 0f)
+
     KeyStatus.Invalid -> KeyCardUi("Key rejected", RecoveryRed, "—", "Garmin didn't accept the saved key. Cached data is still available.", 0f)
+
     KeyStatus.Missing, null -> KeyCardUi("No key", TextMuted, "—", "Paste a key below to start syncing.", 0f)
 }
 
@@ -145,8 +161,12 @@ fun SettingsContent(
         Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            "SETTINGS", Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 0.dp),
-            fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 28.sp, letterSpacing = 1.12.sp,
+            "SETTINGS",
+            Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 0.dp),
+            fontFamily = BarlowCondensed,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 28.sp,
+            letterSpacing = 1.12.sp,
         )
         KeyBanner(state.keyStatus, Modifier.padding(horizontal = 20.dp))
         KeyCard(state.keyStatus, entry, onReplaceKey, onEditKey)
@@ -154,7 +174,10 @@ fun SettingsContent(
         ScoresCard(state, onBanister, onRecalculate)
         Text(
             "Data from Garmin Connect Personal API. Not affiliated with Garmin.",
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp), fontSize = 12.sp, color = TextMuted, textAlign = TextAlign.Center,
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+            fontSize = 12.sp,
+            color = TextMuted,
+            textAlign = TextAlign.Center,
         )
     }
 }
@@ -207,7 +230,10 @@ private fun KeyCard(status: KeyStatus?, entry: KeyEntryState, onReplace: (String
         }
         OutlinedTextField(
             value = key,
-            onValueChange = { key = it; onEdit() },
+            onValueChange = {
+                key = it
+                onEdit()
+            },
             label = { Text("Replace API key") },
             placeholder = { Text("Paste key from Garmin Connect") },
             singleLine = true,
@@ -220,8 +246,13 @@ private fun KeyCard(status: KeyStatus?, entry: KeyEntryState, onReplace: (String
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Lifetimes.forEach { n ->
                 FilterChip(
-                    selected = lifetime == n, onClick = { lifetime = n }, enabled = !testing,
-                    label = { Text("$n days") }, modifier = Modifier.heightIn(min = 48.dp), colors = chipColors(), border = chipBorder(lifetime == n, !testing),
+                    selected = lifetime == n,
+                    onClick = { lifetime = n },
+                    enabled = !testing,
+                    label = { Text("$n days") },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    colors = chipColors(),
+                    border = chipBorder(lifetime == n, !testing),
                 )
             }
         }
@@ -242,7 +273,16 @@ private fun KeyCard(status: KeyStatus?, entry: KeyEntryState, onReplace: (String
         }
         when (entry) {
             is KeyEntryState.Error -> Text(entry.message, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = RecoveryRed, fontSize = 14.sp)
-            KeyEntryState.Saved -> Text("Key saved. Syncing now.", Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = RecoveryGreen, fontSize = 14.sp)
+
+            KeyEntryState.Saved -> Text(
+                "Key saved. Syncing now.",
+                Modifier.semantics {
+                    liveRegion = LiveRegionMode.Polite
+                },
+                color = RecoveryGreen,
+                fontSize = 14.sp,
+            )
+
             else -> {}
         }
         TextButton(onClick = { uri.openUri(KEY_URL) }, Modifier.heightIn(min = 48.dp)) {
@@ -250,7 +290,9 @@ private fun KeyCard(status: KeyStatus?, entry: KeyEntryState, onReplace: (String
         }
         Text(
             "Stored encrypted on this phone (Android Keystore). Never leaves the device except to Garmin.",
-            fontSize = 12.sp, lineHeight = 18.sp, color = TextMuted,
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+            color = TextMuted,
         )
     }
 }
@@ -258,8 +300,11 @@ private fun KeyCard(status: KeyStatus?, entry: KeyEntryState, onReplace: (String
 /** Selected chip = the Trends range chip's fill with the accent text, so it never reads as bare green text. */
 @Composable
 private fun chipColors() = FilterChipDefaults.filterChipColors(
-    selectedContainerColor = ChipActive, selectedLabelColor = RecoveryGreen,
-    labelColor = TextBody, disabledSelectedContainerColor = ChipActive, disabledLabelColor = TextMuted,
+    selectedContainerColor = ChipActive,
+    selectedLabelColor = RecoveryGreen,
+    labelColor = TextBody,
+    disabledSelectedContainerColor = ChipActive,
+    disabledLabelColor = TextMuted,
 )
 
 @Composable
@@ -274,21 +319,26 @@ private fun SyncCard(state: SettingsUiState, clock: Clock, zone: ZoneId, onInter
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SyncInterval.entries.forEach { i ->
                 FilterChip(
-                    selected = state.interval == i, onClick = { onInterval(i) },
-                    label = { Text(intervalLabel(i)) }, modifier = Modifier.heightIn(min = 48.dp),
-                    colors = chipColors(), border = chipBorder(state.interval == i, true),
+                    selected = state.interval == i,
+                    onClick = { onInterval(i) },
+                    label = { Text(intervalLabel(i)) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    colors = chipColors(),
+                    border = chipBorder(state.interval == i, true),
                 )
             }
         }
         InfoRow("History on phone", coverageText(state.coverage))
         OutlinedButton(
-            onClick = onSyncNow, Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            onClick = onSyncNow,
+            Modifier.fillMaxWidth().heightIn(min = 48.dp),
             border = androidx.compose.foundation.BorderStroke(1.dp, Outline),
         ) { Text("Sync now", fontWeight = FontWeight.SemiBold) }
         if (state.failedCount > 0) {
             InfoRow("Sync problems", if (state.failedCount == 1) "1 item couldn't sync" else "${state.failedCount} items couldn't sync")
             OutlinedButton(
-                onClick = onRetryFailed, enabled = !state.retrying,
+                onClick = onRetryFailed,
+                enabled = !state.retrying,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { contentDescription = "Retry failed sync items" },
                 border = androidx.compose.foundation.BorderStroke(1.dp, Outline),
             ) { Text("Retry failed", fontWeight = FontWeight.SemiBold) }
@@ -305,18 +355,26 @@ private fun ScoresCard(state: SettingsUiState, onBanister: (BanisterSet) -> Unit
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             BanisterSet.entries.forEach { b ->
                 FilterChip(
-                    selected = state.banister == b, onClick = { onBanister(b) }, enabled = !state.recalculating,
-                    label = { Text(banisterLabel(b)) }, modifier = Modifier.heightIn(min = 48.dp),
-                    colors = chipColors(), border = chipBorder(state.banister == b, !state.recalculating),
+                    selected = state.banister == b,
+                    onClick = { onBanister(b) },
+                    enabled = !state.recalculating,
+                    label = { Text(banisterLabel(b)) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    colors = chipColors(),
+                    border = chipBorder(state.banister == b, !state.recalculating),
                 )
             }
         }
         Text(
             "Banister's training-impulse weights. Changing the set re-scores your whole history.",
-            fontSize = 12.sp, lineHeight = 18.sp, color = TextMuted,
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+            color = TextMuted,
         )
         OutlinedButton(
-            onClick = onRecalculate, enabled = !state.recalculating, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            onClick = onRecalculate,
+            enabled = !state.recalculating,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             border = androidx.compose.foundation.BorderStroke(1.dp, Outline),
         ) {
             if (state.recalculating) {

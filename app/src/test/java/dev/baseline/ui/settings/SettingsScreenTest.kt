@@ -1,10 +1,13 @@
 package dev.baseline.ui.settings
 
 import androidx.activity.ComponentActivity
-import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import dev.baseline.garmin.KeyStatus
@@ -12,9 +15,6 @@ import dev.baseline.prefs.BanisterSet
 import dev.baseline.prefs.SyncInterval
 import dev.baseline.ui.theme.BaselineTheme
 import org.junit.Assert.assertEquals
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -31,14 +31,23 @@ class SettingsScreenTest {
     val rule = createAndroidComposeRule<ComponentActivity>()
 
     private val clock = Clock.fixed(Instant.parse("2026-10-24T12:00:00Z"), ZoneOffset.UTC)
-    private val base = SettingsUiState(
-        KeyStatus.Ok(LocalDate.of(2027, 10, 21), 362), SyncInterval.HOURLY, BanisterSet.MALE_FITTED,
-        Instant.parse("2026-10-24T11:00:00Z"), HistoryCoverage(LocalDate.of(2025, 9, 1), LocalDate.of(2025, 8, 30)), false, false,
-    )
+    private val base =
+        SettingsUiState(
+            KeyStatus.Ok(LocalDate.of(2027, 10, 21), 362),
+            SyncInterval.HOURLY,
+            BanisterSet.MALE_FITTED,
+            Instant.parse("2026-10-24T11:00:00Z"),
+            HistoryCoverage(LocalDate.of(2025, 9, 1), LocalDate.of(2025, 8, 30)),
+            false,
+            false,
+        )
 
     private fun show(
-        state: SettingsUiState, entry: KeyEntryState = KeyEntryState.Idle,
-        onBanister: (BanisterSet) -> Unit = {}, onRecalc: () -> Unit = {}, onInterval: (SyncInterval) -> Unit = {},
+        state: SettingsUiState,
+        entry: KeyEntryState = KeyEntryState.Idle,
+        onBanister: (BanisterSet) -> Unit = {},
+        onRecalc: () -> Unit = {},
+        onInterval: (SyncInterval) -> Unit = {},
     ) = rule.setContent {
         BaselineTheme { SettingsContent(state, entry, clock, clock.zone, { _, _ -> }, {}, onInterval, {}, onBanister, onRecalc) }
     }
@@ -76,7 +85,9 @@ class SettingsScreenTest {
                 BaselineTheme { SettingsContent(base, KeyEntryState.Idle, clock, clock.zone, { _, _ -> }, {}, {}, {}, {}, {}) }
             }
             rule.onNodeWithText("Today, 11:00 AM").performScrollTo().assertIsDisplayed()
-        } finally { java.util.TimeZone.setDefault(old) }
+        } finally {
+            java.util.TimeZone.setDefault(old)
+        }
     }
 
     @Test
@@ -117,7 +128,9 @@ class SettingsScreenTest {
         var interval: SyncInterval? = null
         show(
             base.copy(keyStatus = KeyStatus.Expired(LocalDate.of(2026, 10, 20))),
-            onBanister = { picked = it }, onRecalc = { recalcs++ }, onInterval = { interval = it },
+            onBanister = { picked = it },
+            onRecalc = { recalcs++ },
+            onInterval = { interval = it },
         )
         rule.onNodeWithText("Your Garmin key expired, so new data can't sync. Paste a new key in Settings.").assertIsDisplayed()
         rule.onNodeWithText("Female-fitted").performScrollTo().performClick()

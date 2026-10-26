@@ -10,10 +10,15 @@ import java.time.LocalDateTime
 /** Enums use Room's built-in name-string mapping; dates are ISO strings so they sort and range-query correctly. */
 class Converters {
     @ColumnTypeConverter fun dateToString(d: LocalDate?): String? = d?.toString()
+
     @ColumnTypeConverter fun stringToDate(s: String?): LocalDate? = s?.let(LocalDate::parse)
+
     @ColumnTypeConverter fun dateTimeToString(d: LocalDateTime?): String? = d?.toString()
+
     @ColumnTypeConverter fun stringToDateTime(s: String?): LocalDateTime? = s?.let(LocalDateTime::parse)
+
     @ColumnTypeConverter fun instantToMillis(i: Instant?): Long? = i?.toEpochMilli()
+
     @ColumnTypeConverter fun millisToInstant(m: Long?): Instant? = m?.let(Instant::ofEpochMilli)
 }
 

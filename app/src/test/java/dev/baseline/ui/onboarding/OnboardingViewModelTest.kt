@@ -52,15 +52,19 @@ class OnboardingViewModelTest {
         if (this is GarminResult.Ok || this == GarminResult.Empty) onValid()
     }
 
-    private suspend fun OnboardingViewModel.settle() =
-        withTimeout(5_000) { state.first { it is OnboardingState.Done || it is OnboardingState.Error } }
+    private suspend fun OnboardingViewModel.settle() = withTimeout(5_000) { state.first { it is OnboardingState.Done || it is OnboardingState.Error } }
 
     @Test
     fun submitSavesOnlyAfterSuccessfulTest() = runBlocking {
         var result: GarminResult = GarminResult.KeyInvalid
         var keyDuringTest: String? = null
         var testedKey: String? = null
-        val vm = OnboardingViewModel(vault) { candidate, onValid -> keyDuringTest = vault.key(); testedKey = candidate; result.also { it.pass(onValid) } }
+        val vm =
+            OnboardingViewModel(vault) { candidate, onValid ->
+                keyDuringTest = vault.key()
+                testedKey = candidate
+                result.also { it.pass(onValid) }
+            }
 
         vm.submit("k", 365)
         assertEquals(
@@ -79,20 +83,22 @@ class OnboardingViewModelTest {
 
     @Test
     fun errorMessagesAndClearOnEveryFailure() = runBlocking {
-        val cases = listOf<suspend () -> GarminResult>(
-            { GarminResult.RateLimited(429) },
-            { throw IOException("boom") },
-            { GarminResult.Failed(403, "Forbidden") },
-            { GarminResult.BadRequest("x") },
-            { throw IllegalStateException("keystore exploded") },
-        )
-        val expected = listOf(
-            "Garmin is busy right now. Try again in a minute.",
-            "No connection. Check your internet and try again.",
-            "Couldn't reach Garmin (code 403).",
-            "Couldn't reach Garmin (code 400).",
-            "Couldn't reach Garmin (code unknown).",
-        )
+        val cases =
+            listOf<suspend () -> GarminResult>(
+                { GarminResult.RateLimited(429) },
+                { throw IOException("boom") },
+                { GarminResult.Failed(403, "Forbidden") },
+                { GarminResult.BadRequest("x") },
+                { throw IllegalStateException("keystore exploded") },
+            )
+        val expected =
+            listOf(
+                "Garmin is busy right now. Try again in a minute.",
+                "No connection. Check your internet and try again.",
+                "Couldn't reach Garmin (code 403).",
+                "Couldn't reach Garmin (code 400).",
+                "Couldn't reach Garmin (code unknown).",
+            )
         cases.zip(expected).forEach { (case, msg) ->
             val vm = OnboardingViewModel(vault) { _, onValid -> case().also { it.pass(onValid) } }
             vm.submit("secret", 30)
@@ -104,7 +110,11 @@ class OnboardingViewModelTest {
     @Test
     fun emptyCountsAsSuccessAndBlankIsIgnored() = runBlocking {
         var calls = 0
-        val vm = OnboardingViewModel(vault) { _, onValid -> calls++; GarminResult.Empty.also { it.pass(onValid) } }
+        val vm =
+            OnboardingViewModel(vault) { _, onValid ->
+                calls++
+                GarminResult.Empty.also { it.pass(onValid) }
+            }
         vm.submit("   ", 365)
         assertEquals(OnboardingState.Idle, vm.state.value)
         assertEquals(0, calls)

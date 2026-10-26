@@ -76,8 +76,11 @@ class CalendarViewModel(private val repo: Repository, private val todayFlow: Sta
                 val onMonth = month.value == YearMonth.from(prev)
                 prev = now
                 if (onMonth) month.value = YearMonth.from(now)
-                if (onToday) selected.value = now
-                else if (selected.value.isAfter(now) || YearMonth.from(selected.value) != month.value) selected.value = now
+                if (onToday) {
+                    selected.value = now
+                } else if (selected.value.isAfter(now) || YearMonth.from(selected.value) != month.value) {
+                    selected.value = now
+                }
             }
         }
     }
@@ -87,6 +90,7 @@ class CalendarViewModel(private val repo: Repository, private val todayFlow: Sta
     }
 
     fun prevMonth() = goTo(month.value.minusMonths(1))
+
     fun nextMonth() = goTo(month.value.plusMonths(1))
 
     /** Keeps the day of the month (clamped to the month and to today), so the card follows the user around. */
@@ -97,22 +101,34 @@ class CalendarViewModel(private val repo: Repository, private val todayFlow: Sta
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val state: StateFlow<CalendarUiState> = month.flatMapLatest { m ->
-        val from = m.atDay(1); val to = m.atEndOfMonth()
-        combine(
-            repo.days(from, to), repo.scores(from, to), repo.activitiesBetween(from, to), repo.firstDayOfWeek, selected, todayFlow,
-        ) { values ->
-            @Suppress("UNCHECKED_CAST")
-            val days = values[0] as List<DayEntity>; val scores = values[1] as List<ScoreEntity>
-            val activities = values[2] as List<ActivityEntity>; val first = values[3] as DayOfWeek
-            val sel = values[4] as LocalDate; val today = values[5] as LocalDate
-            buildCalendarState(m, first, sel, today, days, scores, activities)
-        }
-    }.flowOn(Dispatchers.Default)
-        .stateIn(
-            viewModelScope, SharingStarted.WhileSubscribed(5_000),
-            buildCalendarState(month.value, DayOfWeek.MONDAY, todayFlow.value, todayFlow.value, emptyList(), emptyList(), emptyList()),
-        )
+    val state: StateFlow<CalendarUiState> =
+        month
+            .flatMapLatest { m ->
+                val from = m.atDay(1)
+                val to = m.atEndOfMonth()
+                combine(
+                    repo.days(from, to),
+                    repo.scores(from, to),
+                    repo.activitiesBetween(from, to),
+                    repo.firstDayOfWeek,
+                    selected,
+                    todayFlow,
+                ) { values ->
+                    @Suppress("UNCHECKED_CAST")
+                    val days = values[0] as List<DayEntity>
+                    val scores = values[1] as List<ScoreEntity>
+                    val activities = values[2] as List<ActivityEntity>
+                    val first = values[3] as DayOfWeek
+                    val sel = values[4] as LocalDate
+                    val today = values[5] as LocalDate
+                    buildCalendarState(m, first, sel, today, days, scores, activities)
+                }
+            }.flowOn(Dispatchers.Default)
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                buildCalendarState(month.value, DayOfWeek.MONDAY, todayFlow.value, todayFlow.value, emptyList(), emptyList(), emptyList()),
+            )
 }
 
 internal fun buildCalendarState(
@@ -128,26 +144,44 @@ internal fun buildCalendarState(
     val scoreBy = scores.associateBy { it.date }
     val actBy = activities.groupBy { it.day }
     val lead = Math.floorMod(month.atDay(1).dayOfWeek.value - firstDay.value, 7)
-    val cells = List(lead) { null } + (1..month.lengthOfMonth()).map { n ->
-        val d = month.atDay(n)
-        val recovery = scoreBy[d]?.recovery
-        val count = actBy[d]?.size ?: 0
-        CalendarCell(
-            d, recovery?.let(RecoveryZone::of), recovery, minOf(count, MAX_DOTS), count,
-            isToday = d == today, isFuture = d.isAfter(today),
-        )
-    }
+    val cells =
+        List(lead) { null } +
+            (1..month.lengthOfMonth()).map { n ->
+                val d = month.atDay(n)
+                val recovery = scoreBy[d]?.recovery
+                val count = actBy[d]?.size ?: 0
+                CalendarCell(
+                    d,
+                    recovery?.let(RecoveryZone::of),
+                    recovery,
+                    minOf(count, MAX_DOTS),
+                    count,
+                    isToday = d == today,
+                    isFuture = d.isAfter(today),
+                )
+            }
     val score = scoreBy[selected]
     val perf = score?.sleepPerformance ?: SleepPerformance.of(dayBy[selected]?.sleepSeconds, dayBy[selected]?.sleepNeedMinutes)
-    val summary = DaySummary(
-        selected, score?.recovery, score?.recovery?.let(RecoveryZone::of),
-        perf?.takeIf { it.isFinite() }?.let { (it * 100).roundToInt() },
-        score?.strain?.takeIf { it.isFinite() },
-        actBy[selected].orEmpty().map { a -> a.name?.takeIf { it.isNotBlank() } ?: prettyType(a.typeKey) },
-    )
+    val summary =
+        DaySummary(
+            selected,
+            score?.recovery,
+            score?.recovery?.let(RecoveryZone::of),
+            perf?.takeIf { it.isFinite() }?.let { (it * 100).roundToInt() },
+            score?.strain?.takeIf { it.isFinite() },
+            actBy[selected].orEmpty().map { a -> a.name?.takeIf { it.isNotBlank() } ?: prettyType(a.typeKey) },
+        )
     return CalendarUiState(
-        month, firstDay, cells, selected, summary,
-        scores.mapNotNull { it.recovery }.takeIf { it.isNotEmpty() }?.average()?.roundToInt(),
+        month,
+        firstDay,
+        cells,
+        selected,
+        summary,
+        scores
+            .mapNotNull { it.recovery }
+            .takeIf { it.isNotEmpty() }
+            ?.average()
+            ?.roundToInt(),
         days.mapNotNull { it.sleepSeconds?.takeIf { s -> s > 0 }?.toDouble() }.takeIf { it.isNotEmpty() }?.average(),
         activities.size,
         canGoNext = month.plusMonths(1).atDay(1) <= today,

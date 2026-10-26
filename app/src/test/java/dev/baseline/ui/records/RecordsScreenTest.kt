@@ -6,11 +6,11 @@ import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
 import dev.baseline.data.SportFamily
 import dev.baseline.data.db.BestEffortEntity
@@ -29,15 +29,18 @@ import org.robolectric.RobolectricTestRunner
 class RecordsScreenTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
 
-    private val efforts = listOf(
-        BestEffortEntity(SportFamily.RUN, "5000m", 1476.757, 1, TODAY.minusDays(3)),
-        BestEffortEntity(SportFamily.RIDE, "power_300s", 318.0, 2, TODAY.minusDays(90)),
-    )
+    private val efforts =
+        listOf(
+            BestEffortEntity(SportFamily.RUN, "5000m", 1476.757, 1, TODAY.minusDays(3)),
+            BestEffortEntity(SportFamily.RIDE, "power_300s", 318.0, 2, TODAY.minusDays(90)),
+        )
     private val activities = listOf(act(1, name = "Parkrun"), act(2, "virtual_ride", name = "Zwift"))
+
     private fun state(tab: SportFamily) = buildRecordsState(tab, efforts, activities, TODAY, Formatters(false))
 
     @Test fun rowOpensItsActivityAndTabsAndBackAreBigEnough() {
-        val opened = mutableListOf<Long>(); var back = 0
+        val opened = mutableListOf<Long>()
+        var back = 0
         rule.setContent { BaselineTheme { RecordsContent(state(SportFamily.RUN), {}, { back++ }, { opened += it }) } }
         rule.onNodeWithText("24:37").assertExists()
         rule.onNodeWithText("NEW").assertExists()

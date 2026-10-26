@@ -28,7 +28,8 @@ class StrainTest {
         val empty = Strain.calibrate(emptyList(), 1)
         val zeros = Strain.calibrate(List(5) { 0.0 }, 1)
         val same = Strain.calibrate(List(5) { 50.0 }, 1)
-        assertEquals(1.0, empty.tau, 0.0); assertEquals(1.0, zeros.tau, 0.0)
+        assertEquals(1.0, empty.tau, 0.0)
+        assertEquals(1.0, zeros.tau, 0.0)
         listOf(empty, zeros, same).forEach { c ->
             assertTrue(c.tau.isFinite())
             listOf(0.0, 50.0, 1e9).forEach { assertTrue(Strain.of(it, c).isFinite()) }

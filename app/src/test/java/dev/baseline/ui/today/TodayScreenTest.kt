@@ -2,21 +2,21 @@ package dev.baseline.ui.today
 
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
-import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -31,11 +31,11 @@ import dev.baseline.scores.Contributor
 import dev.baseline.scores.RecoveryResult
 import dev.baseline.scores.RecoveryZone
 import dev.baseline.ui.components.ActivityCardUi
-import dev.baseline.ui.components.statRowDescription
-import dev.baseline.ui.components.bodyBatteryChartDescription
 import dev.baseline.ui.components.BODY_BATTERY_FILL_TAG
 import dev.baseline.ui.components.BodyBatteryFillColor
+import dev.baseline.ui.components.bodyBatteryChartDescription
 import dev.baseline.ui.components.bodyBatteryColor
+import dev.baseline.ui.components.statRowDescription
 import dev.baseline.ui.theme.BaselineTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -54,16 +54,27 @@ class TodayScreenTest {
     private val date = LocalDate.of(2026, 10, 24)
     private val curve = (0..40).map { Instant.ofEpochSecond(1_792_738_800L + it * 240L) to 30 + it }
     private val run = ActivityCardUi(9, "Morning Run", SportFamily.RUN, "running", "7:05 AM · 10.21 km · 52:14", 9.8)
-    private val rows = listOf(
-        StatRowUi("hrv", "HRV (overnight)", "58", "ms", "55 ms", "▲ 6%", true, "better"),
-        StatRowUi("rhr", "Resting heart rate", "49", "bpm", "47 bpm", "▲ 2", false, "worse"),
-        StatRowUi("steps", "Steps", "6,214", "", "9,120", "so far", null),
-    )
+    private val rows =
+        listOf(
+            StatRowUi("hrv", "HRV (overnight)", "58", "ms", "55 ms", "▲ 6%", true, "better"),
+            StatRowUi("rhr", "Resting heart rate", "49", "bpm", "47 bpm", "▲ 2", false, "worse"),
+            StatRowUi("steps", "Steps", "6,214", "", "9,120", "so far", null),
+        )
     private val green = RecoveryResult(72, false, RecoveryZone.GREEN, listOf(Contributor("hrv", 1.0, 6.2), Contributor("rhr", 1.0, -2.0)))
-    private val full = TodayUiState(
-        date, true, 86, green, null, 11.4, 14.0..18.0, emptyList(), rows,
-        BodyBatteryUi(80, curve, 62, null, false), Instant.ofEpochSecond(1_792_738_800L),
-    )
+    private val full =
+        TodayUiState(
+            date,
+            true,
+            86,
+            green,
+            null,
+            11.4,
+            14.0..18.0,
+            emptyList(),
+            rows,
+            BodyBatteryUi(80, curve, 62, null, false),
+            Instant.ofEpochSecond(1_792_738_800L),
+        )
 
     private fun show(
         initial: TodayUiState,
@@ -78,7 +89,13 @@ class TodayScreenTest {
         rule.setContent {
             BaselineTheme {
                 TodayContent(
-                    state, syncLine, onPrev, onNext, onCalendar, onSleep, onActivity,
+                    state,
+                    syncLine,
+                    onPrev,
+                    onNext,
+                    onCalendar,
+                    onSleep,
+                    onActivity,
                     onToggleBodyBattery = { state = state.copy(bodyBattery = state.bodyBattery.copy(expanded = !state.bodyBattery.expanded)) },
                 )
             }
@@ -94,8 +111,18 @@ class TodayScreenTest {
 
         state = state.copy(activities = listOf(run))
         rule.waitForIdle()
-        val activities = rule.onNodeWithText("TODAY'S ACTIVITIES").assertExists().getUnclippedBoundsInRoot().top
-        val baseline = rule.onNodeWithText("VS. 30-DAY BASELINE").assertExists().getUnclippedBoundsInRoot().top
+        val activities =
+            rule
+                .onNodeWithText("TODAY'S ACTIVITIES")
+                .assertExists()
+                .getUnclippedBoundsInRoot()
+                .top
+        val baseline =
+            rule
+                .onNodeWithText("VS. 30-DAY BASELINE")
+                .assertExists()
+                .getUnclippedBoundsInRoot()
+                .top
         assert(activities < baseline) { "activities header at $activities should be above baseline header at $baseline" }
         rule.onNodeWithText("Morning Run").assertExists()
         rule.onNodeWithText("7:05 AM · 10.21 km · 52:14").assertExists()
@@ -152,18 +179,22 @@ class TodayScreenTest {
     fun rowDescriptionsCoverEveryShape() {
         fun d(row: StatRowUi) = statRowDescription(row)
         assertEquals("Sleep 7h 54m, 21m above baseline 7h 33m, better", d(StatRowUi("sleep", "Sleep", "7h 54m", "", "7h 33m", "▲ 21m", true, "better")))
-        assertEquals("Respiration (sleep) 12.0 brpm, 1.0 brpm below baseline 13.0 brpm, normal", d(StatRowUi("resp", "Respiration (sleep)", "12.0", "brpm", "13.0 brpm", "▼ 1.0", null, "normal")))
+        assertEquals(
+            "Respiration (sleep) 12.0 brpm, 1.0 brpm below baseline 13.0 brpm, normal",
+            d(StatRowUi("resp", "Respiration (sleep)", "12.0", "brpm", "13.0 brpm", "▼ 1.0", null, "normal")),
+        )
         assertEquals("Avg stress 24, same as baseline 24", d(StatRowUi("stress", "Avg stress", "24", "", "24", "same", null)))
         assertEquals("Avg stress no value, baseline 24", d(StatRowUi("stress", "Avg stress", "—", "", "24", null, null)))
     }
 
     @Test
     fun verdictWordsAreShownAsText() {
-        val rows = listOf(
-            StatRowUi("hrv", "HRV (overnight)", "58", "ms", "55 ms", "▲ 6%", true, "better"),
-            StatRowUi("resp", "Respiration (sleep)", "12.0", "brpm", "13.0 brpm", "▼ 1.0", null, "normal"),
-            StatRowUi("rhr", "Resting heart rate", "49", "bpm", "47 bpm", "▲ 2", false, "worse"),
-        )
+        val rows =
+            listOf(
+                StatRowUi("hrv", "HRV (overnight)", "58", "ms", "55 ms", "▲ 6%", true, "better"),
+                StatRowUi("resp", "Respiration (sleep)", "12.0", "brpm", "13.0 brpm", "▼ 1.0", null, "normal"),
+                StatRowUi("rhr", "Resting heart rate", "49", "bpm", "47 bpm", "▲ 2", false, "worse"),
+            )
         show(full.copy(rows = rows))
         listOf("better", "normal", "worse").forEach { rule.onNodeWithText(it, useUnmergedTree = true).assertExists() }
     }
@@ -188,7 +219,13 @@ class TodayScreenTest {
         rule.setContent {
             BaselineTheme {
                 TodayContent(
-                    state, null, {}, {}, {}, {}, {},
+                    state,
+                    null,
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
                     onToggleBodyBattery = { state = state.copy(bodyBattery = state.bodyBattery.copy(expanded = !state.bodyBattery.expanded)) },
                 )
             }
@@ -196,7 +233,8 @@ class TodayScreenTest {
         listOf(80 to 0xFF34D399, 60 to 0xFFA3D94C, 40 to 0xFFFBBF24, 10 to 0xFFF87171).forEach { (level, argb) ->
             state = state.copy(bodyBattery = BodyBatteryUi(level, curve, 62, null, false))
             rule.waitForIdle()
-            rule.onNodeWithTag(BODY_BATTERY_FILL_TAG, useUnmergedTree = true)
+            rule
+                .onNodeWithTag(BODY_BATTERY_FILL_TAG, useUnmergedTree = true)
                 .assert(SemanticsMatcher.expectValue(BodyBatteryFillColor, Color(argb)))
             rule.onNodeWithText(level.toString()).assertExists()
         }
@@ -218,10 +256,17 @@ class TodayScreenTest {
 
     @Test
     fun bodyBatteryBandBoundaries() {
-        val expect = mapOf(
-            100 to 0xFF34D399, 76 to 0xFF34D399, 75 to 0xFFA3D94C, 51 to 0xFFA3D94C,
-            50 to 0xFFFBBF24, 26 to 0xFFFBBF24, 25 to 0xFFF87171, 0 to 0xFFF87171,
-        )
+        val expect =
+            mapOf(
+                100 to 0xFF34D399,
+                76 to 0xFF34D399,
+                75 to 0xFFA3D94C,
+                51 to 0xFFA3D94C,
+                50 to 0xFFFBBF24,
+                26 to 0xFFFBBF24,
+                25 to 0xFFF87171,
+                0 to 0xFFF87171,
+            )
         expect.forEach { (level, argb) -> assertEquals("level $level", Color(argb), bodyBatteryColor(level)) }
     }
 
@@ -240,9 +285,21 @@ class TodayScreenTest {
         assertEquals("Body Battery that day, ranging 30 to 32, ending at 48", bodyBatteryChartDescription(bb, false))
         assertEquals("Body Battery today", bodyBatteryChartDescription(BodyBatteryUi(null, emptyList(), null, null, true), true))
         var state by mutableStateOf(full)
-        rule.setContent { BaselineTheme { TodayContent(state, null, {}, {}, {}, {}, {}, { state = state.copy(bodyBattery = state.bodyBattery.copy(expanded = !state.bodyBattery.expanded)) }) } }
-        fun label() = rule.onNodeWithText("Body Battery").fetchSemanticsNode().config
-            .getOrNull(androidx.compose.ui.semantics.SemanticsActions.OnClick)?.label
+        rule.setContent {
+            BaselineTheme {
+                TodayContent(state, null, {}, {}, {}, {}, {}, {
+                    state =
+                        state.copy(bodyBattery = state.bodyBattery.copy(expanded = !state.bodyBattery.expanded))
+                })
+            }
+        }
+
+        fun label() = rule
+            .onNodeWithText("Body Battery")
+            .fetchSemanticsNode()
+            .config
+            .getOrNull(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+            ?.label
         assertEquals("Show Body Battery curve", label())
         rule.onNodeWithText("Body Battery").performClick()
         assertEquals("Hide Body Battery curve", label())
@@ -256,7 +313,11 @@ class TodayScreenTest {
 
     @Test
     fun navigationCallbacksAndNextDisabledOnToday() {
-        var calendar = 0; var prev = 0; var next = 0; var sleep = 0; var opened = -1L
+        var calendar = 0
+        var prev = 0
+        var next = 0
+        var sleep = 0
+        var opened = -1L
         show(full.copy(activities = listOf(run)), null, { prev++ }, { next++ }, { calendar++ }, { sleep++ }, { opened = it })
         rule.onNodeWithContentDescription("Next day").assertIsNotEnabled()
         rule.onNodeWithContentDescription("Previous day").assertIsEnabled().performClick()
@@ -281,9 +342,12 @@ class TodayScreenTest {
     fun headerShowsDateAndSyncedTimeAndSyncLine() {
         show(full, syncLine = "Syncing… 3/10")
         rule.onNodeWithText("Syncing… 3/10").assertExists()
-        rule.onNode(SemanticsMatcher("subtitle") { n ->
-            n.config.getOrNull(SemanticsProperties.Text)?.any { it.text.startsWith("Sat, Oct 24 · Synced ") } == true
-        }).assertExists()
+        rule
+            .onNode(
+                SemanticsMatcher("subtitle") { n ->
+                    n.config.getOrNull(SemanticsProperties.Text)?.any { it.text.startsWith("Sat, Oct 24 · Synced ") } == true
+                },
+            ).assertExists()
     }
 
     @Test
@@ -298,12 +362,20 @@ class TodayScreenTest {
 
     @Test
     fun editModeShowsHandlesAndEyesAndDimsHiddenRows() {
-        val rows = listOf(
-            StatRowUi("hrv", "HRV (overnight)", "98", "ms", "90 ms", null, null),
-            StatRowUi("steps", "Steps", "—", "", null, null, null, hidden = true),
-        )
+        val rows =
+            listOf(
+                StatRowUi("hrv", "HRV (overnight)", "98", "ms", "90 ms", null, null),
+                StatRowUi("steps", "Steps", "—", "", null, null, null, hidden = true),
+            )
         var state by mutableStateOf(full.copy(rows = rows.take(1)))
-        rule.setContent { BaselineTheme { TodayContent(state, null, {}, {}, {}, {}, {}, {}, onToggleEdit = { state = if (state.editing) full.copy(rows = rows.take(1)) else full.copy(rows = rows, editing = true) }) } }
+        rule.setContent {
+            BaselineTheme {
+                TodayContent(state, null, {}, {}, {}, {}, {}, {}, onToggleEdit = {
+                    state =
+                        if (state.editing) full.copy(rows = rows.take(1)) else full.copy(rows = rows, editing = true)
+                })
+            }
+        }
         rule.onNodeWithText("Edit").assertExists()
         rule.onNodeWithContentDescription("Drag to reorder HRV (overnight)").assertDoesNotExist()
         rule.onNodeWithText("Edit").performScrollTo().performClick()
@@ -343,17 +415,27 @@ class TodayScreenTest {
         }
     }
 
-    private fun scrollValue() = rule.onNodeWithTag("screen-today").fetchSemanticsNode()
-        .config[SemanticsProperties.VerticalScrollAxisRange].value()
+    private fun scrollValue() = rule
+        .onNodeWithTag("screen-today")
+        .fetchSemanticsNode()
+        .config[SemanticsProperties.VerticalScrollAxisRange]
+        .value()
 
     @Test
     fun draggingARowOverItsNeighbourMovesItThere() {
         val moves = mutableListOf<Pair<Int, Int>>()
         setEditContent(editRows(3), 1200.dp, moves)
         val h0 = rule.onNodeWithContentDescription("Drag to reorder Row 0").performScrollTo().getUnclippedBoundsInRoot()
-        val stride = rule.onNodeWithContentDescription("Drag to reorder Row 1").getUnclippedBoundsInRoot().top.value - h0.top.value
+        val stride =
+            rule
+                .onNodeWithContentDescription("Drag to reorder Row 1")
+                .getUnclippedBoundsInRoot()
+                .top.value - h0.top.value
         rule.onNodeWithContentDescription("Drag to reorder Row 0").performTouchInput {
-            down(center); moveBy(Offset(0f, 5f)); moveBy(Offset(0f, stride.dp.toPx() * 1.1f)); up()
+            down(center)
+            moveBy(Offset(0f, 5f))
+            moveBy(Offset(0f, stride.dp.toPx() * 1.1f))
+            up()
         }
         assertEquals(listOf(0 to 1), moves)
     }
@@ -363,11 +445,15 @@ class TodayScreenTest {
         val rows = editRows(3)
         var state by mutableStateOf(full.copy(rows = rows, editing = true))
         rule.setContent { BaselineTheme { Box(Modifier.height(1200.dp)) { TodayContent(state, null, {}, {}, {}, {}, {}, {}, onMoveRow = { _, _ -> }) } } }
+
         fun top(i: Int) = rule.onNodeWithContentDescription("Drag to reorder Row $i").getUnclippedBoundsInRoot().top
         rule.onNodeWithContentDescription("Drag to reorder Row 1").performScrollTo()
         val (t0, t1) = top(0) to top(1)
         rule.onNodeWithContentDescription("Drag to reorder Row 0").performTouchInput {
-            down(center); moveBy(Offset(0f, 5f)); moveBy(Offset(0f, (t1 - t0).toPx() * 1.1f)); up()
+            down(center)
+            moveBy(Offset(0f, 5f))
+            moveBy(Offset(0f, (t1 - t0).toPx() * 1.1f))
+            up()
         }
         rule.mainClock.advanceTimeBy(1000)
         assertEquals(t1.value, top(0).value, 1f) // not slid back to the old slot
@@ -383,11 +469,15 @@ class TodayScreenTest {
         val rows = editRows(3)
         var state by mutableStateOf(full.copy(rows = rows, editing = true))
         rule.setContent { BaselineTheme { Box(Modifier.height(1200.dp)) { TodayContent(state, null, {}, {}, {}, {}, {}, {}, onMoveRow = { _, _ -> }) } } }
+
         fun top(i: Int) = rule.onNodeWithContentDescription("Drag to reorder Row $i").getUnclippedBoundsInRoot().top
         rule.onNodeWithContentDescription("Drag to reorder Row 1").performScrollTo()
         val (t0, t1) = top(0) to top(1)
         rule.onNodeWithContentDescription("Drag to reorder Row 0").performTouchInput {
-            down(center); moveBy(Offset(0f, 5f)); moveBy(Offset(0f, (t1 - t0).toPx() * 1.1f)); up()
+            down(center)
+            moveBy(Offset(0f, 5f))
+            moveBy(Offset(0f, (t1 - t0).toPx() * 1.1f))
+            up()
         }
         state = state.copy(rows = listOf(rows[1], rows[0], rows[2])) // saved
         rule.waitForIdle()
@@ -404,8 +494,16 @@ class TodayScreenTest {
         val handle = rule.onNodeWithContentDescription("Drag to reorder Row 6").performScrollTo()
         val before = scrollValue()
         rule.mainClock.autoAdvance = false // the edge-scroll loop runs a frame loop for as long as the finger is down
-        handle.performTouchInput { down(center); moveBy(Offset(0f, 5f)); moveBy(Offset(0f, 150.dp.toPx())) }
-        repeat(200) { rule.mainClock.advanceTimeByFrame(); org.robolectric.shadows.ShadowLooper.idleMainLooper() }
+        handle.performTouchInput {
+            down(center)
+            moveBy(Offset(0f, 5f))
+            moveBy(Offset(0f, 150.dp.toPx()))
+        }
+        repeat(200) {
+            rule.mainClock.advanceTimeByFrame()
+            org.robolectric.shadows.ShadowLooper
+                .idleMainLooper()
+        }
         assertTrue("page scrolled", scrollValue() > before)
         handle.performTouchInput { up() }
         rule.mainClock.advanceTimeBy(100)

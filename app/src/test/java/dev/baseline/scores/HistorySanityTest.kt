@@ -32,8 +32,11 @@ class HistorySanityTest {
 
     @Test
     fun fullHistoryIsSane() = runBlocking {
-        val db = Room.inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
-            .allowMainThreadQueries().build()
+        val db =
+            Room
+                .inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
+                .allowMainThreadQueries()
+                .build()
         try {
             val file = File.createTempFile("prefs", ".preferences_pb").also { it.delete() }
             val prefs = UserPrefs(PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO)) { file })
@@ -45,7 +48,9 @@ class HistorySanityTest {
                 Triple(GarminEndpoint.SLEEP_SUMMARIES, "history", "sleep_summaries_history.json"),
                 Triple(GarminEndpoint.ACTIVITY_PAGE, "0", "activities_all.json"),
                 Triple(GarminEndpoint.HR_ZONES, "-", "hr_zones.json"),
-            )) ingest.apply(e, key, fixture(f).toString().toByteArray())
+            )) {
+                ingest.apply(e, key, fixture(f).toString().toByteArray())
+            }
 
             val from = LocalDate.of(2025, 8, 30)
             val today = LocalDate.of(2026, 10, 24)
@@ -57,18 +62,34 @@ class HistorySanityTest {
             val strain = rows.map { it.strain }.sorted()
             val recovery = rows.mapNotNull { it.recovery }.sorted()
             val tau = prefs.strainCalibration.first()!!.tau
-            val dist = "tau=%.2f strain min/p10/p50/p90/max=%s recovery(n=%d) min/p10/p50/p90/max=%s".format(
-                tau,
-                listOf(strain.first(), nearestRank(strain, .1), nearestRank(strain, .5), nearestRank(strain, .9), strain.last()),
-                recovery.size,
-                recovery.takeIf { it.isNotEmpty() }?.let { listOf(it.first(), nearestRank(it.map(Int::toDouble), .1), nearestRank(it.map(Int::toDouble), .5), nearestRank(it.map(Int::toDouble), .9), it.last()) },
-            )
+            val dist =
+                "tau=%.2f strain min/p10/p50/p90/max=%s recovery(n=%d) min/p10/p50/p90/max=%s".format(
+                    tau,
+                    listOf(strain.first(), nearestRank(strain, .1), nearestRank(strain, .5), nearestRank(strain, .9), strain.last()),
+                    recovery.size,
+                    recovery
+                        .takeIf {
+                            it.isNotEmpty()
+                        }?.let {
+                            listOf(
+                                it.first(),
+                                nearestRank(it.map(Int::toDouble), .1),
+                                nearestRank(it.map(Int::toDouble), .5),
+                                nearestRank(it.map(Int::toDouble), .9),
+                                it.last(),
+                            )
+                        },
+                )
 
             rows.forEach { s ->
                 listOfNotNull(s.sleepPerformance, s.dayLoad, s.strain, s.strainTargetLow, s.strainTargetHigh)
                     .forEach { assertFalse("NaN/inf in $s", it.isNaN() || it.isInfinite()) }
             }
-            db.activityScoreDao().all().first().forEach { assertFalse(it.load.isNaN() || it.strain.isNaN()) }
+            db
+                .activityScoreDao()
+                .all()
+                .first()
+                .forEach { assertFalse(it.load.isNaN() || it.strain.isNaN()) }
             assertEquals(dist, 74.61, tau, 0.01)
             assertTrue(dist, nearestRank(strain, 0.9) in 16.5..17.5)
             assertTrue(dist, recovery.all { it in 0..100 })

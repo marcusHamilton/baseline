@@ -6,16 +6,16 @@ import androidx.test.core.app.ApplicationProvider
 import dev.baseline.data.SportFamily
 import dev.baseline.data.db.ActivityEntity
 import dev.baseline.data.db.ActivityScoreEntity
-import dev.baseline.data.db.HrDayEntity
-import dev.baseline.data.db.HrPacking
-import dev.baseline.data.db.SyncTaskEntity
-import dev.baseline.data.db.TaskStatus
 import dev.baseline.data.db.ActivityStreamEntity
 import dev.baseline.data.db.AppDatabase
 import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.db.DayEntity
+import dev.baseline.data.db.HrDayEntity
+import dev.baseline.data.db.HrPacking
 import dev.baseline.data.db.LoadSource
 import dev.baseline.data.db.ScoreEntity
+import dev.baseline.data.db.SyncTaskEntity
+import dev.baseline.data.db.TaskStatus
 import dev.baseline.fit.FitReader
 import dev.baseline.fit.fitFixture
 import dev.baseline.garmin.GarminEndpoint
@@ -53,13 +53,16 @@ class ScorePipelineTest {
     private val oct20 = LocalDate.of(2026, 10, 20)
 
     private fun clockAt(d: LocalDate) = Clock.fixed(d.atTime(8, 0).toInstant(ZoneOffset.UTC), ZoneOffset.UTC)
+
     private fun pipeline(today: LocalDate = oct24) = ScorePipeline(db, prefs, clockAt(today))
 
     @Before
     fun setUp() {
-        db = Room.inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
-            .allowMainThreadQueries()
-            .build()
+        db =
+            Room
+                .inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
+                .allowMainThreadQueries()
+                .build()
         val file = File.createTempFile("prefs", ".preferences_pb").also { it.delete() }
         prefs = UserPrefs(PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO)) { file })
     }
@@ -67,15 +70,36 @@ class ScorePipelineTest {
     @After
     fun tearDown() = db.close()
 
-    private fun activity(id: Long, day: LocalDate, family: SportFamily = SportFamily.RUN, garmin: Double? = 20.0, duration: Double = 600.0) =
-        ActivityEntity(
-            id, "a$id", "running", family, LocalDateTime.of(day, java.time.LocalTime.of(7, 0)), day,
-            day.atTime(14, 0).toInstant(ZoneOffset.UTC), duration, null, null, null, null, null, null, null, null,
-            garmin, null, null, null, null, null, null, null,
-        )
+    private fun activity(id: Long, day: LocalDate, family: SportFamily = SportFamily.RUN, garmin: Double? = 20.0, duration: Double = 600.0) = ActivityEntity(
+        id,
+        "a$id",
+        "running",
+        family,
+        LocalDateTime.of(day, java.time.LocalTime.of(7, 0)),
+        day,
+        day.atTime(14, 0).toInstant(ZoneOffset.UTC),
+        duration,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        garmin,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+    )
 
     private suspend fun zones(max: Int = 205, rest: Int = 44) = RawIngest(db).apply(
-        GarminEndpoint.HR_ZONES, "-",
+        GarminEndpoint.HR_ZONES,
+        "-",
         """[{"sport":"DEFAULT","maxHeartRateUsed":$max,"restingHeartRateUsed":$rest,"zone1Floor":103}]""".toByteArray(),
     )
 
@@ -113,7 +137,9 @@ class ScorePipelineTest {
         db.activityDao().upsert(activity(1, oct20).copy(fastestSplitsJson = """{"fastestSplit_5000":1500.0}"""))
         pipeline().recompute(oct20)
         val r = db.bestEffortDao().forSport(SportFamily.RUN).single()
-        assertEquals("5000m", r.effort); assertEquals(1500.0, r.valueSec, 0.0); assertEquals(1L, r.activityId)
+        assertEquals("5000m", r.effort)
+        assertEquals(1500.0, r.valueSec, 0.0)
+        assertEquals(1L, r.activityId)
     }
 
     @Test
@@ -135,7 +161,8 @@ class ScorePipelineTest {
 
     @Test
     fun pastDaysKeepCalibrationVersion() = runBlocking {
-        db.dayDao().upsert(DayEntity(oct20)); db.dayDao().upsert(DayEntity(oct24))
+        db.dayDao().upsert(DayEntity(oct20))
+        db.dayDao().upsert(DayEntity(oct24))
         db.activityDao().upsert(activity(1, oct20, garmin = 100.0))
         val p = pipeline()
         p.recalibrateIfDue(oct24, true)
@@ -169,9 +196,9 @@ class ScorePipelineTest {
         db.activityDao().upsert(activity(1, oct20))
         val p = pipeline()
         p.recalibrateIfDue(oct24.minusDays(2), true) // none stored yet: v1
-        p.recalibrateIfDue(oct24, true)              // same month: no-op
+        p.recalibrateIfDue(oct24, true) // same month: no-op
         assertEquals(1, prefs.strainCalibration.first()!!.version)
-        val nov2 = LocalDate.of(2026, 11, 2)         // first sync of November, not the 1st
+        val nov2 = LocalDate.of(2026, 11, 2) // first sync of November, not the 1st
         p.recalibrateIfDue(nov2, true)
         assertEquals(2, prefs.strainCalibration.first()!!.version)
         p.recalibrateIfDue(nov2.plusDays(5), true)
@@ -181,8 +208,8 @@ class ScorePipelineTest {
     @Test
     fun scalingUsesGlobalMedianForFamilyWithoutHr() = runBlocking {
         zones()
-        withStrengthStream(1, oct20, SportFamily.RUN, 20.0)   // ratio 6.5786 / 20
-        withStrengthStream(2, oct20, SportFamily.RIDE, 40.0)  // ratio 6.5786 / 40
+        withStrengthStream(1, oct20, SportFamily.RUN, 20.0) // ratio 6.5786 / 20
+        withStrengthStream(2, oct20, SportFamily.RIDE, 40.0) // ratio 6.5786 / 40
         db.activityDao().upsert(activity(3, oct24, SportFamily.SWIM, 100.0)) // no stream, no samples of its own
         pipeline().recompute(oct20)
         val globalMedian = (6.5786 / 20 + 6.5786 / 40) / 2
@@ -191,7 +218,11 @@ class ScorePipelineTest {
         assertEquals(100.0 * globalMedian, swim.load, 1e-3)
         assertEquals(6.5786, db.activityScoreDao().get(1)!!.load, 1e-4)
         assertEquals(100.0 * globalMedian, db.scoreDao().get(oct24)!!.dayLoad, 1e-3)
-        db.scoreDao().range(oct20, oct24).first().forEach(::assertNoNaN)
+        db
+            .scoreDao()
+            .range(oct20, oct24)
+            .first()
+            .forEach(::assertNoNaN)
     }
 
     @Test
@@ -250,7 +281,8 @@ class ScorePipelineTest {
 
     @Test
     fun provisionalCalibrationIsReplacedWhenBackfillCompletes() = runBlocking {
-        db.dayDao().upsert(DayEntity(oct20)); db.dayDao().upsert(DayEntity(oct24))
+        db.dayDao().upsert(DayEntity(oct20))
+        db.dayDao().upsert(DayEntity(oct24))
         db.activityDao().upsert(activity(1, oct20, garmin = 100.0))
         val p = pipeline()
         p.recalibrateIfDue(oct24, backfillDone = false)
@@ -277,6 +309,7 @@ class ScorePipelineTest {
     fun provisionalStaysProvisionalUntilFitStageIsDone() = runBlocking {
         db.dayDao().upsert(DayEntity(oct20))
         db.activityDao().upsert(activity(1, oct20, garmin = 100.0))
+
         fun task(e: String, k: String, prio: Int, st: TaskStatus) = SyncTaskEntity(e, k, prio, st, 0, null)
         db.taskDao().insertIgnore(listOf(task("STEPS", "a", 5, TaskStatus.DONE), task("FIT", "1", 7, TaskStatus.PENDING)))
         assertFalse("network constraint only looks at priorities 1..6", db.taskDao().backfillPending())
@@ -310,8 +343,10 @@ class ScorePipelineTest {
     }
 
     private fun f(bpm: Int) = ((bpm - 44) / 161.0).let { r -> r * 0.64 * Math.exp(1.92 * r) }
+
     private fun hrDay(day: LocalDate, vararg points: Pair<LocalTime, Int>) = HrDayEntity(
-        day, HrPacking.pack(points.map { (t, bpm) -> HrPoint(day.atTime(t).toEpochSecond(ZoneOffset.UTC), bpm) }),
+        day,
+        HrPacking.pack(points.map { (t, bpm) -> HrPoint(day.atTime(t).toEpochSecond(ZoneOffset.UTC), bpm) }),
     )
 
     @Test
@@ -319,18 +354,24 @@ class ScorePipelineTest {
         zones()
         val oct19 = oct20.minusDays(1)
         db.dayDao().upsert(DayEntity(oct20))
-        db.activityDao().upsert(activity(1, oct20, garmin = 20.0))                        // 14:00..14:10 GMT
-        db.activityDao().upsert(activity(2, oct19, garmin = 0.0).copy(                   // 23:50 .. 00:20 next day
-            startGmt = oct19.atTime(23, 50).toInstant(ZoneOffset.UTC), durationSec = 1800.0))
-        db.hrDayDao().upsert(hrDay(
-            oct20,
-            LocalTime.of(0, 10) to 170,   // inside yesterday's activity that runs past midnight: excluded
-            LocalTime.of(10, 0) to 120,   // counts
-            LocalTime.of(10, 2) to 102,   // below zone1Floor 103: ignored
-            LocalTime.of(10, 4) to 170,   // counts
-            LocalTime.of(14, 5) to 150,   // inside today's activity: excluded
-            LocalTime.of(14, 10) to 160,  // window end is inclusive: excluded
-        ))
+        db.activityDao().upsert(activity(1, oct20, garmin = 20.0)) // 14:00..14:10 GMT
+        db.activityDao().upsert(
+            activity(2, oct19, garmin = 0.0).copy( // 23:50 .. 00:20 next day
+                startGmt = oct19.atTime(23, 50).toInstant(ZoneOffset.UTC),
+                durationSec = 1800.0,
+            ),
+        )
+        db.hrDayDao().upsert(
+            hrDay(
+                oct20,
+                LocalTime.of(0, 10) to 170, // inside yesterday's activity that runs past midnight: excluded
+                LocalTime.of(10, 0) to 120, // counts
+                LocalTime.of(10, 2) to 102, // below zone1Floor 103: ignored
+                LocalTime.of(10, 4) to 170, // counts
+                LocalTime.of(14, 5) to 150, // inside today's activity: excluded
+                LocalTime.of(14, 10) to 160, // window end is inclusive: excluded
+            ),
+        )
         val p = pipeline()
         p.recompute(oct20)
         val expectedNonActivity = 2.0 * (f(120) + f(170))
@@ -382,6 +423,7 @@ class ScorePipelineTest {
         }
         val p = pipeline()
         p.recalibrateAndRescore(true)
+
         suspend fun p90Strain(): Double {
             val loads = days.map { db.scoreDao().get(it)!!.dayLoad }
             val cal = prefs.strainCalibration.first()!!

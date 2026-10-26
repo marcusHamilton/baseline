@@ -61,8 +61,13 @@ fun ActivityContent(state: ActivityUiState, onBack: () -> Unit, mapContent: @Com
             CircleButton(R.drawable.ic_chevron_left, "Back", true, onBack)
             Column {
                 Text(
-                    (state.header?.title ?: "ACTIVITY").uppercase(), fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold,
-                    fontSize = 22.sp, letterSpacing = 0.88.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    (state.header?.title ?: "ACTIVITY").uppercase(),
+                    fontFamily = BarlowCondensed,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 22.sp,
+                    letterSpacing = 0.88.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 state.header?.let { Text(it.subtitle, fontSize = 13.sp, color = TextMuted) }
             }
@@ -77,7 +82,12 @@ fun ActivityContent(state: ActivityUiState, onBack: () -> Unit, mapContent: @Com
         }
         SummaryGrid(state.summary)
         state.note?.let {
-            Text(it, Modifier.fillMaxWidth().testTag("note").clip(RoundedCornerShape(14.dp)).background(Card).padding(16.dp), fontSize = 14.sp, color = TextMuted)
+            Text(
+                it,
+                Modifier.fillMaxWidth().testTag("note").clip(RoundedCornerShape(14.dp)).background(Card).padding(16.dp),
+                fontSize = 14.sp,
+                color = TextMuted,
+            )
         }
         state.sections.forEach { section ->
             when (section) {

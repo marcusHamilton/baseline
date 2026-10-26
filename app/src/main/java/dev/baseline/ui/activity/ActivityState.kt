@@ -37,14 +37,30 @@ enum class SectionKind { MAP, HR, ZONES, SPLITS, RUNNING, RIDE, SWIM, STRENGTH }
 sealed interface Section {
     val kind: SectionKind
 
-    data class Map(val latLon: List<Pair<Double, Double>>) : Section { override val kind get() = SectionKind.MAP }
-    data class Hr(val series: List<Pair<Instant, Number>>, val avg: Int?, val max: Int?, val ticks: List<String>) : Section { override val kind get() = SectionKind.HR }
-    data class Zones(val secondsPerZone: List<Double?>) : Section { override val kind get() = SectionKind.ZONES }
-    data class Splits(val unit: String, val rows: List<SplitRow>) : Section { override val kind get() = SectionKind.SPLITS }
-    data class Ride(val speed: Series?, val power: Series?, val elevation: Series?) : Section { override val kind get() = SectionKind.RIDE }
-    data class Swim(val lengths: List<LengthRow>, val pacePer100: Double?, val summary: String) : Section { override val kind get() = SectionKind.SWIM }
-    data class Strength(val exercises: List<ExerciseUi>) : Section { override val kind get() = SectionKind.STRENGTH }
-    data class Running(val cadence: String, val power: String, val stride: String) : Section { override val kind get() = SectionKind.RUNNING }
+    data class Map(val latLon: List<Pair<Double, Double>>) : Section {
+        override val kind get() = SectionKind.MAP
+    }
+    data class Hr(val series: List<Pair<Instant, Number>>, val avg: Int?, val max: Int?, val ticks: List<String>) : Section {
+        override val kind get() = SectionKind.HR
+    }
+    data class Zones(val secondsPerZone: List<Double?>) : Section {
+        override val kind get() = SectionKind.ZONES
+    }
+    data class Splits(val unit: String, val rows: List<SplitRow>) : Section {
+        override val kind get() = SectionKind.SPLITS
+    }
+    data class Ride(val speed: Series?, val power: Series?, val elevation: Series?) : Section {
+        override val kind get() = SectionKind.RIDE
+    }
+    data class Swim(val lengths: List<LengthRow>, val pacePer100: Double?, val summary: String) : Section {
+        override val kind get() = SectionKind.SWIM
+    }
+    data class Strength(val exercises: List<ExerciseUi>) : Section {
+        override val kind get() = SectionKind.STRENGTH
+    }
+    data class Running(val cadence: String, val power: String, val stride: String) : Section {
+        override val kind get() = SectionKind.RUNNING
+    }
 }
 
 /** [header] is null while [loading] and when the activity does not exist. [note] explains missing detail data. */
@@ -114,16 +130,23 @@ internal fun buildActivityState(
     return ActivityUiState(
         ActivityHeader(
             activity.name?.takeIf { it.isNotBlank() } ?: prettyType(activity.typeKey),
-            activity.startTimeLocal.format(DAY) + " · " + fmt.clock(activity.startTimeLocal), activity.sportFamily,
+            activity.startTimeLocal.format(DAY) + " · " + fmt.clock(activity.startTimeLocal),
+            activity.sportFamily,
         ),
         summaryTiles(activity, score, activeLengths.size, sections.filterIsInstance<Section.Swim>().firstOrNull()?.pacePer100, activeSets, fmt),
-        sections, note,
+        sections,
+        note,
     )
 }
 
 /** [swimPace] is seconds per 100 m of actual swimming (rests left out), as the lengths list shows it; it wins over elapsed time. */
 private fun summaryTiles(
-    a: ActivityEntity, score: ActivityScoreEntity?, lengths: Int, swimPace: Double?, sets: List<StrengthSetEntity>, fmt: Formatters,
+    a: ActivityEntity,
+    score: ActivityScoreEntity?,
+    lengths: Int,
+    swimPace: Double?,
+    sets: List<StrengthSetEntity>,
+    fmt: Formatters,
 ): List<Tile> {
     fun tile(label: String, value: String?) = Tile(label, value ?: DASH)
     val time = tile("time", fmt.duration(a.durationSec))
@@ -132,25 +155,49 @@ private fun summaryTiles(
     val distance = tile("distance ${fmt.distanceUnit}", fmt.distanceValue(a.distanceM))
     val elev = tile("elev gain ${fmt.elevationUnit}", fmt.elevation(a.elevationGainM?.takeIf { it > 0 }))
     val strain = Tile(
-        "strain", score?.strain?.takeIf { it.isFinite() }?.let { "%.1f".format(Locale.US, it) } ?: DASH,
-        "Garmin load " + (a.garminLoad?.takeIf { it.isFinite() }?.roundToInt()?.toString() ?: DASH), accent = true,
+        "strain",
+        score?.strain?.takeIf { it.isFinite() }?.let { "%.1f".format(Locale.US, it) } ?: DASH,
+        "Garmin load " + (a.garminLoad?.takeIf { it.isFinite() }?.roundToInt()?.toString() ?: DASH),
+        accent = true,
     )
     val volumeKg = sets.sumOf { (it.weightKg ?: 0.0) * (it.reps ?: 0) }
     return when (a.sportFamily) {
-        SportFamily.RUN -> listOf(distance, time, tile("avg pace ${fmt.paceUnit}", fmt.pace(fmt.secondsPerUnit(a.distanceM, a.durationSec))), avgHr, elev, strain)
+        SportFamily.RUN -> listOf(
+            distance,
+            time,
+            tile("avg pace ${fmt.paceUnit}", fmt.pace(fmt.secondsPerUnit(a.distanceM, a.durationSec))),
+            avgHr,
+            elev,
+            strain,
+        )
+
         SportFamily.RIDE -> listOf(
-            distance, time,
-            tile("avg speed ${fmt.speedUnit}", fmt.speedValue(a.distanceM?.let { d -> a.durationSec.takeIf { it > 0 }?.let { d / it } })), avgHr, elev, strain,
+            distance,
+            time,
+            tile("avg speed ${fmt.speedUnit}", fmt.speedValue(a.distanceM?.let { d -> a.durationSec.takeIf { it > 0 }?.let { d / it } })),
+            avgHr,
+            elev,
+            strain,
         )
+
         SportFamily.SWIM -> listOf(
-            tile("distance ${fmt.swimDistanceUnit}", fmt.swimDistance(a.distanceM)), time,
+            tile("distance ${fmt.swimDistanceUnit}", fmt.swimDistance(a.distanceM)),
+            time,
             tile("avg pace ${fmt.swimPaceUnit}", fmt.swimPace(swimPace ?: a.distanceM?.takeIf { it > 0 }?.let { a.durationSec / it * 100 })),
-            avgHr, tile("lengths", lengths.takeIf { it > 0 }?.toString()), strain,
+            avgHr,
+            tile("lengths", lengths.takeIf { it > 0 }?.toString()),
+            strain,
         )
+
         SportFamily.STRENGTH -> listOf(
-            time, tile("sets", sets.size.takeIf { it > 0 }?.toString()), strain,
-            tile("volume ${fmt.weightUnit}", volumeKg.takeIf { it > 0 }?.let(fmt::volume)), avgHr, maxHr,
+            time,
+            tile("sets", sets.size.takeIf { it > 0 }?.toString()),
+            strain,
+            tile("volume ${fmt.weightUnit}", volumeKg.takeIf { it > 0 }?.let(fmt::volume)),
+            avgHr,
+            maxHr,
         )
+
         SportFamily.OTHER -> listOf(distance, time, avgHr, maxHr, elev, strain)
     }
 }
@@ -161,7 +208,9 @@ private fun hrSection(a: ActivityEntity, s: ActivityStreams, fmt: Formatters): S
     val values = s.hr.filter { it > 0 }
     val elapsed = (s.epochSec.last() - s.epochSec.first()).toDouble()
     return Section.Hr(
-        pts, (a.avgHr?.takeIf { it > 0 } ?: values.average()).roundToInt(), (a.maxHr?.takeIf { it > 0 }?.roundToInt() ?: values.max()),
+        pts,
+        (a.avgHr?.takeIf { it > 0 } ?: values.average()).roundToInt(),
+        (a.maxHr?.takeIf { it > 0 }?.roundToInt() ?: values.max()),
         (0..4).map { fmt.duration(elapsed * it / 4) ?: "0:00" },
     )
 }
@@ -185,8 +234,17 @@ private fun splitsSection(s: ActivityStreams, fmt: Formatters): Section.Splits? 
             val p = paces[i]
             SplitRow(
                 if (r.distanceM >= unitM - 0.5) (i + 1).toString() else "%.2f".format(Locale.US, r.distanceM / unitM),
-                p, fmt.pace(p) ?: DASH, r.avgHr?.toString() ?: DASH, fmt.elevationDelta(r.elevChangeM) ?: DASH,
-                if (p <= 0) 0.4f else if (slow - fast < 1e-6) 0.7f else (0.4 + 0.6 * (slow - p) / (slow - fast)).toFloat(),
+                p,
+                fmt.pace(p) ?: DASH,
+                r.avgHr?.toString() ?: DASH,
+                fmt.elevationDelta(r.elevChangeM) ?: DASH,
+                if (p <= 0) {
+                    0.4f
+                } else if (slow - fast < 1e-6) {
+                    0.7f
+                } else {
+                    (0.4 + 0.6 * (slow - p) / (slow - fast)).toFloat()
+                },
             )
         },
     )
@@ -195,7 +253,8 @@ private fun splitsSection(s: ActivityStreams, fmt: Formatters): Section.Splits? 
 private fun runningSection(s: ActivityStreams, a: ActivityEntity): Section.Running {
     val r = runningDynamics(s, a.avgPower)
     return Section.Running(
-        r.cadenceSpm?.toString() ?: DASH, r.powerW?.toString() ?: DASH,
+        r.cadenceSpm?.toString() ?: DASH,
+        r.powerW?.toString() ?: DASH,
         r.strideM?.let { "%.2f".format(Locale.US, it) } ?: DASH,
     )
 }
@@ -216,7 +275,17 @@ private fun rideSection(a: ActivityEntity, s: ActivityStreams, fmt: Formatters):
     val elevation = s.altitudeM?.let { alt ->
         val pts = series(s) { i -> fmt.elevationNumber(alt[i].takeIf(Float::valid)?.toDouble()) }
         pts.takeIf { it.size >= 2 }?.let { p ->
-            Series(p, "%d–%d %s".format(Locale.US, p.minOf { it.second.toDouble() }.roundToInt(), p.maxOf { it.second.toDouble() }.roundToInt(), fmt.elevationUnit))
+            Series(
+                p,
+                "%d–%d %s".format(
+                    Locale.US,
+                    p.minOf {
+                        it.second.toDouble()
+                    }.roundToInt(),
+                    p.maxOf { it.second.toDouble() }.roundToInt(),
+                    fmt.elevationUnit,
+                ),
+            )
         }
     }
     return if (speed == null && power == null && elevation == null) null else Section.Ride(speed, power, elevation)
@@ -229,8 +298,12 @@ private fun swimSection(a: ActivityEntity, active: List<SwimLengthEntity>, fmt: 
         val dur = l.durationSec?.takeIf { it > 0 }
         val pace = if (pool != null && dur != null) dur / pool * 100 else null
         LengthRow(
-            i + 1, l.strokeType?.let(::titleCase) ?: DASH, l.strokeCount?.toString() ?: DASH, fmt.duration(dur) ?: DASH,
-            pace, fmt.swimPace(pace) ?: DASH,
+            i + 1,
+            l.strokeType?.let(::titleCase) ?: DASH,
+            l.strokeCount?.toString() ?: DASH,
+            fmt.duration(dur) ?: DASH,
+            pace,
+            fmt.swimPace(pace) ?: DASH,
         )
     }
     val timed = active.mapNotNull { it.durationSec?.takeIf { d -> d > 0 } }
@@ -246,29 +319,30 @@ private fun swimSection(a: ActivityEntity, active: List<SwimLengthEntity>, fmt: 
 private fun strengthSection(active: List<StrengthSetEntity>, fmt: Formatters): Section.Strength? {
     if (active.isEmpty()) return null
     val groups = active.groupBy { exerciseName(it.category) } // groupBy keeps first-appearance order
-    return Section.Strength(groups.map { (name, sets) ->
-        val chips = sets.map { st ->
-            val reps = st.reps?.takeIf { it > 0 }
-            val kg = st.weightKg?.takeIf { it > 0 }
-            when {
-                reps != null && kg != null -> "$reps × ${fmt.weight(kg)}"
-                reps != null -> "$reps"
-                else -> fmt.duration(st.durationSec) ?: DASH
+    return Section.Strength(
+        groups.map { (name, sets) ->
+            val chips = sets.map { st ->
+                val reps = st.reps?.takeIf { it > 0 }
+                val kg = st.weightKg?.takeIf { it > 0 }
+                when {
+                    reps != null && kg != null -> "$reps × ${fmt.weight(kg)}"
+                    reps != null -> "$reps"
+                    else -> fmt.duration(st.durationSec) ?: DASH
+                }
             }
-        }
-        val volume = sets.sumOf { (it.weightKg ?: 0.0) * (it.reps ?: 0) }
-        val tail = when {
-            volume > 0 -> " · ${fmt.volume(volume)} ${fmt.weightUnit}"
-            sets.any { (it.reps ?: 0) > 0 } -> " · bodyweight"
-            else -> ""
-        }
-        ExerciseUi(name, "${sets.size} ${if (sets.size == 1) "set" else "sets"}$tail", chips)
-    })
+            val volume = sets.sumOf { (it.weightKg ?: 0.0) * (it.reps ?: 0) }
+            val tail = when {
+                volume > 0 -> " · ${fmt.volume(volume)} ${fmt.weightUnit}"
+                sets.any { (it.reps ?: 0) > 0 } -> " · bodyweight"
+                else -> ""
+            }
+            ExerciseUi(name, "${sets.size} ${if (sets.size == 1) "set" else "sets"}$tail", chips)
+        },
+    )
 }
 
 private fun exerciseName(category: Int?): String =
     category?.let { ExerciseCategory.getStringFromValue(it) }?.takeIf { it.isNotBlank() && it != "UNKNOWN" }?.let(::titleCase) ?: "Exercise"
 
 /** "BENCH_PRESS" and "individual_medley" -> "Bench Press", "Individual Medley". */
-private fun titleCase(s: String) =
-    s.split('_').filter { it.isNotEmpty() }.joinToString(" ") { it.lowercase().replaceFirstChar(Char::uppercase) }
+private fun titleCase(s: String) = s.split('_').filter { it.isNotEmpty() }.joinToString(" ") { it.lowercase().replaceFirstChar(Char::uppercase) }

@@ -16,6 +16,7 @@ Android Studio's bundled JDK is enough; there is no other tooling to install.
 ./gradlew :app:testDebugUnitTest      # the full unit suite
 ./gradlew :app:assembleDebug
 ./gradlew :app:lintDebug
+./gradlew spotlessApply              # format the code (ktlint); CI runs spotlessCheck
 ```
 
 You need Android Studio (or a JDK 17) and an emulator or an Android 10+ device. `./gradlew :app:installDebug` installs on whatever is connected.
@@ -37,6 +38,7 @@ Then enter `fake-garmin-key` during onboarding. Builds made with `-PgarminBaseUr
 - Branch from `main`, keep the change focused, and explain the why in the description.
 - Use [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `test:`, `docs:`, `build:`.
 - Every behaviour fix gets a regression test. New logic gets tests too. The suite must pass on any host time zone, so inject a `Clock` instead of reading the system zone.
+- Run `./gradlew spotlessApply` before you commit; CI fails on unformatted code.
 - Match the surrounding code: naming, comment density and Compose patterns. Don't add a dependency without a reason.
 - Touch targets stay at least 48dp, and anything interactive keeps its TalkBack description.
 - A change to the Room schema needs a version bump, a migration and a new exported schema in `app/schemas/`.

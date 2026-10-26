@@ -19,11 +19,7 @@ import kotlinx.coroutines.withContext
  * that arrives mid-run triggers exactly one more run. [UserPrefs.recalcPending] is set before the first run and cleared
  * after a successful one, so a run cut short by process death is redone at the next sync.
  */
-class HistoryRecalculator(
-    scope: CoroutineScope,
-    private val prefs: UserPrefs,
-    private val recalculate: suspend () -> Unit,
-) {
+class HistoryRecalculator(scope: CoroutineScope, private val prefs: UserPrefs, private val recalculate: suspend () -> Unit) {
     private val requests = Channel<Unit>(Channel.CONFLATED)
     private val _running = MutableStateFlow(false)
     val running: StateFlow<Boolean> = _running

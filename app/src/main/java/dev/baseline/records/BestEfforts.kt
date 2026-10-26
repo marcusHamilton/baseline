@@ -60,8 +60,11 @@ object BestEfforts {
         if (a.sportFamily != SportFamily.RIDE) return emptyList()
         val out = mutableListOf<BestEffortEntity>()
         if (a.sportFamily.countsForDistanceRecords(a.typeKey)) {
-            if (s == null) splits(a)[40000]?.let { out += effort(a, distanceKey(40000), it) }
-            else RIDE_M.forEach { m -> fastestDistance(s, m.toDouble())?.let { out += effort(a, distanceKey(m), it) } }
+            if (s == null) {
+                splits(a)[40000]?.let { out += effort(a, distanceKey(40000), it) }
+            } else {
+                RIDE_M.forEach { m -> fastestDistance(s, m.toDouble())?.let { out += effort(a, distanceKey(m), it) } }
+            }
         }
         if (s != null) POWER_SEC.forEach { w -> bestPower(s, w)?.let { out += effort(a, powerKey(w), it.toDouble()) } }
         return out
@@ -76,10 +79,9 @@ object BestEfforts {
     }
 
     /** One row per (sport, effort): the fastest time or, for power, the most watts; the earliest activity wins a tie. */
-    fun best(all: List<BestEffortEntity>): List<BestEffortEntity> =
-        all.sortedBy { it.achievedOn }.groupBy { it.sport to it.effort }.values.map { g ->
-            if (isPower(g[0].effort)) g.maxBy { it.valueSec } else g.minBy { it.valueSec }
-        }
+    fun best(all: List<BestEffortEntity>): List<BestEffortEntity> = all.sortedBy { it.achievedOn }.groupBy { it.sport to it.effort }.values.map { g ->
+        if (isPower(g[0].effort)) g.maxBy { it.valueSec } else g.minBy { it.valueSec }
+    }
 
     /**
      * The least time over any stretch covering at least [meters], with the boundary interpolated; null when the
@@ -90,17 +92,25 @@ object BestEfforts {
     fun fastestDistance(s: ActivityStreams, meters: Double): Double? {
         val dist = s.distanceM
         if (dist == null || meters <= 0) return null
-        val t = ArrayList<Double>(); val d = ArrayList<Double>()
-        var cum = 0.0; var clock = 0.0; var lastT = 0L; var lastD = 0f
+        val t = ArrayList<Double>()
+        val d = ArrayList<Double>()
+        var cum = 0.0
+        var clock = 0.0
+        var lastT = 0L
+        var lastD = 0f
         for (i in dist.indices) {
             if (!dist[i].valid()) continue
             val ti = s.epochSec[i]
             if (t.isNotEmpty()) {
-                val dt = ti - lastT; val dd = (dist[i] - lastD).toDouble()
+                val dt = ti - lastT
+                val dd = (dist[i] - lastD).toDouble()
                 if (dt > 0 && dd >= 0 && dd / dt <= MAX_SPEED_MS) cum += dd
                 if (dt > 0 && !isPause(dt, dd)) clock += dt
             }
-            t += clock; d += cum; lastT = ti; lastD = dist[i]
+            t += clock
+            d += cum
+            lastT = ti
+            lastD = dist[i]
         }
         if (t.size < 2) return null
         val fwd = shortestEndingAtSample(t, d, meters)
@@ -142,20 +152,31 @@ object BestEfforts {
             }
             seg.clear()
         }
-        var prevT = 0L; var prevP = -1
+        var prevT = 0L
+        var prevP = -1
         for (i in p.indices) {
             if (p[i] < 0) continue
             if (prevP >= 0) {
                 val gap = s.epochSec[i] - prevT
                 when {
-                    gap == 0L -> {} // a duplicate second: the later reading replaces it
+                    gap == 0L -> {}
+
+                    // a duplicate second: the later reading replaces it
                     gap in 1..MAX_CARRY_SEC -> repeat(gap.toInt()) { seg += prevP }
-                    else -> { seg += prevP; close() }
+
+                    else -> {
+                        seg += prevP
+                        close()
+                    }
                 }
             }
-            prevT = s.epochSec[i]; prevP = p[i]
+            prevT = s.epochSec[i]
+            prevP = p[i]
         }
-        if (prevP >= 0) { seg += prevP; close() }
+        if (prevP >= 0) {
+            seg += prevP
+            close()
+        }
         return if (best >= 0) best.roundToInt() else null
     }
 

@@ -7,8 +7,8 @@ import org.junit.Test
 
 class HrZonesParserTest {
     private fun parse(s: String) = HrZonesParser.parse(Json.parseToJsonElement(s))
-    private fun entry(sport: String, max: Int, rest: Int) =
-        """{"sport":"$sport","maxHeartRateUsed":$max,"restingHeartRateUsed":$rest,"zone1Floor":103}"""
+
+    private fun entry(sport: String, max: Int, rest: Int) = """{"sport":"$sport","maxHeartRateUsed":$max,"restingHeartRateUsed":$rest,"zone1Floor":103}"""
 
     @Test fun fixtureGivesDefaultSportZones() {
         assertEquals(HrZones(205, 44, 103), HrZonesParser.parse(fixture("hr_zones.json")))

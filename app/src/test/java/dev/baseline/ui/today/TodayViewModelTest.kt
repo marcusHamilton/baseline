@@ -24,11 +24,11 @@ import dev.baseline.data.db.TaskCounts
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.garmin.KeyStatus
 import dev.baseline.prefs.UserPrefs
-import dev.baseline.testutil.ScopeCleanup
 import dev.baseline.scores.Contributor
 import dev.baseline.scores.HrPoint
 import dev.baseline.sync.SyncScheduler
 import dev.baseline.sync.closeWorkManagerDb
+import dev.baseline.testutil.ScopeCleanup
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -77,10 +77,18 @@ class TodayViewModelTest {
         val vault = ApiKeyVault(store, { it }, { it }, Clock.systemUTC())
         repo = Repository(db, prefs, vault)
         scheduler = SyncScheduler(WorkManager.getInstance(context)) { false }
-        vm = scopes.track(TodayViewModel(
-            repo, scheduler, prefs,
-            flowOf(TaskCounts(0, 0)), flowOf(false), flowOf(KeyStatus.Invalid), flowOf(true), today,
-        ))
+        vm = scopes.track(
+            TodayViewModel(
+                repo,
+                scheduler,
+                prefs,
+                flowOf(TaskCounts(0, 0)),
+                flowOf(false),
+                flowOf(KeyStatus.Invalid),
+                flowOf(true),
+                today,
+            ),
+        )
     }
 
     @After
@@ -92,8 +100,7 @@ class TodayViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private suspend fun awaitState(predicate: (TodayUiState) -> Boolean): TodayUiState =
-        withTimeout(10_000) { vm.state.first(predicate) }
+    private suspend fun awaitState(predicate: (TodayUiState) -> Boolean): TodayUiState = withTimeout(10_000) { vm.state.first(predicate) }
 
     private fun day(date: LocalDate, hrv: Double? = 55.0, rhr: Int? = 49, sleepSec: Int? = 27_000, need: Int? = 480) = DayEntity(
         date, restingHr = rhr, respirationAvg = 13.0, stressAvg = 28, steps = 9_000, bodyBatteryWake = 74, sleepSeconds = sleepSec,
@@ -128,15 +135,25 @@ class TodayViewModelTest {
         vm.prevDay()
         assertEquals(today.minusDays(1), awaitState { loaded(it) && it.date == today.minusDays(1) }.date)
         assertTrue(!vm.state.value.isToday)
-        vm.nextDay(); vm.nextDay()
+        vm.nextDay()
+        vm.nextDay()
         assertEquals(today, awaitState { loaded(it) && it.date == today }.date)
         vm.setDate(today.plusDays(5))
         assertEquals(today, awaitState { loaded(it) && it.date == today }.date)
     }
 
-    private fun liveVm(flow: kotlinx.coroutines.flow.StateFlow<LocalDate>) = scopes.track(TodayViewModel(
-        repo, scheduler, prefs, flowOf(TaskCounts(0, 0)), flowOf(false), flowOf(KeyStatus.Invalid), flowOf(true), flow,
-    ))
+    private fun liveVm(flow: kotlinx.coroutines.flow.StateFlow<LocalDate>) = scopes.track(
+        TodayViewModel(
+            repo,
+            scheduler,
+            prefs,
+            flowOf(TaskCounts(0, 0)),
+            flowOf(false),
+            flowOf(KeyStatus.Invalid),
+            flowOf(true),
+            flow,
+        ),
+    )
 
     @Test
     fun movesFromTheOldTodayToTheNewOneWhenTheDateAdvances() = runBlocking {
@@ -231,10 +248,28 @@ class TodayViewModelTest {
         for (i in 1..30) db.dayDao().upsert(day(today.minusDays(i.toLong())))
         db.dayDao().upsert(day(today, hrv = 58.0, rhr = 47).copy(steps = 6_214))
         val rows = awaitState { st -> st.rows.firstOrNull { it.id == "hrv" }?.value == "58" }.rows.associateBy { it.id }
-        rows.getValue("hrv").run { assertEquals("55 ms", baseline); assertEquals("▲ 5%", delta); assertEquals(true, better) }
-        rows.getValue("rhr").run { assertEquals("49 bpm", baseline); assertEquals("▼ 2", delta); assertEquals(true, better) }
-        rows.getValue("sleep").run { assertEquals("7h 30m", value); assertEquals("7h 30m", baseline); assertEquals("same", delta); assertNull(better) }
-        rows.getValue("steps").run { assertEquals("6,214", value); assertEquals("9,000", baseline); assertEquals("so far", delta); assertNull(better) }
+        rows.getValue("hrv").run {
+            assertEquals("55 ms", baseline)
+            assertEquals("▲ 5%", delta)
+            assertEquals(true, better)
+        }
+        rows.getValue("rhr").run {
+            assertEquals("49 bpm", baseline)
+            assertEquals("▼ 2", delta)
+            assertEquals(true, better)
+        }
+        rows.getValue("sleep").run {
+            assertEquals("7h 30m", value)
+            assertEquals("7h 30m", baseline)
+            assertEquals("same", delta)
+            assertNull(better)
+        }
+        rows.getValue("steps").run {
+            assertEquals("6,214", value)
+            assertEquals("9,000", baseline)
+            assertEquals("so far", delta)
+            assertNull(better)
+        }
     }
 
     private fun seed(hrv: (Int) -> Double, rhr: (Int) -> Int) = runBlocking {
@@ -294,10 +329,14 @@ class TodayViewModelTest {
         for (i in 1..30) db.dayDao().upsert(day(today.minusDays(i.toLong())))
         db.dayDao().upsert(day(today).copy(respirationAvg = 12.0))
         val low = awaitState { st -> st.rows.firstOrNull { it.id == "resp" }?.value == "12.0" }.rows.first { it.id == "resp" }
-        assertEquals("▼ 1.0", low.delta); assertEquals("normal", low.verdict); assertNull(low.better)
+        assertEquals("▼ 1.0", low.delta)
+        assertEquals("normal", low.verdict)
+        assertNull(low.better)
         db.dayDao().upsert(day(today).copy(respirationAvg = 14.5))
         val high = awaitState { st -> st.rows.firstOrNull { it.id == "resp" }?.value == "14.5" }.rows.first { it.id == "resp" }
-        assertEquals("▲ 1.5", high.delta); assertEquals("worse", high.verdict); assertEquals(false, high.better)
+        assertEquals("▲ 1.5", high.delta)
+        assertEquals("worse", high.verdict)
+        assertEquals(false, high.better)
     }
 
     @Test

@@ -27,7 +27,12 @@ internal fun computeSplits(s: ActivityStreams, unitM: Double): List<RawSplit> {
     val dist = s.distanceM ?: return emptyList()
     val idx = ArrayList<Int>()
     var last = -1f
-    for (i in dist.indices) if (dist[i].valid() && dist[i] >= last) { idx += i; last = dist[i] }
+    for (i in dist.indices) {
+        if (dist[i].valid() && dist[i] >= last) {
+            idx += i
+            last = dist[i]
+        }
+    }
     if (idx.size < 2) return emptyList()
     val d = DoubleArray(idx.size) { dist[idx[it]].toDouble() }
     val t = DoubleArray(idx.size)
@@ -51,7 +56,8 @@ internal fun computeSplits(s: ActivityStreams, unitM: Double): List<RawSplit> {
     }
     fun at(x: Double, v: (Int) -> Double?): Double? {
         val j = segment(x)
-        val a = v(j); val b = v(j + 1)
+        val a = v(j)
+        val b = v(j + 1)
         val span = d[j + 1] - d[j]
         return when {
             a == null || b == null -> a ?: b
@@ -66,7 +72,10 @@ internal fun computeSplits(s: ActivityStreams, unitM: Double): List<RawSplit> {
     for (k in idx.indices) {
         val h = s.hr[idx[k]]
         val n = if (h > 0) bounds.indexOfFirst { d[k] <= it } else -1
-        if (n >= 0) { hrSum[n] += h; hrCount[n]++ }
+        if (n >= 0) {
+            hrSum[n] += h
+            hrCount[n]++
+        }
     }
 
     var prev = 0.0
@@ -76,9 +85,15 @@ internal fun computeSplits(s: ActivityStreams, unitM: Double): List<RawSplit> {
         val tb = at(b) { t[it] } ?: prevT
         val ab = alt?.let { at(b, altAt) }
         RawSplit(
-            b - prev, tb - prevT, if (hrCount[n] > 0) Math.round(hrSum[n].toDouble() / hrCount[n]).toInt() else null,
+            b - prev,
+            tb - prevT,
+            if (hrCount[n] > 0) Math.round(hrSum[n].toDouble() / hrCount[n]).toInt() else null,
             if (ab != null && prevAlt != null) ab - prevAlt else null,
-        ).also { prev = b; prevT = tb; prevAlt = ab }
+        ).also {
+            prev = b
+            prevT = tb
+            prevAlt = ab
+        }
     }
 }
 
@@ -106,7 +121,8 @@ internal fun routePoints(s: ActivityStreams): List<Pair<Double, Double>> {
     val lat = s.lat ?: return emptyList()
     val lon = s.lon ?: return emptyList()
     return lat.indices.mapNotNull { i ->
-        val a = lat[i]; val o = lon[i]
+        val a = lat[i]
+        val o = lon[i]
         if (a in -90.0..90.0 && o in -180.0..180.0 && !(a == 0.0 && o == 0.0)) a to o else null
     }
 }
@@ -160,11 +176,13 @@ internal fun runningDynamics(s: ActivityStreams, avgPower: Double?): RunningDyna
         val dt = s.epochSec[i] - s.epochSec[i - 1]
         if (dt <= 0 || dt > PAUSE_GAP_SEC || cad[i] <= 0) continue
         steps += cad[i] * factor * dt / 60.0
-        val a = dist?.get(i - 1); val b = dist?.get(i)
+        val a = dist?.get(i - 1)
+        val b = dist?.get(i)
         if (a != null && b != null && a.valid() && b.valid() && b >= a) metres += b - a
     }
     return RunningDynamics(
-        Math.round(moving.sumOf { cad[it] } * factor / moving.size.toDouble()).toInt(), powerW,
+        Math.round(moving.sumOf { cad[it] } * factor / moving.size.toDouble()).toInt(),
+        powerW,
         if (steps > 0 && metres > 0) metres / steps else null,
     )
 }

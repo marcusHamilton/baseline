@@ -75,7 +75,7 @@ class TokenProvider(
     private suspend fun loadCached() {
         try {
             prefs.cachedJwt.first()?.let { accept(String(decrypt(it))) }
-            } catch (_: GeneralSecurityException) {
+        } catch (_: GeneralSecurityException) {
             prefs.setCachedJwt(null)
         } catch (_: IllegalArgumentException) {
             prefs.setCachedJwt(null)
@@ -87,12 +87,13 @@ class TokenProvider(
     private suspend fun mint(): String {
         // Missing key: the vault status is already Missing, so don't mark it Invalid.
         val key = vault.key() ?: throw KeyInvalidException("no API key")
-        val token = try {
-            requestJwt(key)
-        } catch (e: KeyInvalidException) {
-            vault.markInvalid()
-            throw e
-        }
+        val token =
+            try {
+                requestJwt(key)
+            } catch (e: KeyInvalidException) {
+                vault.markInvalid()
+                throw e
+            }
         // A garbage 200 body is a transient glitch: never cache it or let it invalidate a good key.
         try {
             accept(token)
@@ -108,12 +109,14 @@ class TokenProvider(
 
     /** Throws [KeyInvalidException] on 401/403 without recording it anywhere. */
     private fun requestJwt(key: String): String {
-        val request = Request.Builder()
-            .url(baseUrl.resolve(MINT_PATH)!!)
-            .header("Authorization", "ApiKey $key")
-            .header("Accept", "*/*")
-            .post(ByteArray(0).toRequestBody())
-            .build()
+        val request =
+            Request
+                .Builder()
+                .url(baseUrl.resolve(MINT_PATH)!!)
+                .header("Authorization", "ApiKey $key")
+                .header("Accept", "*/*")
+                .post(ByteArray(0).toRequestBody())
+                .build()
         return mintHttp.newCall(request).execute().use { r ->
             when {
                 r.code == 401 || r.code == 403 -> throw KeyInvalidException("token mint rejected: ${r.code}")
@@ -135,7 +138,11 @@ class TokenProvider(
             require(JWT_SHAPE.matches(token)) { "not a JWT" }
             try {
                 val payload = Base64.getUrlDecoder().decode(token.split('.')[1])
-                return Json.parseToJsonElement(String(payload)).jsonObject.getValue("exp").jsonPrimitive.long
+                return Json
+                    .parseToJsonElement(String(payload))
+                    .jsonObject
+                    .getValue("exp")
+                    .jsonPrimitive.long
             } catch (e: Exception) {
                 throw IllegalArgumentException("unreadable JWT exp", e)
             }

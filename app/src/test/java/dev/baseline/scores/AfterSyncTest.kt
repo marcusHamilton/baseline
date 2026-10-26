@@ -38,9 +38,11 @@ class AfterSyncTest {
 
     @Before
     fun setUp() {
-        db = Room.inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
-            .allowMainThreadQueries()
-            .build()
+        db =
+            Room
+                .inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
+                .allowMainThreadQueries()
+                .build()
         val file = File.createTempFile("prefs", ".preferences_pb").also { it.delete() }
         prefs = UserPrefs(PreferenceDataStoreFactory.create(scope = storeScope) { file })
     }
