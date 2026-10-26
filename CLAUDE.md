@@ -19,6 +19,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 ./gradlew :app:assembleDebug
 ./gradlew :app:installDebug                 # needs a device/emulator
 ./gradlew :app:lintDebug
+./gradlew spotlessApply                     # format; spotlessCheck is the CI gate
 ```
 
 - `lintDebug` is clean and CI runs it with `warningsAsErrors`, so any new finding fails the build. Fix it, or disable the check in the `lint {}` block of `app/build.gradle.kts` with a reason. Run it before finishing a change.
