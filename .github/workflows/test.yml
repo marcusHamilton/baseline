@@ -23,6 +23,8 @@ jobs:
       # The build targets SDK 37; let Gradle fetch it once the licences are accepted.
       - name: Accept Android SDK licences
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+      - name: Fake Garmin server tests
+        run: python3 -I tools/test_fake_garmin.py
       - name: Format check
         run: ./gradlew spotlessCheck
       - name: Android lint

@@ -12,7 +12,7 @@ The fixture files are never touched: dates are shifted in memory as each respons
     short of today; those trailing days are filled by repeating the same weekday of the week before.
   - Ranged endpoints return only the rows inside the requested window.
   - Per-day endpoints (sleep, heart rate, HRV, SpO2) return the one-day fixture re-dated to the requested date.
-  - Activities move with the history. FIT downloads are zipped from fixtures/fit/ by activity type, with the
+  - Activities move with the history, and the trailing days are filled from the week before too. FIT downloads are zipped from fixtures/fit/ by activity type, with the
     fixtures' own timestamps (other types get a 404, which the app records as a failed task). Stdlib only.
 """
 import argparse
@@ -62,6 +62,7 @@ JWT_LIFETIME_S = 24 * 3600
 
 ISO_DATE = re.compile(r"\d{4}-\d\d-\d\d")
 MS_PER_DAY = 86_400_000
+CLONE_ID_OFFSET = 1_000_000_000  # activity ids of days filled from the week before: unique, and clear of the fixtures' ids
 EPOCH_MS = range(1_500_000_000_000, 2_000_000_000_000)  # 2017-2033: every epoch-millisecond field in the fixtures
 
 
@@ -100,33 +101,44 @@ class Dataset:
 
     def __init__(self, today: date):
         self.today = today
-        self.history = {name: load(name) for _, name, _, _ in RANGED_ROUTES}
-        anchor = max(row_date(r) for _, name, key, _ in RANGED_ROUTES for r in rows_of(self.history[name], key))
+        history = {name: load(name) for _, name, _, _ in RANGED_ROUTES}
+        anchor = max(row_date(r) for _, name, key, _ in RANGED_ROUTES for r in rows_of(history[name], key))
         # Whole weeks, rounded down, so the newest rows never land after today.
         self.delta = (today - anchor).days // 7 * 7
-        self.rows = {}  # fixture -> {date -> row}, shifted, up to today
+        self.last = last = anchor + timedelta(days=self.delta)  # the newest shifted history day; days after it are filled
+        self.rows = {}  # fixture -> [(date, row)] in fixture order, shifted, up to today
         for _, name, key, _ in RANGED_ROUTES:
-            shifted = {}
-            for r in rows_of(self.history[name], key):
-                r = shift(r, self.delta)
-                if row_date(r) <= today:
-                    shifted[row_date(r)] = r
+            # A list, not a dict by date: Garmin's all-null sleep placeholders share a day with the next real row.
+            rows = [(row_date(r) + timedelta(days=self.delta), shift(r, self.delta)) for r in rows_of(history[name], key)]
+            rows = [(d, r) for d, r in rows if d <= today]
+            by_date = dict(rows)  # the real row wins over a placeholder on the same day
             # Days between the last shifted row and today repeat the same weekday of the week before.
-            d = max(shifted) + timedelta(days=1)
+            d = last + timedelta(days=1)
             while d <= today:
-                if d - timedelta(days=7) in shifted:
-                    shifted[d] = shift(shifted[d - timedelta(days=7)], 7)
+                src = by_date.get(d - timedelta(days=7))
+                if src is not None:
+                    rows.append((d, shift(src, 7)))
                 d += timedelta(days=1)
-            self.rows[name] = shifted
-        self.activities = [a for a in (shift(a, self.delta) for a in load("activities_all.json"))
-                           if a["startTimeLocal"][:10] <= today.isoformat()]
+            self.rows[name] = sorted(rows, key=lambda dr: dr[0])
+        # Activities move with the history and fill the trailing days the same way. A copy needs its own id.
+        shifted = [shift(a, self.delta) for a in load("activities_all.json")]
+        self.activities = [a for a in shifted if a["startTimeLocal"][:10] <= today.isoformat()]
+        d = last + timedelta(days=1)
+        while d <= today:
+            src = d - timedelta(days=7)
+            for a in shifted:
+                if a["startTimeLocal"][:10] == src.isoformat():
+                    self.activities.append({**shift(a, 7), "activityId": a["activityId"] + CLONE_ID_OFFSET})
+            d += timedelta(days=1)
+        self.activities.sort(key=lambda a: a["startTimeLocal"], reverse=True)
+        self.day_fixtures = {fixture: load(fixture) for _, fixture in DAY_ROUTES}
 
     def window(self, name: str, key, start: str, end: str):
-        rows = [r for d, r in sorted(self.rows[name].items()) if start <= d.isoformat() <= end]
+        rows = [r for d, r in self.rows[name] if start <= d.isoformat() <= end]
         return {key: rows} if key else rows
 
     def day(self, fixture: str, requested: date):
-        base = load(fixture)
+        base = self.day_fixtures[fixture]
         own = base.get("calendarDate") or base["hrvSummary"]["calendarDate"]
         return shift(base, (requested - date.fromisoformat(own)).days)
 
@@ -192,7 +204,9 @@ def make_handler(key: str, data: Dataset):
                     return self.reply(200, (FIXTURES / fixture).read_bytes())
             for prefix, fixture, rows_key, where in RANGED_ROUTES:
                 if path.startswith(prefix):
-                    start, end = (query.get("startDate", ""), query.get("endDate", "")) if where == "query" else path.split("/")[-2:]
+                    start, end = (query.get("startDate"), query.get("endDate")) if where == "query" else path.split("/")[-2:]
+                    if not (start and end):
+                        return self.reply(400)  # a malformed app request should be loud, not an empty 200
                     return self.reply(200, json.dumps(data.window(fixture, rows_key, start, end)).encode())
             for prefix, fixture in DAY_ROUTES:
                 if path.startswith(prefix):

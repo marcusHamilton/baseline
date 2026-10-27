@@ -127,7 +127,7 @@ adb reverse tcp:8080 tcp:8080                                                 # 
   - "Today" is fixed when the server starts: the host's date, or `--today YYYY-MM-DD`. **Restart the server** after midnight, and pass `--today` whenever the emulator's date or zone differs from the host's (a pinned clock, or after a `set-timezone` test).
   - Data already synced into the app keeps the dates it was fetched with. After changing `--today`, clear the app's data (`adb shell pm clear dev.baseline`) and re-enter the key, or the old and new days will mix.
   - History moves by whole weeks, so weekdays are preserved. The trailing days up to today repeat the same weekday of the week before, and nothing is dated after today.
-  - Ranged endpoints return only the requested window; per-day endpoints (sleep, heart rate, HRV, SpO2) return the one-day fixture re-dated to the requested date. Activities move with the history, so the newest can be up to a week before today.
+  - Ranged endpoints return only the requested window; per-day endpoints (sleep, heart rate, HRV, SpO2) return the one-day fixture re-dated to the requested date. Activities move with the history and the trailing days are filled from the week before the same way, so an activity's date can repeat a week later (with a new id).
   - FIT files keep their original internal timestamps, so an activity's map and charts show the fixture's dates. That's expected.
   - If you add a fixture, give it a `calendarDate` (or `date`) and add it to `RANGED_ROUTES` or `DAY_ROUTES` in `tools/fake_garmin.py`; then run `uv run --python 3.12 --no-project python -I tools/test_fake_garmin.py`.
 - Activity types without a FIT fixture get a 404 and show up as failed tasks; that's expected.

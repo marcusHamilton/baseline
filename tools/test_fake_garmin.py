@@ -6,6 +6,7 @@ import importlib.util
 import json
 import threading
 import unittest
+import urllib.error
 import urllib.request
 from datetime import date, timedelta
 from http.server import ThreadingHTTPServer
@@ -53,6 +54,7 @@ class FakeGarminDates(unittest.TestCase):
         battery = s.get(f"/wellness-service/wellness/bodyBattery/reports/daily?startDate={week}&endDate={d}&chunks=288")
         self.assertEqual(battery[-1]["date"], d)
         hrv = s.get(f"/hrv-service/hrv/daily/{week}/{d}")["hrvSummaries"]
+        # Only <= today: the HRV fixture has gaps (no reading on many nights), so today itself may be missing.
         self.assertLessEqual(hrv[-1]["calendarDate"], d)
         # The window is respected on both ends.
         self.assertTrue(all(week <= r["calendarDate"] <= d for r in steps))
@@ -94,16 +96,45 @@ class FakeGarminDates(unittest.TestCase):
         start = date.fromtimestamp(day["sleepStartTimestampGMT"] / 1000)
         self.assertLessEqual(abs((start - date(2027, 2, 9)).days), 1)
 
-    def test_activities_move_and_stay_before_today(self):
-        s = Server(date(2027, 2, 9))
+    def test_activities_move_stay_before_today_and_keep_unique_ids(self):
+        # Every offset of (today - anchor) % 7, so the filled trailing days are covered too.
+        for today in (date(2027, 2, 9) + timedelta(days=i) for i in range(7)):
+            s = Server(today)
+            self.addCleanup(s.close)
+            acts = s.get(f"{fg.ACTIVITY_SEARCH}?start=0&limit=500")
+            self.assertLessEqual(max(a["startTimeLocal"][:10] for a in acts), today.isoformat())
+            ids = [a["activityId"] for a in acts]
+            self.assertEqual(len(ids), len(set(ids)))
+            window = s.get(f"{fg.ACTIVITY_SEARCH}?startDate={today - timedelta(days=6)}&endDate={today}&limit=50&start=0")
+            self.assertTrue(all(str(today - timedelta(days=6)) <= a["startTimeLocal"][:10] <= str(today) for a in window))
+            self.assertEqual(s.get(f"/activity-service/activity/{ids[0]}")["activityId"], ids[0])
+
+    def test_trailing_days_repeat_the_previous_weeks_activities(self):
+        today = date(2027, 2, 9)
+        s = Server(today)
         self.addCleanup(s.close)
-        acts = s.get(f"{fg.ACTIVITY_SEARCH}?start=0&limit=500")
-        newest = max(a["startTimeLocal"][:10] for a in acts)
-        self.assertLessEqual(newest, "2027-02-09")
-        self.assertGreaterEqual(newest, "2027-02-02")
-        window = s.get(f"{fg.ACTIVITY_SEARCH}?startDate=2027-02-03&endDate=2027-02-09&limit=50&start=0")
-        self.assertTrue(all("2027-02-03" <= a["startTimeLocal"][:10] <= "2027-02-09" for a in window))
-        self.assertEqual(s.get(f"/activity-service/activity/{acts[0]['activityId']}")["activityId"], acts[0]["activityId"])
+        days = {}
+        for a in s.data.activities:
+            days.setdefault(a["startTimeLocal"][:10], []).append(a["activityName"])
+        for i in range(1, (today - s.data.last).days + 1):
+            d = s.data.last + timedelta(days=i)
+            self.assertEqual(days.get(d.isoformat()), days.get((d - timedelta(days=7)).isoformat()))
+
+    def test_sleep_placeholders_are_kept(self):
+        # today = anchor + 2 weeks: nothing to fill, so the response must have exactly the fixture's rows.
+        s = Server(date(2026, 11, 6))
+        self.addCleanup(s.close)
+        served = s.get("/sleep-service/sleep/dailySleepSummariesByDate?startDate=2020-01-01&endDate=2099-01-01")
+        fixture = fg.load("sleep_summaries_history.json")
+        self.assertEqual(len(served), len(fixture))
+        self.assertEqual(sum(r["id"] is None for r in served), sum(r["id"] is None for r in fixture))
+
+    def test_ranged_request_without_a_window_is_rejected(self):
+        s = Server(date(2026, 10, 26))
+        self.addCleanup(s.close)
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            s.get("/usersummary-service/v2/dailysummaries")
+        self.assertEqual(e.exception.code, 400)
 
 
 if __name__ == "__main__":
