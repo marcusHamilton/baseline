@@ -328,13 +328,14 @@ fun buildWidgetSnapshot(
     )
 }
 
-suspend fun loadWidgetSnapshot(container: AppContainer, is24h: Boolean, forceSyncing: Boolean = false): WidgetSnapshot {
+suspend fun loadWidgetSnapshot(container: AppContainer, is24h: Boolean, syncing: Boolean? = null): WidgetSnapshot {
     val today = container.today.value
     val zone = container.dateTicker.zone.value
     val repo = container.repository
     val prefs = container.userPrefs
     val keyStatus = container.apiKeyVault.status.first()
-    val syncing = forceSyncing || container.scheduler.workInfos.first().any { it.state == WorkInfo.State.RUNNING }
+    // An explicit value wins: the worker is still RUNNING in WorkManager while it reports that it has finished.
+    val isSyncing = syncing ?: container.scheduler.workInfos.first().any { it.state == WorkInfo.State.RUNNING }
     val lastSynced = prefs.lastSyncedAt.first()
     val day = repo.day(today).first()
     val score = repo.score(today).first()
@@ -355,7 +356,7 @@ suspend fun loadWidgetSnapshot(container: AppContainer, is24h: Boolean, forceSyn
         zone = zone,
         is24h = is24h,
         keyStatus = keyStatus,
-        syncing = syncing,
+        syncing = isSyncing,
         lastSynced = lastSynced,
         day = day,
         score = score,

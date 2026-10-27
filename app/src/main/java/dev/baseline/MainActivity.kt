@@ -20,7 +20,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (savedInstanceState == null) {
+        // A relaunch from Recents re-delivers the original widget intent; it must not navigate again.
+        if (savedInstanceState == null && intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY == 0) {
             deepLink.value = WidgetRoutes.parse(intent)
         }
         setContent {

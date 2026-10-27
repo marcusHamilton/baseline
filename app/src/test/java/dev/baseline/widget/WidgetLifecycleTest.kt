@@ -169,6 +169,15 @@ class WidgetLifecycleTest {
     }
 
     @Test
+    fun explicitSyncingValueOverridesWorkManagerLookup() = runBlocking {
+        container.apiKeyVault.save("k", 365)
+        // The worker reports "finished" while WorkManager still lists it RUNNING, so the explicit value must win.
+        assertEquals(SyncPillUi.Syncing, loadWidgetSnapshot(container, true, syncing = true).syncPill)
+        assertTrue(loadWidgetSnapshot(container, true, syncing = false).syncPill is SyncPillUi.Ready)
+        assertTrue(loadWidgetSnapshot(container, true).syncPill is SyncPillUi.Ready)
+    }
+
+    @Test
     fun placedWidgetsRefreshOnRowReorderAndMidnightRollover(): Unit = runBlocking {
         container.apiKeyVault.save("k", 365)
         val manager = AppWidgetManager.getInstance(ctx)
@@ -212,7 +221,7 @@ class WidgetLifecycleTest {
             assertTrue(header.contains("TUE OCT 27"))
 
             // Concurrent updateAll bursts from providers + signals + sync must serialize cleanly.
-            (1..8).map { i -> async(Dispatchers.Default) { container.widgetUpdater.updateAll(forceSyncing = i % 2 == 0) } }.awaitAll()
+            (1..8).map { i -> async(Dispatchers.Default) { container.widgetUpdater.updateAll(syncing = i % 2 == 0) } }.awaitAll()
         } finally {
             collectorJob.cancel()
         }

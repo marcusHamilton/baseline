@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import dev.baseline.data.Repository
 import dev.baseline.data.db.AppDatabase
@@ -125,6 +126,8 @@ open class AppContainer(context: Context, val clock: Clock = SystemZoneClock) {
                 historyRecalculator.running,
                 dateTicker.today,
                 dateTicker.zone,
+                // Redraws when the worker really leaves RUNNING, whatever order the updates ran in.
+                scheduler.workInfos.map { infos -> infos.any { it.state == WorkInfo.State.RUNNING } },
             ),
         ) { it.toList() }.distinctUntilChanged()
     }
@@ -136,7 +139,7 @@ open class AppContainer(context: Context, val clock: Clock = SystemZoneClock) {
             userPrefs::setLastSyncedAt,
             reschedule = { scheduler.apply(scheduleInterval.first()) },
             continueSoon = { user -> scheduler.continueSoon(user) },
-            updateWidgets = { syncing -> widgetUpdater.updateAll(forceSyncing = syncing) },
+            updateWidgets = { syncing -> widgetUpdater.updateAll(syncing = syncing) },
         )
     }
 }

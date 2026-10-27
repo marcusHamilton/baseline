@@ -30,11 +30,11 @@ open class WidgetUpdater(private val context: Context, private val container: ()
     fun hasAnyWidgets(manager: AppWidgetManager = AppWidgetManager.getInstance(context)): Boolean =
         PROVIDERS.any { manager.getAppWidgetIds(ComponentName(context, it)).isNotEmpty() }
 
-    open suspend fun updateAll(forceSyncing: Boolean = false) = withContext(Dispatchers.Default) {
+    open suspend fun updateAll(syncing: Boolean? = null) = withContext(Dispatchers.Default) {
         updateMutex.withLock {
             val manager = AppWidgetManager.getInstance(context)
             if (!hasAnyWidgets(manager)) return@withLock
-            val snapshot = loadWidgetSnapshot(container(), DateFormat.is24HourFormat(context), forceSyncing)
+            val snapshot = loadWidgetSnapshot(container(), DateFormat.is24HourFormat(context), syncing)
             updateReadinessInstances(manager, snapshot)
             updateVitalsInstances(manager, snapshot)
             updateBodyBatteryInstances(manager, snapshot)

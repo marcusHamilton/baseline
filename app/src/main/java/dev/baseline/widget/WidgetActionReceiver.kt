@@ -45,8 +45,9 @@ class WidgetActionReceiver : BroadcastReceiver() {
             ACTION_WIDGET_SYNC -> {
                 val status = appContainer.apiKeyVault.status.first()
                 if (status !is KeyStatus.Missing) {
+                    // The worker flips the pill to Syncing once it runs; forcing it here would stick while offline.
                     appContainer.scheduler.syncNow()
-                    appContainer.widgetUpdater.updateAll(forceSyncing = true)
+                    appContainer.widgetUpdater.updateAll()
                 } else {
                     appContainer.widgetUpdater.updateAll()
                 }
