@@ -375,7 +375,7 @@ private val ROWS: Map<String, RowSpec> = listOf(
     RowSpec("steps", "Steps", "", Good.HIGHER, { it.steps?.toDouble() }, ::whole, ::whole, ::grouped, ::grouped, inBaseline = { it > 0 }),
 ).associateBy { it.id }
 
-private fun statRows(
+internal fun statRows(
     day: DayEntity?,
     window: List<DayEntity>,
     recoveryBaseline: Baseline?,
