@@ -14,7 +14,7 @@ On the owner's Mac there's no system JDK; use Android Studio's:
 
 ```bash
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-./gradlew :app:testDebugUnitTest            # Robolectric + Compose UI tests, ~425 tests
+./gradlew :app:testDebugUnitTest            # Robolectric + Compose UI tests, ~460 tests
 ./gradlew :app:testDebugUnitTest --tests 'dev.baseline.sync.*'
 ./gradlew :app:assembleDebug
 ./gradlew :app:installDebug                 # needs a device/emulator
@@ -60,6 +60,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 - `fit/` parses FIT files with the Garmin FIT SDK and builds activity streams.
 - `prefs/UserPrefs` is DataStore: baseline row order and hidden rows, sync interval, coefficient set, cached JWT and last sync.
 - `ui/<screen>/`: one Compose screen and one ViewModel per feature. `ui/components` holds shared pieces (KeyBanner, OfflineBar, StatRow), `ui/theme` holds the colours (`Bg` is `#0E1013` and `ChipActive` is `#2A2F37`), and `ui/format/Formatters` does display formatting.
+- `widget/`: five native `RemoteViews` home-screen widgets (`ReadinessWidgetProvider`, `VitalsWidgetProvider`, `BodyBatteryWidgetProvider`, `SleepWidgetProvider`, `WeeklyActivityWidgetProvider`), `WidgetSnapshot` state builder, `WidgetGraphics` `Canvas` bitmap renderers, `WidgetUpdater` (serialised with a `Mutex` and short-circuited when zero widgets are placed), `WidgetActionReceiver` (`ACTION_WIDGET_SYNC` plus clock/timezone/package-replace refresh), static `@layout/widget_preview_*` picker previews, and `WidgetRoutes` deep-linking.
 - `DateTicker` and `SystemZoneClock` make "today" and the current zone follow midnight and time-zone changes, through a broadcast receiver and `MainActivity.onResume`. Screens take `container.today` or `dateTicker.zone`; never cache `LocalDate.now()` or `ZoneId.systemDefault()` in a ViewModel.
 
 ## Invariants: don't break these
