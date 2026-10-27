@@ -114,7 +114,7 @@ adb shell cmd jobscheduler run -f -n androidx.work.systemjobscheduler dev.baseli
 **Use this by default for on-device testing. Don't ask the owner for their key.** The real key is only needed to pull new fixtures (`tools/fetch_sample.py`) or to check a change against live Garmin behaviour the fixtures don't cover.
 
 ```bash
-uv run --python 3.12 --no-project python -I tools/fake_garmin.py            # :8080; --port, --key to change
+uv run --python 3.12 --no-project python -I tools/fake_garmin.py            # :8080; --port, --key, --today to change
 adb reverse tcp:8080 tcp:8080                                                 # the emulator's 127.0.0.1:8080 now reaches the host
 ./gradlew :app:installDebug -PgarminBaseUrl=http://127.0.0.1:8080
 ```
@@ -123,7 +123,7 @@ adb reverse tcp:8080 tcp:8080                                                 # 
 - The fake API key is `fake-garmin-key`. Paste it in onboarding (or Settings → replace key). Any other key gets a 401, which is how to test the invalid-key banner.
 - `-PgarminBaseUrl` sets `BuildConfig.GARMIN_BASE_URL`, turns on cleartext traffic and appends `-fake` to `versionName`. Without it, builds talk to `https://personal.connectapi.garmin.com` (`GarminBaseUrlTest` guards this). **Never release a build made with it.** Uninstall or clear data before going back to the real API: the stored key and synced data belong to the fake.
 - A minified release can be pointed at it too: `./gradlew :app:assembleRelease -PgarminBaseUrl=…`. Without `keystore.properties` the APK is unsigned; sign a throwaway copy with `apksigner sign --ks <any test keystore>` to install it. This is the way to smoke-test R8 and the baseline profile.
-- Ranged endpoints return the same history fixture for any window, and per-day endpoints return the same day for every date, so the data's dates are the fixtures' own (around October 2026), not today's. Activity types without a FIT fixture get a 404 and show up as failed tasks; that's expected.
+- The server shifts the fixtures' dates in memory (the files are never modified) so the newest data lands on today, the host's date. If the emulator's clock is pinned to another day, start the server with `--today YYYY-MM-DD` to match. History moves by whole weeks, so weekdays are preserved, and the trailing days up to today repeat the same weekday of the week before. Ranged endpoints return only the requested window, and per-day endpoints return the one-day fixture re-dated to the requested date. FIT files keep their original internal timestamps. `tools/test_fake_garmin.py` tests this (`uv run --python 3.12 --no-project python -I tools/test_fake_garmin.py`). Activity types without a FIT fixture get a 404 and show up as failed tasks; that's expected.
 - The server logs each request (method, path and status) to stderr, which shows what a sync asked for.
 
 ## Known follow-ups
