@@ -14,6 +14,7 @@ import android.widget.RemoteViews
 import dev.baseline.AppContainer
 import dev.baseline.BaselineApp
 import dev.baseline.R
+import dev.baseline.ui.components.sportIcon
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +33,24 @@ open class WidgetUpdater(private val context: Context, private val container: ()
         updateReadinessInstances(manager, snapshot)
         updateVitalsInstances(manager, snapshot)
         updateBodyBatteryInstances(manager, snapshot)
+        updateSleepInstances(manager, snapshot)
+        updateWeeklyActivityInstances(manager, snapshot)
+    }
+
+    private fun updateSleepInstances(manager: AppWidgetManager, snapshot: WidgetSnapshot) {
+        val ids = manager.getAppWidgetIds(ComponentName(context, SleepWidgetProvider::class.java))
+        for (id in ids) {
+            val options = manager.getAppWidgetOptions(id)
+            manager.updateAppWidget(id, buildSleepViews(snapshot, options))
+        }
+    }
+
+    private fun updateWeeklyActivityInstances(manager: AppWidgetManager, snapshot: WidgetSnapshot) {
+        val ids = manager.getAppWidgetIds(ComponentName(context, WeeklyActivityWidgetProvider::class.java))
+        for (id in ids) {
+            val options = manager.getAppWidgetOptions(id)
+            manager.updateAppWidget(id, buildWeeklyActivityViews(snapshot, options))
+        }
     }
 
     private fun updateVitalsInstances(manager: AppWidgetManager, snapshot: WidgetSnapshot) {
@@ -354,10 +373,113 @@ open class WidgetUpdater(private val context: Context, private val container: ()
         return views
     }
 
+    internal fun buildSleepViews(snapshot: WidgetSnapshot, options: Bundle = Bundle.EMPTY): RemoteViews {
+        if (snapshot.keyMissing) return buildMissingKeyViews()
+        val s = snapshot.sleep
+        val views = RemoteViews(context.packageName, R.layout.widget_sleep)
+        views.setOnClickPendingIntent(R.id.widget_root, WidgetRoutes.pendingIntent(context, WidgetTarget.SleepToday))
+        bindSyncPill(views, snapshot.syncPill, compact = false)
+
+        views.setTextViewText(R.id.sleep_asleep_value, s.asleepText)
+        if (s.needText != null) {
+            views.setTextViewText(R.id.sleep_need_value, s.needText)
+            views.setViewVisibility(R.id.sleep_need_value, View.VISIBLE)
+        } else {
+            views.setViewVisibility(R.id.sleep_need_value, View.GONE)
+        }
+        if (s.sleepPctText != null) {
+            views.setTextViewText(R.id.sleep_pct_badge, s.sleepPctText)
+            views.setViewVisibility(R.id.sleep_pct_badge, View.VISIBLE)
+        } else {
+            views.setViewVisibility(R.id.sleep_pct_badge, View.GONE)
+        }
+        if (s.garminScoreText != null) {
+            views.setTextViewText(R.id.sleep_garmin_score, s.garminScoreText)
+            views.setViewVisibility(R.id.sleep_garmin_score, View.VISIBLE)
+        } else {
+            views.setViewVisibility(R.id.sleep_garmin_score, View.GONE)
+        }
+
+        val density = context.resources.displayMetrics.density
+        val widthDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).let { if (it <= 0) 250 else it }
+        val barW = WidgetGraphics.dpToClampedPx((widthDp - 28).coerceAtLeast(120).toFloat(), density)
+        val barH = WidgetGraphics.dpToClampedPx(10f, density)
+        views.setImageViewBitmap(
+            R.id.sleep_stage_bar,
+            WidgetGraphics.renderSleepStageBar(s.deepSec, s.remSec, s.lightSec, s.awakeSec, barW, barH),
+        )
+        views.setContentDescription(R.id.sleep_stage_bar, "Last night sleep ${s.asleepText}")
+
+        if (s.unreadable) {
+            views.setTextViewText(R.id.sleep_tonight_need, context.getString(R.string.widget_unreadable_day))
+            views.setTextColor(R.id.sleep_tonight_need, WidgetGraphics.RECOVERY_AMBER)
+        } else {
+            views.setTextViewText(R.id.sleep_tonight_need, s.tonightNeedText)
+            views.setTextColor(R.id.sleep_tonight_need, WidgetGraphics.TEXT_BODY)
+        }
+        if (s.bedtimeText != null) {
+            views.setTextViewText(R.id.sleep_bedtime, s.bedtimeText)
+            views.setViewVisibility(R.id.sleep_bedtime, View.VISIBLE)
+        } else {
+            views.setTextViewText(R.id.sleep_bedtime, "")
+            views.setViewVisibility(R.id.sleep_bedtime, View.GONE)
+        }
+        return views
+    }
+
+    internal fun buildWeeklyActivityViews(snapshot: WidgetSnapshot, options: Bundle = Bundle.EMPTY): RemoteViews {
+        if (snapshot.keyMissing) return buildMissingKeyViews()
+        val w = snapshot.weekly
+        val views = RemoteViews(context.packageName, R.layout.widget_weekly_activity)
+        val activitiesIntent = WidgetRoutes.pendingIntent(context, WidgetTarget.Activities)
+        views.setOnClickPendingIntent(R.id.widget_root, activitiesIntent)
+        views.setOnClickPendingIntent(R.id.weekly_strip, activitiesIntent)
+        bindSyncPill(views, snapshot.syncPill, compact = false)
+
+        views.setTextViewText(R.id.weekly_header_title, w.headerTitle)
+        views.setTextViewText(R.id.weekly_totals_text, w.weekTotalsText)
+
+        val latest = w.latest
+        if (latest != null) {
+            views.setViewVisibility(R.id.weekly_empty_text, View.GONE)
+            views.setViewVisibility(R.id.weekly_sport_icon, View.VISIBLE)
+            views.setViewVisibility(R.id.weekly_activity_text_col, View.VISIBLE)
+            views.setViewVisibility(R.id.weekly_activity_strain, View.VISIBLE)
+            views.setImageViewResource(R.id.weekly_sport_icon, sportIcon(latest.family))
+            views.setInt(R.id.weekly_sport_icon, "setColorFilter", SPORT_ICON_TINT_ARGB)
+            views.setTextViewText(R.id.weekly_activity_title, latest.title)
+            views.setTextViewText(R.id.weekly_activity_meta, latest.metaLine)
+            views.setTextViewText(R.id.weekly_activity_strain, latest.strainText)
+            views.setOnClickPendingIntent(
+                R.id.weekly_workout_card,
+                WidgetRoutes.pendingIntent(context, WidgetTarget.Activity(latest.id)),
+            )
+        } else {
+            views.setViewVisibility(R.id.weekly_empty_text, View.VISIBLE)
+            views.setViewVisibility(R.id.weekly_sport_icon, View.GONE)
+            views.setViewVisibility(R.id.weekly_activity_text_col, View.GONE)
+            views.setViewVisibility(R.id.weekly_activity_strain, View.GONE)
+            views.setOnClickPendingIntent(R.id.weekly_workout_card, activitiesIntent)
+        }
+
+        val density = context.resources.displayMetrics.density
+        val tf = WidgetGraphics.loadCondensedBold(context)
+        val widthDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).let { if (it <= 0) 250 else it }
+        val stripW = WidgetGraphics.dpToClampedPx((widthDp - 28).coerceAtLeast(140).toFloat(), density)
+        val stripH = WidgetGraphics.dpToClampedPx(26f, density)
+        views.setImageViewBitmap(
+            R.id.weekly_strip,
+            WidgetGraphics.renderWeekStripBitmap(w.days, stripW, stripH, tf),
+        )
+        views.setContentDescription(R.id.weekly_strip, "${w.headerTitle}, ${w.weekTotalsText}")
+        return views
+    }
+
     private data class VitalSlotIds(val tileId: Int, val labelId: Int, val valueId: Int, val deltaId: Int)
 
     companion object {
         private const val KEY_ERR_TEXT_ARGB: Int = 0xFFFECACA.toInt()
+        private const val SPORT_ICON_TINT_ARGB: Int = 0xFF93C5FD.toInt()
         private const val TAG = "WidgetUpdater"
 
         private val VITAL_SLOTS =
@@ -373,6 +495,8 @@ open class WidgetUpdater(private val context: Context, private val container: ()
                 ReadinessWidgetProvider::class.java,
                 VitalsWidgetProvider::class.java,
                 BodyBatteryWidgetProvider::class.java,
+                SleepWidgetProvider::class.java,
+                WeeklyActivityWidgetProvider::class.java,
             )
 
         @Volatile

@@ -21,4 +21,11 @@
     <string name="widget_bb_empty_curve">No Body Battery curve yet today</string>
     <string name="widget_bb_label">Body Battery &amp; Stress</string>
     <string name="widget_bb_description">Live Body Battery level, wake/charged/stress stats, and daytime curve.</string>
+    <string name="widget_sleep_header">SLEEP &amp; TONIGHT\'S NEED</string>
+    <string name="widget_sleep_label">Sleep &amp; Tonight\'s Bedtime</string>
+    <string name="widget_sleep_description">Last night\'s sleep performance, stage breakdown, and tonight\'s recommended bedtime.</string>
+    <string name="widget_weekly_default_header">THIS WEEK · 0 ACTIVITIES</string>
+    <string name="widget_weekly_no_activities">No activities synced yet</string>
+    <string name="widget_weekly_label">Weekly Summary &amp; Latest Activity</string>
+    <string name="widget_weekly_description">Week-to-date training totals, 7-day recovery strip, and your latest workout.</string>
 </resources>
