@@ -67,7 +67,10 @@ import dev.baseline.ui.today.TodayScreen
 import dev.baseline.ui.today.TodayViewModel
 import dev.baseline.ui.trends.TrendsScreen
 import dev.baseline.ui.trends.TrendsViewModel
+import dev.baseline.widget.WidgetTarget
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 import java.time.ZoneId
@@ -139,9 +142,12 @@ private val predictivePopExit: AnimatedContentTransitionScope<NavBackStackEntry>
     }
 }
 
+private val NoDeepLink: StateFlow<WidgetTarget?> = MutableStateFlow(null)
+
 @Composable
-fun BaselineNavHost(container: AppContainer) {
+fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> = NoDeepLink, onDeepLinkConsumed: () -> Unit = {}) {
     val nav = rememberNavController()
+    val target by deepLink.collectAsStateWithLifecycle()
     val destination = nav.currentBackStackEntryAsState().value?.destination
     // A page opened from a tab (Records, an activity, the calendar) keeps that tab highlighted.
     var currentTab by rememberSaveable { mutableStateOf(Routes.TODAY) }
@@ -308,6 +314,66 @@ fun BaselineNavHost(container: AppContainer) {
                         container.clock,
                     )
                 }
+            }
+            LaunchedEffect(target, start) {
+                val pending = target ?: return@LaunchedEffect
+                if (status is KeyStatus.Missing || nav.currentDestination?.route == Routes.ONBOARDING) {
+                    onDeepLinkConsumed()
+                    return@LaunchedEffect
+                }
+                when (pending) {
+                    WidgetTarget.Today -> {
+                        currentTab = Routes.TODAY
+                        nav.navigate(Routes.TODAY) {
+                            popUpTo(Routes.TODAY)
+                            launchSingleTop = true
+                        }
+                        runCatching { nav.getBackStackEntry(Routes.TODAY) }.getOrNull()
+                            ?.savedStateHandle?.set(SELECTED_DATE, container.today.value.toString())
+                    }
+
+                    WidgetTarget.SleepToday -> {
+                        val today = container.today.value
+                        currentTab = Routes.TODAY
+                        nav.navigate(Routes.TODAY) {
+                            popUpTo(Routes.TODAY)
+                            launchSingleTop = true
+                        }
+                        runCatching { nav.getBackStackEntry(Routes.TODAY) }.getOrNull()
+                            ?.savedStateHandle?.set(SELECTED_DATE, today.toString())
+                        nav.navigate("sleep/$today") {
+                            launchSingleTop = true
+                        }
+                    }
+
+                    WidgetTarget.Activities -> {
+                        currentTab = Routes.ACTIVITIES
+                        nav.navigate(Routes.ACTIVITIES) {
+                            popUpTo(Routes.TODAY)
+                            launchSingleTop = true
+                        }
+                    }
+
+                    is WidgetTarget.Activity -> {
+                        currentTab = Routes.ACTIVITIES
+                        nav.navigate(Routes.ACTIVITIES) {
+                            popUpTo(Routes.TODAY)
+                            launchSingleTop = true
+                        }
+                        nav.navigate("activity/${pending.id}") {
+                            launchSingleTop = true
+                        }
+                    }
+
+                    WidgetTarget.Settings -> {
+                        currentTab = Routes.SETTINGS
+                        nav.navigate(Routes.SETTINGS) {
+                            popUpTo(Routes.TODAY)
+                            launchSingleTop = true
+                        }
+                    }
+                }
+                onDeepLinkConsumed()
             }
         }
     }
