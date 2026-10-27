@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_missing_key_prompt">Connect Garmin API key to start</string>
+    <string name="widget_unreadable_day">Couldn\'t read today\'s data</string>
+    <string name="widget_sync_syncing">Syncing…</string>
+    <string name="widget_sync_key_error">Key error</string>
+    <string name="widget_sync_default">↻ Sync</string>
+    <string name="widget_sync_compact_default">↻</string>
+    <string name="widget_label_baseline">BASELINE</string>
+    <string name="widget_label_recovery">RECOVERY</string>
+    <string name="widget_label_strain">STRAIN</string>
+    <string name="widget_label_sleep">SLEEP</string>
+    <string name="widget_label_body_battery">BODY BATTERY</string>
+    <string name="widget_readiness_label">Daily Readiness &amp; Strain</string>
+    <string name="widget_readiness_description">Recovery, Sleep, Strain target, and live Body Battery (resizes to 2×2).</string>
+</resources>

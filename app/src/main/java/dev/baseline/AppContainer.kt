@@ -26,6 +26,7 @@ import dev.baseline.sync.RawIngest
 import dev.baseline.sync.SyncEngine
 import dev.baseline.sync.SyncScheduler
 import dev.baseline.sync.SyncWorkerDeps
+import dev.baseline.widget.WidgetUpdater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -113,6 +114,7 @@ open class AppContainer(context: Context) {
     val afterSync by lazy {
         AfterSync(scorePipeline, historyRecalculator, { !db.taskDao().calibrationPending() }, { LocalDate.now(clock) })
     }
+    open val widgetUpdater by lazy { WidgetUpdater(appContext) { this } }
     val syncWorkerDeps by lazy {
         SyncWorkerDeps(
             syncEngine,

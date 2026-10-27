@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg_card"
+    android:paddingStart="14dp"
+    android:paddingTop="4dp"
+    android:paddingEnd="8dp"
+    android:paddingBottom="12dp">
+
+    <LinearLayout
+        android:id="@+id/widget_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_header_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="@font/barlow_condensed_semibold"
+            android:letterSpacing="0.06"
+            android:maxLines="1"
+            android:text="@string/widget_label_baseline"
+            android:textColor="#9AA3AE"
+            android:textSize="13sp" />
+
+        <FrameLayout
+            android:id="@+id/widget_sync_hitbox"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="48dp"
+            android:minHeight="48dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp">
+
+            <TextView
+                android:id="@+id/widget_sync_pill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:background="@drawable/widget_bg_pill"
+                android:maxLines="1"
+                android:paddingStart="10dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="4dp"
+                android:text="@string/widget_sync_default"
+                android:textColor="#C9CFD6"
+                android:textSize="11sp" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_footer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_marginEnd="6dp"
+        android:background="@drawable/widget_bg_inner"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingTop="7dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="7dp">
+
+        <TextView
+            android:id="@+id/readiness_footer_left"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="#C9CFD6"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/readiness_footer_bb"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:fontFamily="@font/barlow_condensed_bold"
+            android:maxLines="1"
+            android:textColor="#34D399"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_body"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@id/widget_footer"
+        android:layout_below="@id/widget_header"
+        android:layout_marginEnd="6dp"
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingBottom="4dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/dial_recovery"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:contentDescription="@null"
+                android:scaleType="fitCenter" />
+
+            <TextView
+                android:id="@+id/label_recovery"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/barlow_condensed_semibold"
+                android:letterSpacing="0.06"
+                android:maxLines="1"
+                android:text="@string/widget_label_recovery"
+                android:textColor="#34D399"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/dial_strain"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:contentDescription="@null"
+                android:scaleType="fitCenter" />
+
+            <TextView
+                android:id="@+id/label_strain"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/barlow_condensed_semibold"
+                android:letterSpacing="0.06"
+                android:maxLines="1"
+                android:text="@string/widget_label_strain"
+                android:textColor="#93C5FD"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/dial_sleep"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:contentDescription="@null"
+                android:scaleType="fitCenter" />
+
+            <TextView
+                android:id="@+id/label_sleep"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/barlow_condensed_semibold"
+                android:letterSpacing="0.06"
+                android:maxLines="1"
+                android:text="@string/widget_label_sleep"
+                android:textColor="#C4B5FD"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </LinearLayout>
+</RelativeLayout>
