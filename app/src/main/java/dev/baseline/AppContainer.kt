@@ -46,12 +46,11 @@ import java.util.concurrent.TimeUnit
 private val Context.baselineStore: DataStore<Preferences> by preferencesDataStore(name = "baseline")
 
 /** Manual DI root; later tasks add their dependencies here. */
-open class AppContainer(context: Context) {
+open class AppContainer(context: Context, val clock: Clock = SystemZoneClock) {
     private val appContext = context.applicationContext
 
-    val dataStore: DataStore<Preferences> get() = appContext.baselineStore
+    open val dataStore: DataStore<Preferences> get() = appContext.baselineStore
     val aead by lazy { KeystoreAead() }
-    val clock: Clock = SystemZoneClock
     val dateTicker = DateTicker(clock)
     val today get() = dateTicker.today
 
@@ -115,6 +114,20 @@ open class AppContainer(context: Context) {
         AfterSync(scorePipeline, historyRecalculator, { !db.taskDao().calibrationPending() }, { LocalDate.now(clock) })
     }
     open val widgetUpdater by lazy { WidgetUpdater(appContext) { this } }
+    val widgetRefreshSignals: Flow<List<Any?>> by lazy {
+        combine(
+            listOf(
+                userPrefs.baselineOrder,
+                userPrefs.hiddenRows,
+                repository.imperial,
+                repository.firstDayOfWeek,
+                apiKeyVault.status,
+                historyRecalculator.running,
+                dateTicker.today,
+                dateTicker.zone,
+            ),
+        ) { it.toList() }.distinctUntilChanged()
+    }
     val syncWorkerDeps by lazy {
         SyncWorkerDeps(
             syncEngine,
@@ -123,6 +136,7 @@ open class AppContainer(context: Context) {
             userPrefs::setLastSyncedAt,
             reschedule = { scheduler.apply(scheduleInterval.first()) },
             continueSoon = { user -> scheduler.continueSoon(user) },
+            updateWidgets = { syncing -> widgetUpdater.updateAll(forceSyncing = syncing) },
         )
     }
 }

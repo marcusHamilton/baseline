@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="180dp"
+    android:height="20dp"
+    android:viewportWidth="240"
+    android:viewportHeight="26">
+    <!-- 7 day cells: width 31, gap 3.83 -> starts at 0, 34.8, 69.7, 104.5, 139.3, 174.2, 209 -->
+    <path
+        android:fillColor="#0E1013"
+        android:pathData="M5,0 H26 A5,5 0 0,1 31,5 V21 A5,5 0 0,1 26,26 H5 A5,5 0 0,1 0,21 V5 A5,5 0 0,1 5,0 Z M40,0 H61 A5,5 0 0,1 66,5 V21 A5,5 0 0,1 61,26 H40 A5,5 0 0,1 35,21 V5 A5,5 0 0,1 40,0 Z M75,0 H96 A5,5 0 0,1 101,5 V21 A5,5 0 0,1 96,26 H75 A5,5 0 0,1 70,21 V5 A5,5 0 0,1 75,0 Z M110,0 H131 A5,5 0 0,1 136,5 V21 A5,5 0 0,1 131,26 H110 A5,5 0 0,1 105,21 V5 A5,5 0 0,1 110,0 Z M145,0 H166 A5,5 0 0,1 171,5 V21 A5,5 0 0,1 166,26 H145 A5,5 0 0,1 140,21 V5 A5,5 0 0,1 145,0 Z M180,0 H201 A5,5 0 0,1 206,5 V21 A5,5 0 0,1 201,26 H180 A5,5 0 0,1 175,21 V5 A5,5 0 0,1 180,0 Z M214,0 H235 A5,5 0 0,1 240,5 V21 A5,5 0 0,1 235,26 H214 A5,5 0 0,1 209,21 V5 A5,5 0 0,1 214,0 Z" />
+    <!-- Day letter strokes M T W T F S S -->
+    <path
+        android:pathData="M11.5,14 V7 L15.5,11.5 L19.5,7 V14 M47,7 H54 M50.5,7 V14 M80.5,7 L82.5,14 L85.5,9.5 L88.5,14 L90.5,7 M117,7 H124 M120.5,7 V14 M153,14 V7 H158.5 M153,10.5 H157.5 M193,8 C191.5,6.8 188,7 188,8.8 C188,10.8 193,10.2 193,12.4 C193,14.2 189.2,14.3 187.8,13.2 M227,8 C225.5,6.8 222,7 222,8.8 C222,10.8 227,10.2 227,12.4 C227,14.2 223.2,14.3 221.8,13.2"
+        android:strokeColor="#C9CFD6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.5" />
+    <!-- Blue activity dots on Mon, Tue, Thu, Sat -->
+    <path
+        android:fillColor="#60A5FA"
+        android:pathData="M26.5,3 A1.8,1.8 0 1,1 26.5,6.6 A1.8,1.8 0 1,1 26.5,3 Z M61.5,3 A1.8,1.8 0 1,1 61.5,6.6 A1.8,1.8 0 1,1 61.5,3 Z M131.5,3 A1.8,1.8 0 1,1 131.5,6.6 A1.8,1.8 0 1,1 131.5,3 Z M201.5,3 A1.8,1.8 0 1,1 201.5,6.6 A1.8,1.8 0 1,1 201.5,3 Z" />
+    <!-- Recovery bars: Green (Mon, Wed, Fri, Sat), Amber (Tue, Thu), Track (Sun) -->
+    <path
+        android:pathData="M6,21.5 H25 M76,21.5 H95 M146,21.5 H165 M181,21.5 H200"
+        android:strokeColor="#34D399"
+        android:strokeLineCap="round"
+        android:strokeWidth="3" />
+    <path
+        android:pathData="M41,21.5 H60 M111,21.5 H130"
+        android:strokeColor="#FBBF24"
+        android:strokeLineCap="round"
+        android:strokeWidth="3" />
+    <path
+        android:pathData="M215,21.5 H234"
+        android:strokeColor="#262A31"
+        android:strokeLineCap="round"
+        android:strokeWidth="3" />
+</vector>

@@ -20,21 +20,27 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 open class WidgetUpdater(private val context: Context, private val container: () -> AppContainer) {
+    private val updateMutex = Mutex()
+
     fun hasAnyWidgets(manager: AppWidgetManager = AppWidgetManager.getInstance(context)): Boolean =
         PROVIDERS.any { manager.getAppWidgetIds(ComponentName(context, it)).isNotEmpty() }
 
     open suspend fun updateAll(forceSyncing: Boolean = false) = withContext(Dispatchers.Default) {
-        val manager = AppWidgetManager.getInstance(context)
-        if (!hasAnyWidgets(manager)) return@withContext
-        val snapshot = loadWidgetSnapshot(container(), DateFormat.is24HourFormat(context), forceSyncing)
-        updateReadinessInstances(manager, snapshot)
-        updateVitalsInstances(manager, snapshot)
-        updateBodyBatteryInstances(manager, snapshot)
-        updateSleepInstances(manager, snapshot)
-        updateWeeklyActivityInstances(manager, snapshot)
+        updateMutex.withLock {
+            val manager = AppWidgetManager.getInstance(context)
+            if (!hasAnyWidgets(manager)) return@withLock
+            val snapshot = loadWidgetSnapshot(container(), DateFormat.is24HourFormat(context), forceSyncing)
+            updateReadinessInstances(manager, snapshot)
+            updateVitalsInstances(manager, snapshot)
+            updateBodyBatteryInstances(manager, snapshot)
+            updateSleepInstances(manager, snapshot)
+            updateWeeklyActivityInstances(manager, snapshot)
+        }
     }
 
     private fun updateSleepInstances(manager: AppWidgetManager, snapshot: WidgetSnapshot) {
@@ -186,8 +192,25 @@ open class WidgetUpdater(private val context: Context, private val container: ()
 
         val density = context.resources.displayMetrics.density
         val tf = WidgetGraphics.loadCondensedBold(context)
-        val dialPx = WidgetGraphics.dpToClampedPx(56f, density)
-        val strokePx = (5f * density).coerceAtLeast(2f)
+        val sideDialPx = WidgetGraphics.dpToClampedPx(50f, density)
+        val heroDialPx = WidgetGraphics.dpToClampedPx(60f, density)
+        val sideStrokePx = (4.5f * density).coerceAtLeast(2f)
+        val heroStrokePx = (5f * density).coerceAtLeast(2f)
+
+        views.setImageViewBitmap(
+            R.id.dial_sleep,
+            WidgetGraphics.renderDialBitmap(
+                fraction = r.sleepPct?.let { it / 100f },
+                value = r.sleepPct?.toString() ?: "—",
+                suffix = if (r.sleepPct != null) "%" else "",
+                note = null,
+                accentArgb = WidgetGraphics.SLEEP_PURPLE,
+                sizePx = sideDialPx,
+                strokePx = sideStrokePx,
+                typeface = tf,
+            ),
+        )
+        views.setContentDescription(R.id.dial_sleep, r.sleepPct?.let { "Sleep $it%" } ?: "Sleep unavailable")
 
         val recColor = WidgetGraphics.recoveryArgb(r.recoveryZone)
         views.setImageViewBitmap(
@@ -198,8 +221,8 @@ open class WidgetUpdater(private val context: Context, private val container: ()
                 suffix = if (r.recoveryPct != null) "%" else "",
                 note = if (r.recoveryPartial) "Partial" else null,
                 accentArgb = recColor,
-                sizePx = dialPx,
-                strokePx = strokePx,
+                sizePx = heroDialPx,
+                strokePx = heroStrokePx,
                 typeface = tf,
             ),
         )
@@ -214,27 +237,12 @@ open class WidgetUpdater(private val context: Context, private val container: ()
                 suffix = "",
                 note = r.strainTargetText,
                 accentArgb = WidgetGraphics.STRAIN_BLUE,
-                sizePx = dialPx,
-                strokePx = strokePx,
+                sizePx = sideDialPx,
+                strokePx = sideStrokePx,
                 typeface = tf,
             ),
         )
         views.setContentDescription(R.id.dial_strain, if (r.strain != null) "Strain ${r.strainText}" else "Strain unavailable")
-
-        views.setImageViewBitmap(
-            R.id.dial_sleep,
-            WidgetGraphics.renderDialBitmap(
-                fraction = r.sleepPct?.let { it / 100f },
-                value = r.sleepPct?.toString() ?: "—",
-                suffix = if (r.sleepPct != null) "%" else "",
-                note = null,
-                accentArgb = WidgetGraphics.SLEEP_PURPLE,
-                sizePx = dialPx,
-                strokePx = strokePx,
-                typeface = tf,
-            ),
-        )
-        views.setContentDescription(R.id.dial_sleep, r.sleepPct?.let { "Sleep $it%" } ?: "Sleep unavailable")
 
         when {
             r.unreadable -> {

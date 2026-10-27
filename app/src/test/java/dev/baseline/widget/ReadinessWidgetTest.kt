@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
@@ -140,11 +141,44 @@ class ReadinessWidgetTest {
         container.widgetUpdater.updateAll()
     }
 
+    private fun collectImageIds(view: View): List<Int> {
+        if (view.visibility != View.VISIBLE) return emptyList()
+        val own = if (view is ImageView && view.id != View.NO_ID) listOf(view.id) else emptyList()
+        val children =
+            if (view is ViewGroup) {
+                (0 until view.childCount).flatMap { collectImageIds(view.getChildAt(it)) }
+            } else {
+                emptyList()
+            }
+        return own + children
+    }
+
+    private fun collectTexts(view: View): List<String> {
+        if (view.visibility != View.VISIBLE) return emptyList()
+        val own = if (view is TextView && view.text.isNotBlank()) listOf(view.text.toString()) else emptyList()
+        val children =
+            if (view is ViewGroup) {
+                (0 until view.childCount).flatMap { collectTexts(view.getChildAt(it)) }
+            } else {
+                emptyList()
+            }
+        return own + children
+    }
+
     @Test
     fun expandedAndCompactReadinessRenderDialsTargetsAnd48dpSyncHitbox() {
         val parent = FrameLayout(ctx)
         val expanded = container.widgetUpdater.buildReadinessViews(sampleReadySnapshot(), compact = false).apply(ctx, parent)
         assertEquals("TODAY · MON OCT 26", expanded.findViewById<TextView>(R.id.widget_header_title).text.toString())
+        val body = expanded.findViewById<ViewGroup>(R.id.widget_body)
+        assertEquals(
+            listOf(R.id.dial_sleep, R.id.dial_recovery, R.id.dial_strain),
+            collectImageIds(body),
+        )
+        assertEquals(
+            listOf("SLEEP", "RECOVERY", "STRAIN"),
+            collectTexts(body),
+        )
         assertEquals("Recovery 74%", expanded.findViewById<ImageView>(R.id.dial_recovery).contentDescription.toString())
         assertEquals("Strain 11.4", expanded.findViewById<ImageView>(R.id.dial_strain).contentDescription.toString())
         assertEquals("Sleep 92%", expanded.findViewById<ImageView>(R.id.dial_sleep).contentDescription.toString())

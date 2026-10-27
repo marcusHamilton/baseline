@@ -13,12 +13,14 @@ import androidx.work.WorkerParameters
 import dev.baseline.BaselineApp
 import dev.baseline.data.db.TaskCounts
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.text.NumberFormat
 import java.time.Clock
 import java.time.Duration
@@ -37,6 +39,7 @@ class SyncWorkerDeps(
     val reschedule: suspend () -> Unit,
     /** Queues the follow-up run after a PARTIAL one; the argument is whether the finished run was user-initiated. */
     val continueSoon: suspend (Boolean) -> Unit,
+    val updateWidgets: suspend (Boolean) -> Unit = {},
 )
 
 class SyncWorker(ctx: Context, params: WorkerParameters, private val deps: SyncWorkerDeps) : CoroutineWorker(ctx, params) {
@@ -46,51 +49,72 @@ class SyncWorker(ctx: Context, params: WorkerParameters, private val deps: SyncW
 
     override suspend fun doWork(): Result {
         val queuedAt = deps.clock.instant()
-        val outcome =
-            syncMutex.withLock {
-                // Time spent waiting for another run counts against WorkManager's limit too.
-                val waited = Duration.between(queuedAt, deps.clock.instant()).toKotlinDuration()
-                val today = LocalDate.now(deps.clock)
-                deps.engine.repairSleepPlaceholders()
-                deps.engine.ensureBackfillPlanned(today)
-                deps.engine.planIncremental(today)
-                // onProgress is not suspending, so progress goes through a conflated channel; the delay throttles setForeground.
-                val progress = Channel<TaskCounts>(Channel.CONFLATED)
-                val run =
-                    coroutineScope {
-                        val notifier =
-                            launch {
-                                for (c in progress) {
-                                    // One refusal (Android 12+ background start) ends the notifications; the sync itself carries on.
-                                    if (c.total - c.done > FOREGROUND_THRESHOLD && !showProgress(c)) break
-                                    delay(NOTIFY_EVERY_MS)
+        var startedWidgets = false
+        try {
+            val outcome =
+                syncMutex.withLock {
+                    startedWidgets = true
+                    notifyWidgets(true)
+                    // Time spent waiting for another run counts against WorkManager's limit too.
+                    val waited = Duration.between(queuedAt, deps.clock.instant()).toKotlinDuration()
+                    val today = LocalDate.now(deps.clock)
+                    deps.engine.repairSleepPlaceholders()
+                    deps.engine.ensureBackfillPlanned(today)
+                    deps.engine.planIncremental(today)
+                    // onProgress is not suspending, so progress goes through a conflated channel; the delay throttles setForeground.
+                    val progress = Channel<TaskCounts>(Channel.CONFLATED)
+                    val run =
+                        coroutineScope {
+                            val notifier =
+                                launch {
+                                    for (c in progress) {
+                                        // One refusal (Android 12+ background start) ends the notifications; the sync itself carries on.
+                                        if (c.total - c.done > FOREGROUND_THRESHOLD && !showProgress(c)) break
+                                        delay(NOTIFY_EVERY_MS)
+                                    }
                                 }
+                            try {
+                                deps.engine.runPending((RUN_BUDGET - waited).coerceAtLeast(KDuration.ZERO)) { progress.trySend(it) }
+                            } finally {
+                                notifier.cancel()
                             }
-                        try {
-                            deps.engine.runPending((RUN_BUDGET - waited).coerceAtLeast(KDuration.ZERO)) { progress.trySend(it) }
-                        } finally {
-                            notifier.cancel()
                         }
-                    }
-                deps.afterSync(run.changedFrom)
-                run.outcome
-            }
-        return when (outcome) {
-            SyncOutcome.COMPLETED, SyncOutcome.KEY_INVALID -> {
-                if (outcome == SyncOutcome.COMPLETED) markSynced()
-                deps.reschedule() // backfill may just have finished: UNMETERED -> CONNECTED
-                Result.success()
-            }
+                    deps.afterSync(run.changedFrom)
+                    run.outcome
+                }
+            return when (outcome) {
+                SyncOutcome.COMPLETED, SyncOutcome.KEY_INVALID -> {
+                    if (outcome == SyncOutcome.COMPLETED) markSynced()
+                    deps.reschedule() // backfill may just have finished: UNMETERED -> CONNECTED
+                    Result.success()
+                }
 
-            SyncOutcome.PARTIAL -> {
-                markSynced()
-                deps.continueSoon(SyncScheduler.USER in tags)
-                Result.success()
-            }
+                SyncOutcome.PARTIAL -> {
+                    markSynced()
+                    deps.continueSoon(SyncScheduler.USER in tags)
+                    Result.success()
+                }
 
-            SyncOutcome.RATE_LIMITED, SyncOutcome.OFFLINE -> {
-                Result.retry()
+                SyncOutcome.RATE_LIMITED, SyncOutcome.OFFLINE -> {
+                    Result.retry()
+                }
             }
+        } finally {
+            if (startedWidgets) {
+                withContext(NonCancellable) {
+                    notifyWidgets(false)
+                }
+            }
+        }
+    }
+
+    private suspend fun notifyWidgets(syncing: Boolean) {
+        try {
+            deps.updateWidgets(syncing)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not update widgets: ${e.javaClass.name}: ${e.message}")
         }
     }
 

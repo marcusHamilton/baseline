@@ -108,12 +108,40 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingTop="10dp">
+
+            <ImageView
+                android:id="@+id/dial_sleep"
+                android:layout_width="50dp"
+                android:layout_height="50dp"
+                android:contentDescription="@null"
+                android:scaleType="fitCenter" />
+
+            <TextView
+                android:id="@+id/label_sleep"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/barlow_condensed_semibold"
+                android:letterSpacing="0.06"
+                android:maxLines="1"
+                android:text="@string/widget_label_sleep"
+                android:textColor="#C4B5FD"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center_horizontal"
             android:orientation="vertical">
 
             <ImageView
                 android:id="@+id/dial_recovery"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
                 android:contentDescription="@null"
                 android:scaleType="fitCenter" />
 
@@ -135,12 +163,13 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:gravity="center_horizontal"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:paddingTop="10dp">
 
             <ImageView
                 android:id="@+id/dial_strain"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
+                android:layout_width="50dp"
+                android:layout_height="50dp"
                 android:contentDescription="@null"
                 android:scaleType="fitCenter" />
 
@@ -154,33 +183,6 @@
                 android:maxLines="1"
                 android:text="@string/widget_label_strain"
                 android:textColor="#93C5FD"
-                android:textSize="11sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center_horizontal"
-            android:orientation="vertical">
-
-            <ImageView
-                android:id="@+id/dial_sleep"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:contentDescription="@null"
-                android:scaleType="fitCenter" />
-
-            <TextView
-                android:id="@+id/label_sleep"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:fontFamily="@font/barlow_condensed_semibold"
-                android:letterSpacing="0.06"
-                android:maxLines="1"
-                android:text="@string/widget_label_sleep"
-                android:textColor="#C4B5FD"
                 android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>
