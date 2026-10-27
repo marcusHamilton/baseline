@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg_card"
+    android:paddingStart="14dp"
+    android:paddingTop="4dp"
+    android:paddingEnd="8dp"
+    android:paddingBottom="10dp">
+
+    <LinearLayout
+        android:id="@+id/widget_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_header_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="@font/barlow_condensed_semibold"
+            android:letterSpacing="0.06"
+            android:maxLines="1"
+            android:text="@string/widget_vitals_header"
+            android:textColor="#9AA3AE"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/vitals_status_summary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="4dp"
+            android:maxLines="1"
+            android:textColor="#9AA3AE"
+            android:textSize="11sp" />
+
+        <FrameLayout
+            android:id="@+id/widget_sync_hitbox"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="48dp"
+            android:minHeight="48dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp">
+
+            <TextView
+                android:id="@+id/widget_sync_pill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:background="@drawable/widget_bg_pill"
+                android:maxLines="1"
+                android:paddingStart="10dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="4dp"
+                android:text="@string/widget_sync_default"
+                android:textColor="#C9CFD6"
+                android:textSize="11sp" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/vitals_unreadable"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="6dp"
+        android:gravity="center"
+        android:maxLines="1"
+        android:text="@string/widget_unreadable_day"
+        android:textColor="#FBBF24"
+        android:textSize="11sp"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/vitals_all_hidden"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@id/vitals_unreadable"
+        android:layout_below="@id/widget_header"
+        android:layout_marginEnd="6dp"
+        android:gravity="center"
+        android:text="@string/widget_vitals_all_hidden"
+        android:textColor="#9AA3AE"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/vitals_grid"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@id/vitals_unreadable"
+        android:layout_below="@id/widget_header"
+        android:layout_marginEnd="6dp"
+        android:gravity="center_vertical"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:id="@+id/vitals_row_1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <RelativeLayout
+                android:id="@+id/vital_tile_1"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="3dp"
+                android:layout_weight="1"
+                android:background="@drawable/widget_bg_inner"
+                android:paddingStart="10dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="6dp">
+
+                <TextView
+                    android:id="@+id/vital_delta_1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentTop="true"
+                    android:layout_alignParentEnd="true"
+                    android:maxLines="1"
+                    android:textColor="#6EE7B7"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/vital_label_1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentStart="true"
+                    android:layout_alignParentTop="true"
+                    android:layout_marginEnd="4dp"
+                    android:layout_toStartOf="@id/vital_delta_1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="#9AA3AE"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/vital_value_1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_below="@id/vital_label_1"
+                    android:layout_alignParentStart="true"
+                    android:layout_marginTop="1dp"
+                    android:fontFamily="@font/barlow_condensed_bold"
+                    android:maxLines="1"
+                    android:textColor="#F2F4F7"
+                    android:textSize="18sp" />
+            </RelativeLayout>
+
+            <RelativeLayout
+                android:id="@+id/vital_tile_2"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:layout_weight="1"
+                android:background="@drawable/widget_bg_inner"
+                android:paddingStart="10dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="6dp">
+
+                <TextView
+                    android:id="@+id/vital_delta_2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentTop="true"
+                    android:layout_alignParentEnd="true"
+                    android:maxLines="1"
+                    android:textColor="#6EE7B7"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/vital_label_2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentStart="true"
+                    android:layout_alignParentTop="true"
+                    android:layout_marginEnd="4dp"
+                    android:layout_toStartOf="@id/vital_delta_2"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="#9AA3AE"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/vital_value_2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_below="@id/vital_label_2"
+                    android:layout_alignParentStart="true"
+                    android:layout_marginTop="1dp"
+                    android:fontFamily="@font/barlow_condensed_bold"
+                    android:maxLines="1"
+                    android:textColor="#F2F4F7"
+                    android:textSize="18sp" />
+            </RelativeLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/vitals_row_2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <RelativeLayout
+                android:id="@+id/vital_tile_3"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="3dp"
+                android:layout_weight="1"
+                android:background="@drawable/widget_bg_inner"
+                android:paddingStart="10dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="6dp">
+
+                <TextView
+                    android:id="@+id/vital_delta_3"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentTop="true"
+                    android:layout_alignParentEnd="true"
+                    android:maxLines="1"
+                    android:textColor="#6EE7B7"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/vital_label_3"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentStart="true"
+                    android:layout_alignParentTop="true"
+                    android:layout_marginEnd="4dp"
+                    android:layout_toStartOf="@id/vital_delta_3"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="#9AA3AE"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/vital_value_3"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_below="@id/vital_label_3"
+                    android:layout_alignParentStart="true"
+                    android:layout_marginTop="1dp"
+                    android:fontFamily="@font/barlow_condensed_bold"
+                    android:maxLines="1"
+                    android:textColor="#F2F4F7"
+                    android:textSize="18sp" />
+            </RelativeLayout>
+
+            <RelativeLayout
+                android:id="@+id/vital_tile_4"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:layout_weight="1"
+                android:background="@drawable/widget_bg_inner"
+                android:paddingStart="10dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="6dp">
+
+                <TextView
+                    android:id="@+id/vital_delta_4"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentTop="true"
+                    android:layout_alignParentEnd="true"
+                    android:maxLines="1"
+                    android:textColor="#6EE7B7"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/vital_label_4"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentStart="true"
+                    android:layout_alignParentTop="true"
+                    android:layout_marginEnd="4dp"
+                    android:layout_toStartOf="@id/vital_delta_4"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="#9AA3AE"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/vital_value_4"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_below="@id/vital_label_4"
+                    android:layout_alignParentStart="true"
+                    android:layout_marginTop="1dp"
+                    android:fontFamily="@font/barlow_condensed_bold"
+                    android:maxLines="1"
+                    android:textColor="#F2F4F7"
+                    android:textSize="18sp" />
+            </RelativeLayout>
+        </LinearLayout>
+    </LinearLayout>
+</RelativeLayout>

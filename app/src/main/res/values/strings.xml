@@ -13,4 +13,12 @@
     <string name="widget_label_body_battery">BODY BATTERY</string>
     <string name="widget_readiness_label">Daily Readiness &amp; Strain</string>
     <string name="widget_readiness_description">Recovery, Sleep, Strain target, and live Body Battery (resizes to 2×2).</string>
+    <string name="widget_vitals_header">VS. 30-DAY BASELINE</string>
+    <string name="widget_vitals_all_hidden">All baseline metrics hidden in Today</string>
+    <string name="widget_vitals_label">Health Monitor / Vitals</string>
+    <string name="widget_vitals_description">Today\'s top 4 vitals compared against your 30-day baseline.</string>
+    <string name="widget_bb_header">BODY BATTERY &amp; STRESS</string>
+    <string name="widget_bb_empty_curve">No Body Battery curve yet today</string>
+    <string name="widget_bb_label">Body Battery &amp; Stress</string>
+    <string name="widget_bb_description">Live Body Battery level, wake/charged/stress stats, and daytime curve.</string>
 </resources>

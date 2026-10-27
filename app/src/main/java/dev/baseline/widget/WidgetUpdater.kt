@@ -30,6 +30,25 @@ open class WidgetUpdater(private val context: Context, private val container: ()
         if (!hasAnyWidgets(manager)) return@withContext
         val snapshot = loadWidgetSnapshot(container(), DateFormat.is24HourFormat(context), forceSyncing)
         updateReadinessInstances(manager, snapshot)
+        updateVitalsInstances(manager, snapshot)
+        updateBodyBatteryInstances(manager, snapshot)
+    }
+
+    private fun updateVitalsInstances(manager: AppWidgetManager, snapshot: WidgetSnapshot) {
+        val ids = manager.getAppWidgetIds(ComponentName(context, VitalsWidgetProvider::class.java))
+        if (ids.isEmpty()) return
+        val views = buildVitalsViews(snapshot)
+        for (id in ids) {
+            manager.updateAppWidget(id, views)
+        }
+    }
+
+    private fun updateBodyBatteryInstances(manager: AppWidgetManager, snapshot: WidgetSnapshot) {
+        val ids = manager.getAppWidgetIds(ComponentName(context, BodyBatteryWidgetProvider::class.java))
+        for (id in ids) {
+            val options = manager.getAppWidgetOptions(id)
+            manager.updateAppWidget(id, buildBodyBatteryViews(snapshot, options))
+        }
     }
 
     private fun updateReadinessInstances(manager: AppWidgetManager, snapshot: WidgetSnapshot) {
@@ -222,13 +241,138 @@ open class WidgetUpdater(private val context: Context, private val container: ()
         return views
     }
 
+    internal fun buildVitalsViews(snapshot: WidgetSnapshot): RemoteViews {
+        if (snapshot.keyMissing) return buildMissingKeyViews()
+        val v = snapshot.vitals
+        val views = RemoteViews(context.packageName, R.layout.widget_vitals)
+        views.setOnClickPendingIntent(R.id.widget_root, WidgetRoutes.pendingIntent(context, WidgetTarget.Today))
+        bindSyncPill(views, snapshot.syncPill, compact = false)
+
+        if (v.statusSummary != null) {
+            views.setTextViewText(R.id.vitals_status_summary, v.statusSummary)
+            views.setTextColor(
+                R.id.vitals_status_summary,
+                if (v.statusWarn) WidgetGraphics.RECOVERY_AMBER else WidgetGraphics.TEXT_MUTED,
+            )
+            views.setViewVisibility(R.id.vitals_status_summary, View.VISIBLE)
+        } else {
+            views.setViewVisibility(R.id.vitals_status_summary, View.GONE)
+        }
+
+        views.setViewVisibility(R.id.vitals_unreadable, if (v.unreadable) View.VISIBLE else View.GONE)
+
+        if (v.allHidden) {
+            views.setViewVisibility(R.id.vitals_all_hidden, View.VISIBLE)
+            views.setViewVisibility(R.id.vitals_grid, View.GONE)
+            return views
+        }
+
+        views.setViewVisibility(R.id.vitals_all_hidden, View.GONE)
+        views.setViewVisibility(R.id.vitals_grid, View.VISIBLE)
+        views.setViewVisibility(R.id.vitals_row_1, if (v.tiles.isNotEmpty()) View.VISIBLE else View.GONE)
+        views.setViewVisibility(R.id.vitals_row_2, if (v.tiles.size > 2) View.VISIBLE else View.GONE)
+
+        VITAL_SLOTS.forEachIndexed { idx, slot ->
+            val tile = v.tiles.getOrNull(idx)
+            if (tile == null) {
+                views.setViewVisibility(slot.tileId, View.GONE)
+            } else {
+                views.setViewVisibility(slot.tileId, View.VISIBLE)
+                views.setTextViewText(slot.labelId, tile.shortLabel)
+                val formattedValue =
+                    if (tile.valueText == "—" || tile.unit.isEmpty()) {
+                        tile.valueText
+                    } else {
+                        "${tile.valueText} ${tile.unit}"
+                    }
+                views.setTextViewText(slot.valueId, formattedValue)
+                if (tile.deltaText != null) {
+                    views.setTextViewText(slot.deltaId, tile.deltaText)
+                    val deltaColor =
+                        when (tile.better) {
+                            true -> WidgetGraphics.BETTER_GREEN
+                            false -> WidgetGraphics.RECOVERY_RED
+                            null -> WidgetGraphics.TEXT_MUTED
+                        }
+                    views.setTextColor(slot.deltaId, deltaColor)
+                    views.setViewVisibility(slot.deltaId, View.VISIBLE)
+                } else {
+                    views.setViewVisibility(slot.deltaId, View.GONE)
+                }
+            }
+        }
+        return views
+    }
+
+    internal fun buildBodyBatteryViews(snapshot: WidgetSnapshot, options: Bundle = Bundle.EMPTY): RemoteViews {
+        if (snapshot.keyMissing) return buildMissingKeyViews()
+        val bb = snapshot.bodyBattery
+        val views = RemoteViews(context.packageName, R.layout.widget_body_battery)
+        views.setOnClickPendingIntent(R.id.widget_root, WidgetRoutes.pendingIntent(context, WidgetTarget.Today))
+        bindSyncPill(views, snapshot.syncPill, compact = false)
+
+        val accent = WidgetGraphics.bodyBatteryArgb(bb.current)
+        views.setTextViewText(R.id.bb_current_value, bb.current?.toString() ?: "—")
+        views.setTextColor(R.id.bb_current_value, accent)
+
+        if (bb.unreadable && bb.curve.size >= 2) {
+            views.setTextViewText(R.id.bb_meta_line, context.getString(R.string.widget_unreadable_day))
+            views.setTextColor(R.id.bb_meta_line, WidgetGraphics.RECOVERY_AMBER)
+        } else {
+            views.setTextViewText(R.id.bb_meta_line, bb.metaLine)
+            views.setTextColor(R.id.bb_meta_line, WidgetGraphics.TEXT_BODY)
+        }
+
+        val axisIds = listOf(R.id.bb_axis_1, R.id.bb_axis_2, R.id.bb_axis_3, R.id.bb_axis_4)
+        axisIds.forEachIndexed { i, id ->
+            views.setTextViewText(id, bb.axisLabels.getOrElse(i) { "" })
+        }
+
+        if (bb.curve.size >= 2) {
+            val density = context.resources.displayMetrics.density
+            val widthDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).let { if (it <= 0) 250 else it }
+            val wPx = WidgetGraphics.dpToClampedPx((widthDp - 36).coerceAtLeast(120).toFloat(), density)
+            val hPx = WidgetGraphics.dpToClampedPx(44f, density)
+            views.setImageViewBitmap(
+                R.id.bb_sparkline,
+                WidgetGraphics.renderBodyBatterySparkline(bb.curve, accent, snapshot.today, snapshot.zone, wPx, hPx),
+            )
+            views.setContentDescription(R.id.bb_sparkline, "Body Battery today, now ${bb.current ?: "unavailable"}")
+            views.setViewVisibility(R.id.bb_sparkline, View.VISIBLE)
+            views.setViewVisibility(R.id.bb_empty_note, View.GONE)
+        } else {
+            views.setViewVisibility(R.id.bb_sparkline, View.GONE)
+            views.setViewVisibility(R.id.bb_empty_note, View.VISIBLE)
+            if (bb.unreadable) {
+                views.setTextViewText(R.id.bb_empty_note, context.getString(R.string.widget_unreadable_day))
+                views.setTextColor(R.id.bb_empty_note, WidgetGraphics.RECOVERY_AMBER)
+            } else {
+                views.setTextViewText(R.id.bb_empty_note, context.getString(R.string.widget_bb_empty_curve))
+                views.setTextColor(R.id.bb_empty_note, WidgetGraphics.TEXT_MUTED)
+            }
+        }
+        return views
+    }
+
+    private data class VitalSlotIds(val tileId: Int, val labelId: Int, val valueId: Int, val deltaId: Int)
+
     companion object {
         private const val KEY_ERR_TEXT_ARGB: Int = 0xFFFECACA.toInt()
         private const val TAG = "WidgetUpdater"
 
+        private val VITAL_SLOTS =
+            listOf(
+                VitalSlotIds(R.id.vital_tile_1, R.id.vital_label_1, R.id.vital_value_1, R.id.vital_delta_1),
+                VitalSlotIds(R.id.vital_tile_2, R.id.vital_label_2, R.id.vital_value_2, R.id.vital_delta_2),
+                VitalSlotIds(R.id.vital_tile_3, R.id.vital_label_3, R.id.vital_value_3, R.id.vital_delta_3),
+                VitalSlotIds(R.id.vital_tile_4, R.id.vital_label_4, R.id.vital_value_4, R.id.vital_delta_4),
+            )
+
         private val PROVIDERS: List<Class<out AppWidgetProvider>> =
             listOf(
                 ReadinessWidgetProvider::class.java,
+                VitalsWidgetProvider::class.java,
+                BodyBatteryWidgetProvider::class.java,
             )
 
         @Volatile
