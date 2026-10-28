@@ -172,7 +172,11 @@ fun buildWidgetSnapshot(
         } else {
             null
         }
-    val latestBb = bodyBatteryCurve.lastOrNull()?.second?.coerceIn(0, 100)
+    // Only samples inside the phone zone's day count, so the value, the empty-curve note and the sparkline agree.
+    val dayStart = today.atStartOfDay(zone).toInstant()
+    val dayEnd = today.plusDays(1).atStartOfDay(zone).toInstant()
+    val bbCurve = bodyBatteryCurve.filter { it.first >= dayStart && it.first <= dayEnd }
+    val latestBb = bbCurve.lastOrNull()?.second?.coerceIn(0, 100)
 
     val readiness =
         ReadinessModel(
@@ -229,7 +233,7 @@ fun buildWidgetSnapshot(
         BodyBatteryModel(
             current = latestBb,
             metaLine = bbMetaParts.joinToString(" · ").ifEmpty { MISSING },
-            curve = bodyBatteryCurve,
+            curve = bbCurve,
             axisLabels = if (is24h) listOf("00", "06", "12", "18") else listOf("12a", "6a", "12p", "6p"),
             unreadable = unreadable,
         )
@@ -281,7 +285,7 @@ fun buildWidgetSnapshot(
         latestEntity?.let { a ->
             val whenPrefix =
                 if (a.day == today) {
-                    "Today ${fmt.clock(a.startTimeLocal)}"
+                    "Today ${Formatters.time(a.startTimeLocal.toLocalTime(), is24h)}"
                 } else {
                     Formatters.dayHeader(a.day, today)
                 }
