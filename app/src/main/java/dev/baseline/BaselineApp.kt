@@ -44,8 +44,9 @@ class BaselineApp :
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         val log = CoroutineExceptionHandler { _, t -> Log.w(TAG, "background scope: ${t.javaClass.simpleName}: ${t.message}") }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + log)
         // Re-applies when the key is saved (onboarding) or removed, and when the interval setting changes.
-        CoroutineScope(SupervisorJob() + Dispatchers.Default + log).launch {
+        scope.launch {
             container.scheduleInterval.collect {
                 try {
                     container.scheduler.apply(it)
@@ -54,6 +55,17 @@ class BaselineApp :
                 } catch (e: Exception) {
                     // one bad apply must not end the collector
                     Log.w(TAG, "schedule: ${e.javaClass.simpleName}: ${e.message}")
+                }
+            }
+        }
+        scope.launch {
+            container.widgetRefreshSignals.collect {
+                try {
+                    container.widgetUpdater.updateAll()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "widgets: ${e.javaClass.simpleName}: ${e.message}")
                 }
             }
         }

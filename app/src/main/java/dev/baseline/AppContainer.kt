@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import dev.baseline.data.Repository
 import dev.baseline.data.db.AppDatabase
@@ -26,6 +27,7 @@ import dev.baseline.sync.RawIngest
 import dev.baseline.sync.SyncEngine
 import dev.baseline.sync.SyncScheduler
 import dev.baseline.sync.SyncWorkerDeps
+import dev.baseline.widget.WidgetUpdater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,12 +47,11 @@ import java.util.concurrent.TimeUnit
 private val Context.baselineStore: DataStore<Preferences> by preferencesDataStore(name = "baseline")
 
 /** Manual DI root; later tasks add their dependencies here. */
-open class AppContainer(context: Context) {
+open class AppContainer(context: Context, val clock: Clock = SystemZoneClock) {
     private val appContext = context.applicationContext
 
-    val dataStore: DataStore<Preferences> get() = appContext.baselineStore
+    open val dataStore: DataStore<Preferences> get() = appContext.baselineStore
     val aead by lazy { KeystoreAead() }
-    val clock: Clock = SystemZoneClock
     val dateTicker = DateTicker(clock)
     val today get() = dateTicker.today
 
@@ -113,6 +114,23 @@ open class AppContainer(context: Context) {
     val afterSync by lazy {
         AfterSync(scorePipeline, historyRecalculator, { !db.taskDao().calibrationPending() }, { LocalDate.now(clock) })
     }
+    open val widgetUpdater by lazy { WidgetUpdater(appContext) { this } }
+    val widgetRefreshSignals: Flow<List<Any?>> by lazy {
+        combine(
+            listOf(
+                userPrefs.baselineOrder,
+                userPrefs.hiddenRows,
+                repository.imperial,
+                repository.firstDayOfWeek,
+                apiKeyVault.status,
+                historyRecalculator.running,
+                dateTicker.today,
+                dateTicker.zone,
+                // Redraws when the worker really leaves RUNNING, whatever order the updates ran in.
+                scheduler.workInfos.map { infos -> infos.any { it.state == WorkInfo.State.RUNNING } },
+            ),
+        ) { it.toList() }.distinctUntilChanged()
+    }
     val syncWorkerDeps by lazy {
         SyncWorkerDeps(
             syncEngine,
@@ -121,6 +139,7 @@ open class AppContainer(context: Context) {
             userPrefs::setLastSyncedAt,
             reschedule = { scheduler.apply(scheduleInterval.first()) },
             continueSoon = { user -> scheduler.continueSoon(user) },
+            updateWidgets = { syncing -> widgetUpdater.updateAll(syncing = syncing) },
         )
     }
 }

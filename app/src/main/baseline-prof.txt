@@ -47,9 +47,11 @@ HPLdev/baseline/ui/trends/**;->**(**)**
 Ldev/baseline/ui/trends/**;
 HPLdev/baseline/ui/settings/**;->**(**)**
 Ldev/baseline/ui/settings/**;
-# The activity screen unpacks stored streams.
+# The activity screen unpacks stored streams; home-screen widgets render snapshots and Canvas bitmaps.
 HPLdev/baseline/fit/ActivityStreams**;->**(**)**
 Ldev/baseline/fit/ActivityStreams**;
+HPLdev/baseline/widget/**;->**(**)**
+Ldev/baseline/widget/**;
 
 # Vico draws Today's, Trends' and Activity's charts; MapLibre draws the route map. Neither ships a profile.
 HPLcom/patrykandpatrick/vico/**;->**(**)**

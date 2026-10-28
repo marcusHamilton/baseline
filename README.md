@@ -41,6 +41,7 @@ If you've used a WHOOP, the idea will feel familiar. The difference is that it r
 - **Trends.** Weeks and months of recovery, sleep against sleep need, strain and heart rate, so you can see what's actually changing.
 - **Calendar.** A month at a glance: a ring per day coloured by recovery, a dot for every activity.
 - **Records.** Your all-time bests, like that fastest 5K, kept up to date for you.
+- **Home-screen widgets.** Five dark-mode widgets — sleep, recovery & strain dials, 30-day baseline vitals, live Body Battery & stress curve, sleep & tonight's bedtime, and weekly activity summary — with one-tap sync.
 - **Your baseline, not someone else's.** Recovery is measured against your own last 30 days of HRV, resting heart rate and respiration. The strain scale is calibrated to your history, so your 90th-percentile day lands at about 17.
 
 ## 🔒 Private by design

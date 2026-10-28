@@ -33,7 +33,7 @@ app. Baseline never writes to Garmin.
 ### Non-goals (v1)
 - iOS or web, a backend, multiple users or Play Store distribution.
 - Writing to Garmin (workouts, courses, renaming activities).
-- Home-screen widgets, notifications other than sync progress, Health Connect export.
+- Notifications other than sync progress, Health Connect export. (Home-screen widgets were added later; see `2026-10-26-home-screen-widgets-design.md`.)
 - Nutrition, hydration, weight, women's health screens. The endpoints exist; they're left out until asked for.
 
 ## 2. Verified data sources

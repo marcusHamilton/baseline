@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_missing_key_prompt">Connect Garmin API key to start</string>
+    <string name="widget_unreadable_day">Couldn\'t read today\'s data</string>
+    <string name="widget_sync_syncing">Syncing…</string>
+    <string name="widget_sync_key_error">Key error</string>
+    <string name="widget_sync_default">↻ Sync</string>
+    <string name="widget_sync_compact_default">↻</string>
+    <string name="widget_label_baseline">BASELINE</string>
+    <string name="widget_label_recovery">RECOVERY</string>
+    <string name="widget_label_strain">STRAIN</string>
+    <string name="widget_label_sleep">SLEEP</string>
+    <string name="widget_label_body_battery">BODY BATTERY</string>
+    <string name="widget_readiness_label">Daily Readiness &amp; Strain</string>
+    <string name="widget_readiness_description">Recovery, Sleep, Strain target, and live Body Battery (resizes to 2×2).</string>
+    <string name="widget_vitals_header">VS. 30-DAY BASELINE</string>
+    <string name="widget_vitals_all_hidden">All baseline metrics hidden in Today</string>
+    <string name="widget_vitals_label">Health Monitor / Vitals</string>
+    <string name="widget_vitals_description">Today\'s top 4 vitals compared against your 30-day baseline.</string>
+    <string name="widget_bb_header">BODY BATTERY &amp; STRESS</string>
+    <string name="widget_bb_empty_curve">No Body Battery curve yet today</string>
+    <string name="widget_bb_label">Body Battery &amp; Stress</string>
+    <string name="widget_bb_description">Live Body Battery level, wake/charged/stress stats, and daytime curve.</string>
+    <string name="widget_sleep_header">SLEEP &amp; TONIGHT\'S NEED</string>
+    <string name="widget_sleep_label">Sleep &amp; Tonight\'s Bedtime</string>
+    <string name="widget_sleep_description">Last night\'s sleep performance, stage breakdown, and tonight\'s recommended bedtime.</string>
+    <string name="widget_weekly_default_header">THIS WEEK · 0 ACTIVITIES</string>
+    <string name="widget_weekly_no_activities">No activities synced yet</string>
+    <string name="widget_weekly_label">Weekly Summary &amp; Latest Activity</string>
+    <string name="widget_weekly_description">Week-to-date training totals, 7-day recovery strip, and your latest workout.</string>
+    <string name="widget_preview_sync_stamp" translatable="false">↻ 7:40 AM</string>
+    <string name="widget_preview_readiness_header" translatable="false">TODAY · MON</string>
+    <string name="widget_preview_recovery_val" translatable="false">78%</string>
+    <string name="widget_preview_strain_val" translatable="false">12.4</string>
+    <string name="widget_preview_strain_range" translatable="false">14–18</string>
+    <string name="widget_preview_sleep_val" translatable="false">91%</string>
+    <string name="widget_preview_target_footer" translatable="false">Target strain 14–18</string>
+    <string name="widget_preview_bb_badge" translatable="false">BB 74</string>
+    <string name="widget_preview_vitals_status" translatable="false">4 in range</string>
+    <string name="widget_preview_vital_1_label" translatable="false">HRV</string>
+    <string name="widget_preview_vital_1_val" translatable="false">64 ms</string>
+    <string name="widget_preview_vital_1_delta" translatable="false">↑4</string>
+    <string name="widget_preview_vital_2_label" translatable="false">Resting HR</string>
+    <string name="widget_preview_vital_2_val" translatable="false">51 bpm</string>
+    <string name="widget_preview_vital_2_delta" translatable="false">↓1</string>
+    <string name="widget_preview_vital_3_label" translatable="false">Sleep</string>
+    <string name="widget_preview_vital_3_val" translatable="false">7h 45m</string>
+    <string name="widget_preview_vital_3_delta" translatable="false">↑18m</string>
+    <string name="widget_preview_vital_4_label" translatable="false">Wake BB</string>
+    <string name="widget_preview_vital_4_val" translatable="false">86 /100</string>
+    <string name="widget_preview_vital_4_delta" translatable="false">↑6</string>
+    <string name="widget_preview_bb_val" translatable="false">74</string>
+    <string name="widget_preview_bb_meta" translatable="false">Wake 88 · Charged +62 · Stress 24</string>
+    <string name="widget_preview_axis_12a" translatable="false">12a</string>
+    <string name="widget_preview_axis_6a" translatable="false">6a</string>
+    <string name="widget_preview_axis_12p" translatable="false">12p</string>
+    <string name="widget_preview_axis_6p" translatable="false">6p</string>
+    <string name="widget_preview_sleep_asleep" translatable="false">7h 45m</string>
+    <string name="widget_preview_sleep_need" translatable="false">/ 8h 10m need</string>
+    <string name="widget_preview_sleep_pct" translatable="false">95%</string>
+    <string name="widget_preview_sleep_score" translatable="false">Score 86</string>
+    <string name="widget_preview_tonight_need" translatable="false">Tonight\'s need: 8h 05m</string>
+    <string name="widget_preview_bedtime" translatable="false">Bedtime 10:15 PM</string>
+    <string name="widget_preview_weekly_header" translatable="false">THIS WEEK · 4 ACTIVITIES</string>
+    <string name="widget_preview_weekly_totals" translatable="false">4h 50m · 38.4 km</string>
+    <string name="widget_preview_activity_title" translatable="false">Morning Run</string>
+    <string name="widget_preview_activity_meta" translatable="false">Today 7:05 AM · 8.0 km · 41:10</string>
+    <string name="widget_preview_activity_strain" translatable="false">13.8</string>
+</resources>

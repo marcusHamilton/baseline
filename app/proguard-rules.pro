@@ -22,3 +22,7 @@
 # - OkHttp, DataStore, Compose, Navigation: covered by their consumer rules.
 # - Persisted enum names (GarminEndpoint, TaskStatus, SyncInterval, BanisterSet): R8 keeps Enum.name() and valueOf()
 #   returning the source names, so stored rows and prefs stay readable.
+# - Home-screen widgets (ReadinessWidgetProvider, VitalsWidgetProvider, BodyBatteryWidgetProvider, SleepWidgetProvider,
+#   WeeklyActivityWidgetProvider) and WidgetActionReceiver: AAPT2 automatically generates -keep rules for every
+#   <receiver> declared in AndroidManifest.xml; RemoteViews method names ("setBackgroundResource", "setColorFilter")
+#   target framework android.view.View / android.widget.ImageView methods that R8 never renames.
