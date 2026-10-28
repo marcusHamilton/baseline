@@ -33,8 +33,8 @@ android {
         applicationId = "dev.baseline"
         minSdk = 29
         targetSdk = 37
-        versionCode = 3
-        versionName = "0.03"
+        versionCode = 4
+        versionName = "0.04"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GARMIN_BASE_URL", "\"${fakeGarminUrl ?: "https://personal.connectapi.garmin.com"}\"")
         manifestPlaceholders["cleartext"] = fakeGarminUrl != null
