@@ -26,7 +26,8 @@ if [ ! -x "$SDKMANAGER" ]; then
     rm -rf "$tmp"
 fi
 yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-"$SDKMANAGER" "platforms;android-37.0" "build-tools;37.0.0" "platform-tools" >/dev/null
+# AGP also wants build-tools 36 (its default); without it every first build downloads it.
+"$SDKMANAGER" "platforms;android-37.0" "build-tools;37.0.0" "build-tools;36.0.0" "platform-tools" >/dev/null
 
 echo "sdk.dir=$SDK" > "$REPO/local.properties"
 

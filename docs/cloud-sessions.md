@@ -10,18 +10,16 @@ server (2026-10-26).
 tools/cloud_setup.sh            # add --warm to also resolve dependencies and compile once
 ```
 
-It's idempotent: about 2 minutes on a fresh container, a few seconds after that. The owner can make every session
-start ready by putting it in the cloud environment's **Setup script** (environment menu in the session's title bar →
-Edit). The script starts one directory above the repo:
+It's idempotent: about 2 minutes on a fresh container, a few seconds after that. If a session starts without the SDK
+(no `~/android-sdk`), run it first.
 
-```bash
-#!/bin/bash
-set -euo pipefail
-cd baseline
-tools/cloud_setup.sh --warm
-```
+The owner can make every session start ready instead: the cloud environment's **Setup script** (environment menu in the
+session's title bar → Edit) holds the whole of `tools/cloud_env_setup.sh`, pasted in. It has to be self-contained,
+because it runs before the repo is cloned. So it sets `ANDROID_HOME` in `~/.bashrc` and `~/.profile` rather than writing
+`local.properties`; Gradle falls back to that. It does everything below except `--warm`. When you change one of the
+two scripts, change the other, and tell the owner to re-paste.
 
-If you find a session without it (no `~/android-sdk`), run it yourself first. It:
+The scripts:
 
 - Installs the Android SDK into `~/android-sdk` (platform 37.0, build-tools 37.0.0, platform-tools) and writes `local.properties`.
   The container has no SDK. The bootstrap `cmdline-tools` zip is too old to see `platforms;android-37.0`, so the script uses it
