@@ -13,6 +13,16 @@
     public <init>(android.content.Context, androidx.work.WorkerParameters);
 }
 
+# The same for the in-app updater's workers: a daily check queued by one build must resolve in the next.
+-keepnames class dev.baseline.update.UpdateCheckWorker
+-keepnames class dev.baseline.update.UpdateDownloadWorker
+-keepclassmembers class dev.baseline.update.UpdateCheckWorker {
+    public <init>(android.content.Context, androidx.work.WorkerParameters);
+}
+-keepclassmembers class dev.baseline.update.UpdateDownloadWorker {
+    public <init>(android.content.Context, androidx.work.WorkerParameters);
+}
+
 # Nothing else is needed:
 # - Room 3 (KSP): AppDatabase_Impl is passed as a factory, not looked up by name; room3-runtime keeps RoomDatabase subclasses.
 # - Garmin FIT SDK: plain Java with no reflection on the paths FitReader uses (MesgBroadcaster dispatches with instanceof).

@@ -85,6 +85,7 @@ import dev.baseline.ui.components.CircleButton
 import dev.baseline.ui.components.Dial
 import dev.baseline.ui.components.KeyBanner
 import dev.baseline.ui.components.StatRow
+import dev.baseline.ui.components.UpdateBanner
 import dev.baseline.ui.components.zoneColor
 import dev.baseline.ui.format.Formatters
 import dev.baseline.ui.theme.BarlowCondensed
@@ -99,6 +100,9 @@ import dev.baseline.ui.theme.Surface2
 import dev.baseline.ui.theme.TextBody
 import dev.baseline.ui.theme.TextMuted
 import dev.baseline.ui.theme.TextPrimary
+import dev.baseline.update.UpdateState
+import dev.baseline.update.UpdateUi
+import dev.baseline.update.Updater
 import kotlinx.coroutines.flow.StateFlow
 import java.time.Instant
 import java.time.LocalDate
@@ -110,7 +114,14 @@ import kotlin.math.roundToInt
 
 /** Today: the permission prompt, pull-to-refresh and the sync line around the stateless [TodayContent]. */
 @Composable
-fun TodayScreen(vm: TodayViewModel, onOpenCalendar: () -> Unit, onOpenSleep: (LocalDate) -> Unit, onOpenActivity: (Long) -> Unit, zone: StateFlow<ZoneId>) {
+fun TodayScreen(
+    vm: TodayViewModel,
+    onOpenCalendar: () -> Unit,
+    onOpenSleep: (LocalDate) -> Unit,
+    onOpenActivity: (Long) -> Unit,
+    zone: StateFlow<ZoneId>,
+    updater: Updater? = null,
+) {
     val context = LocalContext.current
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     LaunchedEffect(Unit) {
@@ -127,10 +138,12 @@ fun TodayScreen(vm: TodayViewModel, onOpenCalendar: () -> Unit, onOpenSleep: (Lo
     val refreshing by vm.refreshing.collectAsStateWithLifecycle()
     val keyStatus by vm.keyStatus.collectAsStateWithLifecycle()
     val zoneNow by zone.collectAsStateWithLifecycle()
+    val update = updater?.ui?.collectAsStateWithLifecycle()?.value
     PullToRefreshBox(refreshing, vm::refresh, Modifier.fillMaxSize()) {
         TodayContent(
             state, sync, vm::prevDay, vm::nextDay, onOpenCalendar, { onOpenSleep(state.date) }, onOpenActivity, vm::toggleBodyBattery,
             keyStatus, vm::toggleEdit, vm::moveRow, vm::toggleHidden, zoneNow,
+            update, { updater?.primary() }, { tag -> updater?.dismiss(tag) },
         )
     }
 }
@@ -150,6 +163,9 @@ fun TodayContent(
     onMoveRow: (from: Int, to: Int) -> Unit = { _, _ -> },
     onToggleHidden: (String) -> Unit = {},
     zone: ZoneId = ZoneId.systemDefault(),
+    update: UpdateUi? = null,
+    onUpdate: () -> Unit = {},
+    onDismissUpdate: (String) -> Unit = {},
 ) {
     val scroll = rememberScrollState()
     var viewport by remember { mutableStateOf(Rect.Zero) }
@@ -160,6 +176,9 @@ fun TodayContent(
     ) {
         Header(state, zone, onPrevDay, onNextDay, onOpenCalendar)
         KeyBanner(keyStatus, Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+        (update?.state as? UpdateState.Offer)?.takeIf { update.showBanner }?.let { offer ->
+            UpdateBanner(offer, onUpdate, { onDismissUpdate(offer.release.tag) }, Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+        }
         if (state.unreadable) {
             Text(
                 NOTE_UNREADABLE,

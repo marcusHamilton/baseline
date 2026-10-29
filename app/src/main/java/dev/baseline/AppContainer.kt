@@ -27,6 +27,11 @@ import dev.baseline.sync.RawIngest
 import dev.baseline.sync.SyncEngine
 import dev.baseline.sync.SyncScheduler
 import dev.baseline.sync.SyncWorkerDeps
+import dev.baseline.update.AndroidUpdatePlatform
+import dev.baseline.update.ReleaseSource
+import dev.baseline.update.UpdatePrefs
+import dev.baseline.update.Updater
+import dev.baseline.update.updatesEnabled
 import dev.baseline.widget.WidgetUpdater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +48,9 @@ import okhttp3.OkHttpClient
 import java.time.Clock
 import java.time.LocalDate
 import java.util.concurrent.TimeUnit
+
+/** Where the in-app updater looks unless the build was made with -PupdatesUrl (tools/fake_garmin.py --release-apk). */
+const val DEFAULT_UPDATES_URL = "https://api.github.com/repos/marcusHamilton/baseline/releases/latest"
 
 private val Context.baselineStore: DataStore<Preferences> by preferencesDataStore(name = "baseline")
 
@@ -108,6 +116,32 @@ open class AppContainer(context: Context, val clock: Clock = SystemZoneClock) {
 
     /** For tests that build containers; the app itself never closes it. */
     fun close() = appScope.cancel()
+
+    // GitHub, not Garmin: no Authenticator and no logging interceptor, so no Garmin credential can reach it (spec: in-app updates §4).
+    internal val updateHttp by lazy {
+        OkHttpClient
+            .Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .build()
+    }
+    val updatePrefs by lazy { UpdatePrefs(dataStore) }
+
+    // open: tests swap in an updater with a fake platform.
+    open val updater by lazy {
+        val userAgent = "Baseline/${BuildConfig.VERSION_NAME}"
+        Updater(
+            updatePrefs,
+            ReleaseSource(updateHttp, BuildConfig.UPDATES_URL, userAgent),
+            updateHttp,
+            AndroidUpdatePlatform(appContext) { WorkManager.getInstance(appContext) },
+            clock,
+            BuildConfig.VERSION_NAME,
+            enabled = updatesEnabled(BuildConfig.UPDATES_URL, BuildConfig.DEBUG, BuildConfig.VERSION_NAME),
+            appScope,
+            userAgent,
+        )
+    }
 
     val historyRecalculator by lazy { HistoryRecalculator(appScope, userPrefs) { scorePipeline.recalibrateAndRescore(!db.taskDao().calibrationPending()) } }
 

@@ -1,7 +1,7 @@
 # Baseline: in-app updates from GitHub releases (design spec)
 
 Date: 2026-10-29
-Status: draft for review
+Status: implemented (code in `app/src/main/java/dev/baseline/update/`); the on-device update test in §8 is still owed
 Changes: main spec §9 (Settings and Today) and §12 (release build, and the hosts the app talks to: Baseline now also
 calls `api.github.com`). These edits land with the implementation.
 
@@ -38,7 +38,7 @@ Decisions made with the owner:
 | Android installs an update only when its signing certificate matches the installed one. | Even a compromised download path can't install anyone else's code. The app's own checks (§5) only give clearer errors and catch mistakes such as a `-fake` build or a lower `versionCode`. |
 | The installed app's installer of record is whatever sideloaded it (Files, a browser or adb). | The **first** in-app update always shows the system's "Update this app?" dialog. After that, Baseline is its own installer of record, and on API 31+ later updates can skip the dialog (§6). The platform keeps the right to ask anyway, so the dialog path is always handled. |
 | `SyncWorker` already runs as an expedited worker that promotes itself to a `dataSync` foreground service, and the manifest already declares that service type. | The APK download reuses that pattern instead of relying on expedited work alone (§5). |
-| `WidgetActionReceiver` already handles `MY_PACKAGE_REPLACED`. | The post-update hook exists, and the cleanup in §6 is added there or next to it. |
+| Android restarts the app after an update, and any broadcast (`MY_PACKAGE_REPLACED` included) creates the `Application` first. | The post-update cleanup in §6 runs from `BaselineApp.onCreate`; no receiver is needed for it. |
 | OkHttp, WorkManager, DataStore and kotlinx.serialization are already dependencies. | **No new dependencies.** |
 
 ## 3. User experience
@@ -48,20 +48,21 @@ Decisions made with the owner:
 | State | Row |
 |---|---|
 | Up to date | `Version 0.04 · Up to date` · "Checked 2 h ago" · `Check now` |
-| Update available | `Version 0.05 available` · release notes (first ~6 lines, then "More" opens the release page) · `Update (55 MB)` |
+| Update available | "Baseline 0.05 is available." · release notes (first 6 lines, then "Release notes ↗" opens the release page) · `Update (55 MB)` (decimal MB, as Android's storage screens count) |
 | Downloading | `Downloading 0.05… 42 %` with a progress bar and `Cancel` |
 | Waiting for permission | "Allow Baseline to install updates" with an `Allow` button that opens the system's *Install unknown apps* screen for Baseline |
 | Ready / installing | `Installing 0.05…` while the system installer has it |
 | Failed | A one-line reason ("Download didn't match the release checksum", "Not signed with the Baseline key", "No network") and `Retry` |
 | Check failed | Same as the current state, plus "Couldn't check for updates (rate-limited / offline)". The app works normally and never shows a red error for this. |
 
-It also gets a **"Check for updates automatically"** switch, on by default. Turning it off stops the daily check,
+It also gets a **"Check for updates daily"** switch, on by default. Turning it off stops the daily check,
 while `Check now` still works.
 
 **Today banner:** when an update is available and the owner hasn't dismissed *that version*, a quiet banner sits
 under the key banner (same slot and style as `KeyBanner`, with neutral colours rather than red): "Baseline 0.05 is
 available. Update · ✕". Update starts the same flow as Settings, and ✕ hides it until a newer tag appears. The
-touch targets are at least 48dp, and TalkBack reads "Update available, Baseline 0.05".
+touch targets are at least 48dp; TalkBack reads the banner's line (a polite live region, so progress is announced)
+and calls ✕ "Hide this update".
 
 **The tap:** `Update` → (the first time only) the *Install unknown apps* permission → the download (with progress) →
 verification → the system installer. The permission is checked **before** the download, so the owner isn't asked
@@ -104,24 +105,20 @@ Each run:
 5. `403`/`429`, network errors and parse errors are recorded as `checkError`, with no retry storm (the next
    periodic run tries again). WorkManager's backoff is used only for network loss.
 
-State lives in `prefs/UserPrefs` (DataStore), so no Room schema change is needed:
-
-- `updatesEnabled` (default on).
-- `updateEtag`.
-- `updateLastCheckedAt`.
-- `updateAvailable`: the serialized `Release` above, or null.
-- `updateDismissedTag`.
-- `updateCheckError`.
+State lives in `update/UpdatePrefs`, on the app's DataStore next to `UserPrefs`, so no Room schema change is
+needed: the daily-check switch (default on), the ETag, when it last checked and the last check error, the offered
+release (tag, notes, page, APK URL, size, SHA-256), its `Phase` (`AVAILABLE`, `NEEDS_PERMISSION`, `DOWNLOADING`,
+`READY`, `INSTALLING`, `FAILED`) with a failure message and the installer session id, and the dismissed tag.
 
 ## 5. Downloading and verifying
 
 `update/UpdateDownloadWorker`:
 
-- A one-off job, unique per tag, any network. The owner tapped Update, so a metered network is fine, and the button
+- A one-off job (unique work `update-download`, replaced by a new start), on any connected network. The owner tapped Update, so a metered network is fine, and the button
   shows the size.
 - It's enqueued expedited (`OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST`) so it starts at once, and then,
   like `SyncWorker`, it calls `setForeground` with a `FOREGROUND_SERVICE_TYPE_DATA_SYNC` "Downloading update"
-  progress notification on the existing sync channel. Expedited work alone has a short time and quota budget,
+  progress notification on its own low-importance "Updates" channel. Expedited work alone has a short time and quota budget,
   which a 55 MB download on a slow network can exceed. The foreground service starts while the owner is in the app,
   so background-start limits don't apply.
 - There must be room for about twice the APK, because the file is copied into the installer session. Without it,
@@ -141,7 +138,7 @@ Steps:
      installs a fake one, and fake test builds can still update each other;
    - signing certificates equal to the installed package's (`signingInfo.apkContentsSigners`). If the archive
      reports no signing info on an old OS, skip this check and let the system's own update check decide.
-4. Rename `.part` to `.apk` and mark the state `ReadyToInstall(tag, path)`.
+4. Rename `.part` to `.apk` (only a verified file ever has that name) and set the phase to `READY`.
 
 The SHA-256 check is the integrity check. The certificate check gives clear errors (and the system enforces it
 anyway). The `versionCode` check rules out side-grades, which Android would refuse with a less useful error.
@@ -167,15 +164,16 @@ anyway). The `versionCode` check rules out side-grades, which Android would refu
    the installer fills in its extras.
 4. The receiver handles:
    - `STATUS_PENDING_USER_ACTION` (the first update, or when the OS wants a dialog): the receiver doesn't start an
-     activity itself. It hands `EXTRA_INTENT` to `UpdateRepository`, and the visible `MainActivity` launches it.
+     activity itself. It hands `EXTRA_INTENT` to `Updater.userAction`, and the visible `MainActivity` launches it.
      Commit only runs while Baseline is in the foreground (`Update` was tapped there, or the flow resumed in
-     `onResume`), so background-start limits don't apply. If the activity has gone, keep `ReadyToInstall`, and the
-     banner says "Ready to install · Install".
+     `onResume`), so background-start limits don't apply. A download that finishes while Baseline is in the
+     background waits as `READY` ("Baseline 0.05 is ready to install" · Install) and installs when it comes back.
    - `STATUS_SUCCESS`: on a self-update this usually never arrives, because the process is killed.
    - Any `STATUS_FAILURE*`: map it to the Failed state with the installer's message.
-5. **After the update,** the new process's `MY_PACKAGE_REPLACED` handler (and a cold-start check in
-   `BaselineApp`, as a backstop) does the following: if `BuildConfig.VERSION_NAME` is at or past `updateAvailable`,
-   it clears `updateAvailable` and `updateDismissedTag` and deletes `updates/`.
+5. **After the update,** `Updater.start()` in the new process's `BaselineApp.onCreate`: if `BuildConfig.VERSION_NAME`
+   is at or past the offered tag, it deletes `updates/` and then clears the offer and the dismissed tag. If the
+   process died while `INSTALLING` (no answer will come), it abandons the session and shows "The install didn't
+   finish. Try again." A cancelled or failed install keeps the verified APK, so Retry doesn't download again.
 
 Required manifest additions:
 
@@ -190,12 +188,14 @@ New package `dev.baseline.update/`, wired in `AppContainer` like everything else
 
 | File | Role |
 |---|---|
-| `Release.kt` | `@Serializable` DTOs for the API response, `Release`/`ReleaseAsset`, and `isNewer(tag, installedName)`. |
-| `ReleaseSource.kt` | A thin GET with an ETag that returns `NotModified` / `Found(Release)` / `Error`. It takes an `OkHttpClient` and a URL, so tests use MockWebServer. |
-| `UpdateRepository.kt` | Puts DataStore state and WorkManager `WorkInfo` together into a `StateFlow<UpdateState>`, and exposes `checkNow()`, `download()`, `cancel()`, `install()` and `dismiss(tag)`. |
-| `UpdateCheckWorker.kt` / `UpdateDownloadWorker.kt` | The workers in §4 and §5. |
-| `ApkVerifier.kt` | Hash, size, package, versionCode, `-fake` and certificate checks. Pure functions over bytes and `PackageInfo`, so they can be tested. |
-| `SelfInstaller.kt` / `InstallResultReceiver.kt` | The steps in §6. |
+| `Release.kt` | `Release`, `parseRelease` (the `JsonElement` tree, like the Garmin parsers: no serialization plugin), `isNewer(tag, installed)` and `plainNotes`. |
+| `ReleaseSource.kt` | A thin GET with an ETag that returns `NotModified` / `Found(release, etag)` / `Failed(message)`. It takes an `OkHttpClient` and a URL, so tests use MockWebServer. |
+| `UpdatePrefs.kt` | The DataStore state in §4. |
+| `Updater.kt` | The state machine: puts `UpdatePrefs` and the download's `WorkInfo` together into `StateFlow<UpdateUi>`, and exposes `primary()` (Update / Allow / Cancel / Install / Retry), `checkNow()`, `dismiss(tag)`, `setAutoCheck()`, `check()` and `download()` for the workers, and `onInstallResult()` for the receiver. Android sits behind `UpdatePlatform`, so the flow is unit-tested with a fake. |
+| `AndroidUpdatePlatform.kt` | `UpdatePlatform` on a device: WorkManager, `PackageManager`, the `PackageInstaller` session and the *Install unknown apps* screen. |
+| `UpdateWorkers.kt` | `UpdateCheckWorker` and `UpdateDownloadWorker` (§4 and §5). |
+| `ApkVerifier.kt` | Size, hash, package, versionCode, `-fake` and certificate checks, as a pure function over `ApkFacts`. |
+| `InstallResultReceiver.kt` | The steps in §6. |
 
 UI:
 
@@ -204,8 +204,8 @@ UI:
 - `TodayScreen` places it under `KeyBanner`.
 
 R8: both worker classes need the same `-keepnames` and constructor rule as `SyncWorker` in `app/proguard-rules.pro`,
-because WorkManager stores their class names. The `@Serializable` DTOs are covered by the serialization plugin's
-rules, as the Garmin ones are.
+because WorkManager stores their class names. The receiver is kept by AAPT's manifest rules, and there are no
+`@Serializable` classes.
 
 ## 8. Build, release process and testing
 
@@ -214,8 +214,9 @@ rules, as the Garmin ones are.
 - A new `buildConfigField UPDATES_URL`, overridable with `-PupdatesUrl=…`, works like `-PgarminBaseUrl`.
 - A build made with either property has `-fake` in its `versionName` and allows cleartext, because the fake
   server is plain `http`. Today the `cleartext` placeholder and the suffix only follow `garminBaseUrl`.
-- A new `-PversionCodeOverride=N`, honoured only together with `-PupdatesUrl`, lets the update test build
-  successive versions without editing the real version.
+- A new `-PversionOverride=0.05`, honoured only together with `-PupdatesUrl`, sets `versionName` to `0.05` and
+  `versionCode` to 5 (the releases' own mapping), so the update test can build successive versions without editing
+  the real ones.
 - The verifier refuses a `-fake` APK when the installed build is real, so a fake build that slipped into a release
   could never reach the phone through the updater.
 
@@ -234,7 +235,7 @@ day.
 `GET /repos/marcusHamilton/baseline/releases/latest` and the APK download, with a real size and SHA-256. To test the
 whole flow on an emulator without GitHub:
 
-1. Build **three** release APKs, N, N+1 and N+2 (with `-PversionCodeOverride`). Build all of them with
+1. Build **three** release APKs, N, N+1 and N+2 (with `-PversionOverride`). Build all of them with
    `-PupdatesUrl=http://127.0.0.1:8080/repos/marcusHamilton/baseline/releases/latest`, so each one keeps checking
    the fake server, and sign all three with the same throwaway key.
 2. Install N from adb, then run `adb reverse tcp:8080 tcp:8080`.
@@ -249,10 +250,10 @@ whole flow on an emulator without GitHub:
 
 - Version comparison (`0.10` vs `0.09`, the `v` prefix, `-fake`, a malformed tag).
 - Parsing a real `releases/latest` response saved as a fixture (zero, one or two APK assets).
-- `ReleaseSource` against MockWebServer: 200, 304 with the ETag sent back, 403 rate-limited, a timeout.
+- `ReleaseSource` against MockWebServer: 200, 304 with the ETag sent back, 403 rate-limited, no network.
 - `ApkVerifier` cases: wrong hash, wrong size, wrong package, a lower or equal versionCode, `-fake`, a different
   signer.
-- `UpdateRepository` state transitions.
+- `Updater` state transitions against a fake `UpdatePlatform` and MockWebServer (`UpdaterTest`).
 - The Settings card and the Today banner (Compose tests: states, 48dp targets, dismiss per tag).
 - The post-update cleanup.
 

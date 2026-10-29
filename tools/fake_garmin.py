@@ -14,9 +14,15 @@ The fixture files are never touched: dates are shifted in memory as each respons
   - Per-day endpoints (sleep, heart rate, HRV, SpO2) return the one-day fixture re-dated to the requested date.
   - Activities move with the history, and the trailing days are filled from the week before too. FIT downloads are zipped from fixtures/fit/ by activity type, with the
     fixtures' own timestamps (other types get a 404, which the app records as a failed task). Stdlib only.
+
+With --release-apk it also fakes GitHub's latest release for the in-app updater (no auth, like the real API):
+GET /repos/marcusHamilton/baseline/releases/latest and the APK download it points to, with the real size and SHA-256.
+Build the app with -PupdatesUrl=http://127.0.0.1:8080/repos/marcusHamilton/baseline/releases/latest (CLAUDE.md has the
+whole update test).
 """
 import argparse
 import base64
+import hashlib
 import io
 import json
 import re
@@ -152,7 +158,16 @@ def fake_jwt() -> str:
     return f"{b64url({'alg': 'none', 'typ': 'JWT'})}.{b64url({'exp': int(time.time()) + JWT_LIFETIME_S})}.ZmFrZQ"
 
 
-def make_handler(key: str, data: Dataset):
+RELEASE_PATH = "/repos/marcusHamilton/baseline/releases/latest"
+
+
+def fake_release(apk: Path, tag: str) -> dict:
+    """The fields of GitHub's release JSON the app reads; the download URL is filled in per request (it needs the Host)."""
+    body = apk.read_bytes()
+    return {"tag": tag, "name": f"Baseline-{tag.removeprefix('v')}.apk", "bytes": body, "sha256": hashlib.sha256(body).hexdigest()}
+
+
+def make_handler(key: str, data: Dataset, release: dict | None = None):
     activities = data.activities
     by_id = {a["activityId"]: a for a in activities}
     tokens: set[str] = set()
@@ -177,6 +192,8 @@ def make_handler(key: str, data: Dataset):
         def do_GET(self):
             url = urlparse(self.path)
             path, query = url.path, {k: v[0] for k, v in parse_qs(url.query).items()}
+            if path == RELEASE_PATH or path.startswith("/releases/download/"):
+                return self.release(path)
             auth = self.headers.get("Authorization") or ""
             if not auth.startswith("Bearer ") or auth.removeprefix("Bearer ") not in tokens:
                 return self.reply(401)
@@ -217,6 +234,35 @@ def make_handler(key: str, data: Dataset):
                     return self.reply(200, json.dumps(data.day(fixture, day)).encode())
             self.reply(404)
 
+        def release(self, path: str):
+            """GitHub's side of the in-app updater: public, no token, ETag'd like the real API."""
+            if release is None:
+                return self.reply(404)
+            if path != RELEASE_PATH:
+                return self.reply(200, release["bytes"], "application/vnd.android.package-archive") \
+                    if path == f"/releases/download/{release['tag']}/{release['name']}" else self.reply(404)
+            etag = f'"{release["sha256"][:16]}"'
+            if self.headers.get("If-None-Match") == etag:
+                self.send_response(304)
+                self.send_header("ETag", etag)
+                self.end_headers()
+                return
+            host = self.headers.get("Host") or "127.0.0.1"
+            doc = {
+                "tag_name": release["tag"], "name": f"Baseline {release['tag'].removeprefix('v')} (fake)", "draft": False,
+                "prerelease": False, "html_url": f"http://{host}/releases/tag/{release['tag']}",
+                "body": "## Fake release\n- Served by tools/fake_garmin.py --release-apk",
+                "assets": [{"name": release["name"], "size": len(release["bytes"]), "digest": f"sha256:{release['sha256']}",
+                            "browser_download_url": f"http://{host}/releases/download/{release['tag']}/{release['name']}"}],
+            }
+            body = json.dumps(doc).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("ETag", etag)
+            self.end_headers()
+            self.wfile.write(body)
+
         def log_message(self, fmt, *args):
             sys.stderr.write(f"{self.command} {self.path.split('?')[0]} -> {args[1] if len(args) > 1 else ''}\n")
 
@@ -229,9 +275,14 @@ def main():
     p.add_argument("--key", default="fake-garmin-key", help="the only API key the fake mint accepts")
     p.add_argument("--today", type=date.fromisoformat, default=date.today(),
                    help="YYYY-MM-DD the newest data lands on; default is the host's date. Set it to the emulator's date if its clock is pinned")
+    p.add_argument("--release-apk", type=Path, help="also fake GitHub's latest release, offering this APK (in-app update testing)")
+    p.add_argument("--release-tag", default="v9.99", help="the tag of that release, e.g. v0.05; it must be newer than the installed build")
     args = p.parse_args()
     data = Dataset(args.today)
-    server = ThreadingHTTPServer(("0.0.0.0", args.port), make_handler(args.key, data))
+    release = fake_release(args.release_apk, args.release_tag) if args.release_apk else None
+    server = ThreadingHTTPServer(("0.0.0.0", args.port), make_handler(args.key, data, release))
+    if release:
+        print(f"fake release {release['tag']}: {release['name']} ({len(release['bytes'])} bytes, sha256 {release['sha256'][:12]}…)", flush=True)
     print(f"fake Garmin API on :{args.port} ({len(data.activities)} activities); today: {args.today} "
           f"(fixtures shifted {data.delta} days); key: {args.key}", flush=True)
     server.serve_forever()

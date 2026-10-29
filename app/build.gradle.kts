@@ -25,6 +25,13 @@ val keystoreProps =
 // it allows cleartext traffic and its versionName ends in "-fake".
 val fakeGarminUrl = providers.gradleProperty("garminBaseUrl").orNull
 
+// -PupdatesUrl=http://127.0.0.1:8080/repos/marcusHamilton/baseline/releases/latest points the in-app updater at
+// tools/fake_garmin.py --release-apk; -PversionOverride=0.05 (only with it) builds the successive test versions the
+// update test needs. Same rule: never ship one.
+val fakeUpdatesUrl = providers.gradleProperty("updatesUrl").orNull
+val versionOverride = providers.gradleProperty("versionOverride").orNull?.takeIf { fakeUpdatesUrl != null }
+val testBuild = fakeGarminUrl != null || fakeUpdatesUrl != null
+
 android {
     namespace = "dev.baseline"
     compileSdk = 37
@@ -36,9 +43,15 @@ android {
         versionCode = 4
         versionName = "0.04"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        if (versionOverride != null) {
+            // "0.05" -> versionCode 5, the same mapping the real releases use.
+            versionName = versionOverride
+            versionCode = versionOverride.split('.').let { (major, minor) -> major.toInt() * 100 + minor.toInt() }
+        }
         buildConfigField("String", "GARMIN_BASE_URL", "\"${fakeGarminUrl ?: "https://personal.connectapi.garmin.com"}\"")
-        manifestPlaceholders["cleartext"] = fakeGarminUrl != null
-        if (fakeGarminUrl != null) versionNameSuffix = "-fake"
+        buildConfigField("String", "UPDATES_URL", "\"${fakeUpdatesUrl ?: "https://api.github.com/repos/marcusHamilton/baseline/releases/latest"}\"")
+        manifestPlaceholders["cleartext"] = testBuild
+        if (testBuild) versionNameSuffix = "-fake"
     }
 
     signingConfigs {

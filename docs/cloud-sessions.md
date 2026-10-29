@@ -49,6 +49,13 @@ You can't run the minified APK here, but you can check what R8 did:
 - **Don't run the unit tests while something else is using the CPU** (a build, an emulator). Some tests wait on
   real-time timeouts (for example `TrendsViewModelTest.rangeEndFollowsTheTodayFlow`, 10 s) and flake under load.
   If a test fails, re-run it on an idle machine before you call it a regression.
+- **Robolectric downloads some Android images itself**, straight from Maven Central and not through Gradle's mirror,
+  so they fail with 429 ("Failed to fetch maven artifact org.robolectric:android-all-instrumented:…"; `WidgetLifecycleTest`
+  needs API 30's). Fetch the named jar and pom from `https://maven-central.storage-download.googleapis.com/maven2/` into
+  the same path under `~/.m2/repository/` and re-run.
+- **Lint here may report `AndroidGradlePluginVersion`** ("A newer version of com.android.application … is available")
+  when CI doesn't, because the container sees newer AGP releases. That's not a regression from your change; leave the
+  AGP bump to its own PR.
 - **`pkill -f <pattern>` kills your own shell** when the pattern is also in the command line you're running.
   Kill by PID instead.
 - Long Gradle runs can go over the 10-minute tool timeout. Run them in the background, or use `-q` and filter the output.

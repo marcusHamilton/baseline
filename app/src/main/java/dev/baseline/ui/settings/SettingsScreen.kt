@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -25,6 +26,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -41,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -57,6 +60,9 @@ import dev.baseline.garmin.KeyStatus
 import dev.baseline.prefs.BanisterSet
 import dev.baseline.prefs.SyncInterval
 import dev.baseline.ui.components.KeyBanner
+import dev.baseline.ui.components.UpdateProgress
+import dev.baseline.ui.components.updateButton
+import dev.baseline.ui.components.updateHeadline
 import dev.baseline.ui.format.Formatters
 import dev.baseline.ui.theme.BarlowCondensed
 import dev.baseline.ui.theme.Card
@@ -68,6 +74,9 @@ import dev.baseline.ui.theme.RecoveryRed
 import dev.baseline.ui.theme.Surface2
 import dev.baseline.ui.theme.TextBody
 import dev.baseline.ui.theme.TextMuted
+import dev.baseline.update.UpdateState
+import dev.baseline.update.UpdateUi
+import dev.baseline.update.Updater
 import kotlinx.coroutines.flow.StateFlow
 import java.time.Clock
 import java.time.LocalDate
@@ -133,12 +142,14 @@ private fun banisterLabel(b: BanisterSet) = when (b) {
 }
 
 @Composable
-fun SettingsScreen(vm: SettingsViewModel, zone: StateFlow<ZoneId>, clock: Clock = SystemZoneClock) {
+fun SettingsScreen(vm: SettingsViewModel, zone: StateFlow<ZoneId>, updater: Updater, clock: Clock = SystemZoneClock) {
     val state by vm.state.collectAsStateWithLifecycle()
     val entry by vm.entry.collectAsStateWithLifecycle()
     val zoneNow by zone.collectAsStateWithLifecycle()
+    val update by updater.ui.collectAsStateWithLifecycle()
     SettingsContent(
         state, entry, clock, zoneNow, vm::replaceKey, vm::clearEntry, vm::setInterval, vm::syncNow, vm::setBanister, vm::recalculateHistory, vm::retryFailed,
+        update, updater::primary, updater::checkNow, updater::setAutoCheck,
     )
 }
 
@@ -155,6 +166,10 @@ fun SettingsContent(
     onBanister: (BanisterSet) -> Unit,
     onRecalculate: () -> Unit,
     onRetryFailed: () -> Unit = {},
+    update: UpdateUi? = null,
+    onUpdatePrimary: () -> Unit = {},
+    onCheckUpdates: () -> Unit = {},
+    onAutoCheck: (Boolean) -> Unit = {},
 ) {
     Column(
         Modifier.fillMaxSize().testTag("screen-settings").verticalScroll(rememberScrollState()).padding(bottom = 24.dp),
@@ -172,6 +187,7 @@ fun SettingsContent(
         KeyCard(state.keyStatus, entry, onReplaceKey, onEditKey)
         SyncCard(state, clock, zone, onInterval, onSyncNow, onRetryFailed)
         ScoresCard(state, onBanister, onRecalculate)
+        update?.let { AppCard(it, clock, onUpdatePrimary, onCheckUpdates, onAutoCheck) }
         Text(
             "Data from Garmin Connect Personal API. Not affiliated with Garmin.",
             Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
@@ -387,5 +403,72 @@ private fun ScoresCard(state: SettingsUiState, onBanister: (BanisterSet) -> Unit
             }
         }
         InfoRow("Units", if (state.imperial) "Imperial (from your Garmin profile)" else "Metric")
+    }
+}
+
+/** How many lines of release notes the card shows before "Release notes ↗". */
+private const val NOTES_LINES = 6
+
+/** Version, the update on offer (spec: in-app updates §3), "Check now" and the daily-check switch. */
+@Composable
+private fun AppCard(ui: UpdateUi, clock: Clock, onPrimary: () -> Unit, onCheckNow: () -> Unit, onAutoCheck: (Boolean) -> Unit) {
+    val uri = LocalUriHandler.current
+    SettingsCard("APP") {
+        InfoRow("Version", ui.installed)
+        if (!ui.enabled) {
+            Text("Debug and test builds don't check for updates.", fontSize = 12.sp, color = TextMuted)
+            return@SettingsCard
+        }
+        when (val state = ui.state) {
+            UpdateState.UpToDate -> InfoRow(
+                "Updates",
+                ui.checkedAt?.let { "Up to date · checked ${Formatters.ago(it, clock.instant())}" } ?: "Not checked yet",
+                Modifier.testTag("update-status"),
+            )
+
+            is UpdateState.Offer -> {
+                Text(
+                    updateHeadline(state),
+                    Modifier.testTag("update-status").semantics { liveRegion = LiveRegionMode.Polite },
+                    fontSize = 14.sp,
+                    color = if (state is UpdateState.Failed) RecoveryAmber else TextBody,
+                )
+                if (state is UpdateState.Downloading) UpdateProgress(state)
+                if (state.release.notes.isNotBlank()) {
+                    Text(state.release.notes.lines().take(NOTES_LINES).joinToString("\n"), fontSize = 12.sp, lineHeight = 18.sp, color = TextMuted)
+                }
+                TextButton(onClick = { uri.openUri(state.release.pageUrl) }, Modifier.heightIn(min = 48.dp)) {
+                    Text("Release notes ↗", color = Color(0xFF93C5FD))
+                }
+                updateButton(state)?.let { label ->
+                    Button(
+                        onClick = onPrimary,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF2F4F7), contentColor = Color(0xFF0E1013)),
+                    ) { Text(label, fontWeight = FontWeight.SemiBold) }
+                }
+            }
+        }
+        ui.checkError?.let { Text("Couldn't check for updates: $it", fontSize = 12.sp, color = TextMuted) }
+        OutlinedButton(
+            onClick = onCheckNow,
+            enabled = !ui.checking,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Outline),
+        ) { Text(if (ui.checking) "Checking…" else "Check now", fontWeight = FontWeight.SemiBold) }
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(ui.autoCheck, role = Role.Switch, onValueChange = onAutoCheck),
+            Arrangement.SpaceBetween,
+            Alignment.CenterVertically,
+        ) {
+            Text("Check for updates daily", Modifier.weight(1f), fontSize = 14.sp, color = TextBody)
+            Switch(checked = ui.autoCheck, onCheckedChange = null)
+        }
+        Text(
+            "Asks GitHub for the latest Baseline release. GitHub sees your IP address, as any website would; none of your data is sent.",
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+            color = TextMuted,
+        )
     }
 }

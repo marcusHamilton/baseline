@@ -39,6 +39,12 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
   2. Run `./gradlew :app:assembleRelease`.
   3. Check the signature: `apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk`.
   4. Tag `vX.Y` and attach the APK to a GitHub release (`gh release create`).
+- The phone's in-app updater offers every new non-draft, non-pre-release release within a day, so releases follow its rules:
+  - `versionCode` must go up; the updater refuses an APK whose code isn't higher. Keep `vX.YY` tags (`0.10` > `0.09`; `0.4` and `0.04` compare equal).
+  - Exactly one `.apk` asset (`Baseline-X.YY.apk`). The first lines of the release notes are what Settings shows.
+  - Never attach a `-fake` build. The updater refuses one anyway, but don't rely on that.
+  - Publish as a **pre-release** to stage a build without offering it to the phone.
+  - Before tagging, also update the previous release to the new one through the app on an emulator (the update test below).
 - **Never commit the keystore or `keystore.properties`, and never print or log their passwords.** Every update must be signed with this same key, or it won't install over the previous release. If the key is lost, users have to uninstall, which wipes their data.
 - Debug builds use the machine's debug key, so they won't install over a release build (or the other way round) without an uninstall.
 
@@ -58,6 +64,9 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 - `data/`: `Repository` plus Room `data/db/AppDatabase`, at schema version 2. Schemas are exported to `app/schemas/`; any schema change needs a migration and a new exported schema.
 - `scores/ScorePipeline` holds recovery, sleep performance and strain (0–21). The strain scale is calibrated so your 90th-percentile day is about 17 (spec §7). `records/RecordsRefresher` maintains all-time records.
 - `fit/` parses FIT files with the Garmin FIT SDK and builds activity streams.
+- `update/`: one-tap in-app updates from GitHub releases (`docs/superpowers/specs/2026-10-29-in-app-updates-design.md`).
+  - `Updater` is the state machine behind Settings' App card and Today's banner: `UpdateCheckWorker` offers a newer release once a day, `UpdateDownloadWorker` downloads it as a foreground job, `verifyApk` checks size, SHA-256, versionCode, the `-fake` suffix and the signing key, and `AndroidUpdatePlatform` hands it to `PackageInstaller`. `InstallResultReceiver` takes the answer.
+  - State is in `UpdatePrefs` (DataStore). After an update, `Updater.start()` in `BaselineApp.onCreate` clears the offer.
 - `prefs/UserPrefs` is DataStore: baseline row order and hidden rows, sync interval, coefficient set, cached JWT and last sync.
 - `ui/<screen>/`: one Compose screen and one ViewModel per feature. `ui/components` holds shared pieces (KeyBanner, OfflineBar, StatRow), `ui/theme` holds the colours (`Bg` is `#0E1013` and `ChipActive` is `#2A2F37`), and `ui/format/Formatters` does display formatting.
 - `widget/`: five native `RemoteViews` home-screen widgets (`ReadinessWidgetProvider`, `VitalsWidgetProvider`, `BodyBatteryWidgetProvider`, `SleepWidgetProvider`, `WeeklyActivityWidgetProvider`), `WidgetSnapshot` state builder, `WidgetGraphics` `Canvas` bitmap renderers, `WidgetUpdater` (serialised with a `Mutex` and short-circuited when zero widgets are placed), `WidgetActionReceiver` (`ACTION_WIDGET_SYNC` plus clock/timezone/package-replace refresh), static `@layout/widget_preview_*` picker previews, and `WidgetRoutes` deep-linking.
@@ -69,6 +78,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 - **One Garmin request at a time.** Everything goes through `GarminClient`; don't create a second client path.
 - **A key under test never touches the vault.** Only a passing test saves it. Don't reintroduce save-then-rollback: a running sync can mark the good key invalid.
 - **Sync is not paused on an Invalid or Expired key.** It keeps trying, so a one-off 401 heals on the next 200. The scheduler only stops when the key is Missing. The red banner text in `ui/components/KeyBanner.kt` says "…so new data can't sync. Paste a new key in Settings."
+- **GitHub never sees a Garmin credential.** The updater uses its own `updateHttp` client with no authenticator or interceptor (`UpdatesUrlTest` guards this); don't route update traffic through `GarminClient` or `httpBuilder`.
 - **Room schema changes** need a version bump, a migration and an exported schema.
 - **Touch targets are at least 48dp** (spec §9, accessibility). TalkBack descriptions exist for dials, charts, calendar cells and the drag handles ("Move up" / "Move down").
 - **Today edit mode** uses the custom drag-reorder in `ui/today/RowReorder.kt` and `TodayScreen.kt`, with edge auto-scroll, not a library. Drop indices are in the all-rows space, hidden rows included, which is what `TodayViewModel.moveRow` expects.
@@ -134,8 +144,25 @@ adb reverse tcp:8080 tcp:8080                                                 # 
 - Activity types without a FIT fixture get a 404 and show up as failed tasks; that's expected.
 - The server logs each request (method, path and status) to stderr, which shows what a sync asked for.
 
+**In-app update test** (spec `2026-10-29-in-app-updates-design.md` §8). `--release-apk` makes the same server fake GitHub's latest release. Build three releases with one throwaway key, each pointed at the server:
+
+```bash
+U=http://127.0.0.1:8080/repos/marcusHamilton/baseline/releases/latest
+for v in 0.05 0.06 0.07; do                                  # versionName v (+ -fake), versionCode 5, 6, 7
+  ./gradlew -q :app:assembleRelease -PupdatesUrl=$U -PgarminBaseUrl=http://127.0.0.1:8080 -PversionOverride=$v
+  apksigner sign --ks /tmp/test.jks --ks-pass pass:testtest --out /tmp/b-$v.apk app/build/outputs/apk/release/app-release-unsigned.apk
+done
+adb install /tmp/b-0.05.apk && adb reverse tcp:8080 tcp:8080
+uv run --python 3.12 --no-project python -I tools/fake_garmin.py --release-apk /tmp/b-0.06.apk --release-tag v0.06
+```
+
+- Settings → App → Check now offers 0.06. The first Update asks for *Install unknown apps*, then shows Android's "Update this app?" dialog, because adb was the installer of record.
+- Restart the server with `b-0.07.apk` and `--release-tag v0.07`. That update should install without a dialog, because Baseline is now its own installer of record.
+- Also try an APK signed with another key, and a tag whose APK has a lower versionCode. Each must stop with its own message and leave the app as it was.
+- Use `Medium_Phone_API_35`, never the review AVD: these builds are signed with a throwaway key.
+
 ## Known follow-ups
 
 - A long re-score after a sync can exceed WorkManager's ~10-minute limit. The work reruns.
 - `stat-label`, `day-highlight` and `day-card` test tags in production composables are deliberate: they mark layout-only nodes with no semantics, and the tests need their bounds.
-- Not yet verified on a device: replacing the key with a valid key in Settings, and API 36.
+- Not yet verified on a device: replacing the key with a valid key in Settings, API 36, and the in-app update test above (the second update skipping Android's dialog is the part to watch).
