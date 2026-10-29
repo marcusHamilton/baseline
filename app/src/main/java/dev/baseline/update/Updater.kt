@@ -5,6 +5,7 @@ import android.content.pm.PackageInstaller
 import android.util.Log
 import dev.baseline.DEFAULT_UPDATES_URL
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -124,9 +125,16 @@ class Updater(
     private val clock: Clock,
     private val installedVersion: String,
     val enabled: Boolean,
-    private val scope: CoroutineScope,
+    scope: CoroutineScope,
     private val userAgent: String,
 ) {
+    /**
+     * The given scope plus a handler: a DataStore read error (a corrupt file) in a long-lived collector is logged,
+     * not an app crash. The container's appScope has no handler of its own.
+     */
+    private val scope =
+        CoroutineScope(scope.coroutineContext + CoroutineExceptionHandler { _, e -> Log.w(TAG, "updater: ${e.javaClass.simpleName}: ${e.message}") })
+
     /** Serialises every phase change: taps, the download's end and installer results must not interleave. */
     private val lock = Mutex()
     private val foreground = MutableStateFlow(false)

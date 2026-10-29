@@ -7,10 +7,11 @@ import dev.baseline.testutil.ScopeCleanup
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
@@ -138,11 +139,17 @@ class UpdaterTest {
 
     @After
     fun tearDown() = runBlocking {
-        updaterScopes.forEach { it.cancel() }
+        // Joined, not just cancelled: a collector still unwinding must not read the store deleted below.
+        stopUpdaters()
         scopes.close()
         server.shutdown()
         dir.deleteRecursively()
         Unit
+    }
+
+    private suspend fun stopUpdaters() {
+        updaterScopes.forEach { it.coroutineContext.job.cancelAndJoin() }
+        updaterScopes.clear()
     }
 
     private fun updater(installedVersion: String = "0.04", enabled: Boolean = true): Updater {
@@ -179,7 +186,7 @@ class UpdaterTest {
         u.check()
         val offered = u.awaitState { it.state is UpdateState.Available }
         assertEquals("v0.05", (offered.state as UpdateState.Available).release.tag)
-        assertEquals("• Faster", offered.state.let { (it as UpdateState.Available).release.notes })
+        assertEquals("• Faster", (offered.state as UpdateState.Available).release.notes)
         assertEquals(clock.instant(), offered.checkedAt)
         assertTrue(offered.showBanner)
 
@@ -368,11 +375,11 @@ class UpdaterTest {
         val before = updater()
         before.toReady()
         before.awaitState { it.state is UpdateState.Ready }
-        updaterScopes.forEach { it.cancel() }
+        stopUpdaters()
 
-        // The process after the update: its version is the offered one.
-        val after = updater(installedVersion = "0.05")
-        after.awaitState { it.state == UpdateState.UpToDate }
+        // The process after the update: its version is the offered one. (Not awaitState: the UI's initial value is UpToDate.)
+        updater(installedVersion = "0.05")
+        eventually { prefs.current().release == null }
         assertTrue(platform.updatesDir.listFiles().isNullOrEmpty())
     }
 
@@ -382,7 +389,7 @@ class UpdaterTest {
         before.onForeground(true)
         before.toReady()
         eventually { prefs.current().sessionId == 7 }
-        updaterScopes.forEach { it.cancel() }
+        stopUpdaters()
         platform.liveSessions.clear() // no answer can come now
 
         val after = updater()
@@ -396,7 +403,7 @@ class UpdaterTest {
         before.onForeground(true)
         before.toReady()
         eventually { prefs.current().sessionId == 7 }
-        updaterScopes.forEach { it.cancel() }
+        stopUpdaters()
 
         // The installer's broadcast starts a new process: start() runs first, then the answer arrives.
         val after = updater()
@@ -419,7 +426,7 @@ class UpdaterTest {
         before.onForeground(true)
         before.toReady()
         eventually { prefs.current().sessionId == 7 }
-        updaterScopes.forEach { it.cancel() }
+        stopUpdaters()
 
         // New process, no answer delivered, and the owner opens the app: nothing can finish that session.
         val after = updater()
@@ -484,7 +491,7 @@ class UpdaterTest {
         eventually { platform.scheduled == listOf(true) }
         u.setAutoCheck(false)
         eventually { platform.scheduled == listOf(true, false) }
-        updaterScopes.forEach { it.cancel() }
+        stopUpdaters()
 
         platform.scheduled.clear()
         val debug = updater(enabled = false)
