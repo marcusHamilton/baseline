@@ -60,8 +60,9 @@ class AndroidUpdatePlatform(private val context: Context, workManager: () -> Wor
         work.enqueueUniquePeriodicWork(CHECK_PERIODIC, ExistingPeriodicWorkPolicy.KEEP, request)
     }
 
+    /** No network constraint: offline, the check fails at once with "Couldn't reach GitHub" instead of waiting. */
     override fun checkNow() {
-        val request = OneTimeWorkRequestBuilder<UpdateCheckWorker>().setConstraints(connected()).build()
+        val request = OneTimeWorkRequestBuilder<UpdateCheckWorker>().build()
         work.enqueueUniqueWork(CHECK_NOW, ExistingWorkPolicy.KEEP, request)
     }
 
@@ -89,10 +90,11 @@ class AndroidUpdatePlatform(private val context: Context, workManager: () -> Wor
         )
     }
 
-    override fun freeBytes(): Long {
+    /** Unknown (an IOException resolving the volume) counts as enough: the download then fails on its own if it isn't. */
+    override fun freeBytes(): Long = runCatching {
         val storage = context.getSystemService(StorageManager::class.java)
-        return storage.getAllocatableBytes(storage.getUuidForPath(updatesDir.apply { mkdirs() }))
-    }
+        storage.getAllocatableBytes(storage.getUuidForPath(updatesDir.apply { mkdirs() }))
+    }.getOrDefault(Long.MAX_VALUE)
 
     override fun archiveFacts(apk: File): ApkFacts? {
         val pm = context.packageManager

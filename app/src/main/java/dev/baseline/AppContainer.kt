@@ -50,7 +50,7 @@ import java.time.LocalDate
 import java.util.concurrent.TimeUnit
 
 /** Where the in-app updater looks unless the build was made with -PupdatesUrl (tools/fake_garmin.py --release-apk). */
-const val DEFAULT_UPDATES_URL = "https://api.github.com/repos/marcusHamilton/baseline/releases/latest"
+const val DEFAULT_UPDATES_URL = BuildConfig.DEFAULT_UPDATES_URL
 
 private val Context.baselineStore: DataStore<Preferences> by preferencesDataStore(name = "baseline")
 

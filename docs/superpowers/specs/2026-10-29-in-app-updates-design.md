@@ -82,7 +82,8 @@ DataStore and the flow picks up again in `MainActivity.onResume`.
   the sync schedule.
 - Is cancelled when the switch is off.
 - Never runs in debug builds unless the build sets `-PupdatesUrl` (§8).
-- `Check now` enqueues a one-off run of the same worker. The UI never calls the network (main spec §3).
+- `Check now` enqueues a one-off run of the same worker with no network constraint, so offline it fails at once
+  with "Couldn't reach GitHub" rather than waiting. The UI never calls the network (main spec §3).
 
 Each run:
 
@@ -99,7 +100,8 @@ Each run:
    - With zero or several APKs, the release is ignored and the reason logged.
 4. Compare versions: strip the `v` from the tag and compare it with `BuildConfig.VERSION_NAME` numerically by dot
    segment, so `0.10 > 0.09` and a suffix such as `-fake` is ignored. A newer tag becomes `available`; an equal or
-   older one clears it. A tag that doesn't parse is ignored. The tag is only a hint: the APK's own `versionCode`
+   older one clears it. The same tag with a different APK (re-uploaded: another URL, size or SHA-256) is a new
+   offer: its download and any verified file are thrown away. A tag that doesn't parse is ignored. The tag is only a hint: the APK's own `versionCode`
    decides (§5). Segment comparison treats `0.4` and `0.04` as equal, so tags keep the current two-digit form.
    The release body is Markdown and is shown as plain text, with headings and list markers stripped.
 5. `403`/`429`, network errors and parse errors are recorded as `checkError`, with no retry storm (the next
@@ -114,7 +116,9 @@ release (tag, notes, page, APK URL, size, SHA-256), its `Phase` (`AVAILABLE`, `N
 
 `update/UpdateDownloadWorker`:
 
-- A one-off job (unique work `update-download`, replaced by a new start), on any connected network. The owner tapped Update, so a metered network is fine, and the button
+- A one-off job (unique work `update-download`, replaced by a new start), on any connected network. Each attempt
+  writes its own `<tag>-<work id>.part`, so a cancelled job still unwinding can't delete its replacement's file.
+  Progress is reported at most twice a second. The owner tapped Update, so a metered network is fine, and the button
   shows the size.
 - It's enqueued expedited (`OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST`) so it starts at once, and then,
   like `SyncWorker`, it calls `setForeground` with a `FOREGROUND_SERVICE_TYPE_DATA_SYNC` "Downloading update"
@@ -171,9 +175,14 @@ anyway). The `versionCode` check rules out side-grades, which Android would refu
    - `STATUS_SUCCESS`: on a self-update this usually never arrives, because the process is killed.
    - Any `STATUS_FAILURE*`: map it to the Failed state with the installer's message.
 5. **After the update,** `Updater.start()` in the new process's `BaselineApp.onCreate`: if `BuildConfig.VERSION_NAME`
-   is at or past the offered tag, it deletes `updates/` and then clears the offer and the dismissed tag. If the
-   process died while `INSTALLING` (no answer will come), it abandons the session and shows "The install didn't
-   finish. Try again." A cancelled or failed install keeps the verified APK, so Retry doesn't download again.
+   is at or past the offered tag, it deletes `updates/` and then clears the offer and the dismissed tag. A cancelled
+   or failed install keeps the verified APK, so Retry doesn't download again.
+6. **An install nobody will answer.** Back on Android's dialog doesn't always send a status, and the installer's
+   answer may itself be what starts a new process. So at start, `INSTALLING` becomes "The install didn't finish" only
+   when the session is gone; a live one is left for its answer. When Baseline comes back to the foreground still
+   `INSTALLING`, the session is abandoned ("Update cancelled.", with Retry) once no answer can come: its dialog was
+   already shown, the session is gone, or this process never committed it. It isn't while a dialog waits to be
+   shown, or while this process's own commit is unanswered.
 
 Required manifest additions:
 

@@ -61,6 +61,7 @@ import dev.baseline.prefs.BanisterSet
 import dev.baseline.prefs.SyncInterval
 import dev.baseline.ui.components.KeyBanner
 import dev.baseline.ui.components.UpdateProgress
+import dev.baseline.ui.components.updateAnnouncements
 import dev.baseline.ui.components.updateButton
 import dev.baseline.ui.components.updateHeadline
 import dev.baseline.ui.format.Formatters
@@ -429,7 +430,7 @@ private fun AppCard(ui: UpdateUi, clock: Clock, onPrimary: () -> Unit, onCheckNo
             is UpdateState.Offer -> {
                 Text(
                     updateHeadline(state),
-                    Modifier.testTag("update-status").semantics { liveRegion = LiveRegionMode.Polite },
+                    Modifier.testTag("update-status").updateAnnouncements(state),
                     fontSize = 14.sp,
                     color = if (state is UpdateState.Failed) RecoveryAmber else TextBody,
                 )

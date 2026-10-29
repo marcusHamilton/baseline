@@ -34,7 +34,7 @@ class UpdateDownloadWorker(ctx: Context, params: WorkerParameters, private val u
     override suspend fun doWork(): Result {
         val tag = inputData.getString(RELEASE_TAG) ?: return Result.failure()
         var foreground = goForeground(tag, 0, 0)
-        updater.download(tag) { done, total ->
+        updater.download(tag, id.toString()) { done, total ->
             setProgress(workDataOf(DONE to done, TOTAL to total))
             // One refusal (background start limits) ends the notification updates; the download carries on.
             if (foreground) foreground = goForeground(tag, done, total)
@@ -55,7 +55,7 @@ class UpdateDownloadWorker(ctx: Context, params: WorkerParameters, private val u
     }
 
     private fun foregroundInfo(tag: String, done: Long, total: Long): ForegroundInfo {
-        val percent = if (total > 0) (done * 100 / total).toInt() else 0
+        val percent = percentOf(done, total)
         val n =
             NotificationCompat
                 .Builder(applicationContext, CHANNEL)

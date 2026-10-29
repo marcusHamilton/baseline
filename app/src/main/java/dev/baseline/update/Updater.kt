@@ -132,6 +132,11 @@ class Updater(
     private val foreground = MutableStateFlow(false)
     private val _userAction = MutableStateFlow<Intent?>(null)
 
+    /** The session this process committed, and the one whose dialog it launched; both forgotten with the process. */
+    @Volatile private var committedSession: Int? = null
+
+    @Volatile private var launchedSession: Int? = null
+
     /** The system's "Update this app?" screen, waiting for a visible activity to launch it ([MainActivity]). */
     val userAction: StateFlow<Intent?> = _userAction.asStateFlow()
 
@@ -157,7 +162,10 @@ class Updater(
         }
     }
 
-    /** MainActivity's onResume/onPause. Resuming also picks up a flow that was waiting for the install permission. */
+    /**
+     * MainActivity's onResume/onPause. Resuming picks up a flow that was waiting for the install permission, and frees
+     * an install nobody will answer: Back on Android's dialog doesn't always send a status.
+     */
     fun onForeground(visible: Boolean) {
         foreground.value = visible
         if (!visible) return
@@ -165,10 +173,31 @@ class Updater(
             guarded("resume") {
                 lock.withLock {
                     val r = prefs.current()
-                    if (r.release != null && r.phase == Phase.NEEDS_PERMISSION && platform.canInstall()) startLocked(r.release)
+                    when {
+                        r.release == null -> {}
+
+                        r.phase == Phase.NEEDS_PERMISSION && platform.canInstall() -> startLocked(r.release)
+
+                        r.phase == Phase.INSTALLING && installAbandonedLocked(r) -> {
+                            r.sessionId?.let { if (platform.sessionExists(it)) platform.abandonSession(it) }
+                            prefs.setPhase(Phase.FAILED, "Update cancelled.")
+                        }
+                    }
                 }
             }
         }
+    }
+
+    /**
+     * Back in the app while INSTALLING: true once no answer can still come. Not while a dialog waits to be launched,
+     * nor while this process's commit hasn't been answered; yes once its dialog was shown (the owner is back without
+     * finishing it), or when the session is gone, or when this process never had the session's intent.
+     */
+    private fun installAbandonedLocked(r: UpdateRecord): Boolean {
+        val id = r.sessionId ?: return true
+        if (_userAction.value != null) return false
+        if (!platform.sessionExists(id)) return true
+        return launchedSession == id || committedSession != id
     }
 
     /** The one button: Update, Allow, Cancel, Install or Retry, depending on the state. */
@@ -206,6 +235,7 @@ class Updater(
     /** MainActivity launched [userAction]; it must not be launched twice. */
     fun userActionLaunched() {
         _userAction.value = null
+        launchedSession = committedSession
     }
 
     /** [UpdateCheckWorker]: one look at the latest release. */
@@ -220,8 +250,9 @@ class Updater(
 
                 is LatestRelease.Found -> {
                     val offered = prefs.current().release
-                    if (offered != null && offered.tag != result.release.tag) {
-                        // A newer release replaces one that was half-way through; its download is no longer wanted.
+                    if (offered != null && !offered.sameAsset(result.release)) {
+                        // A newer release, or the same tag with a re-uploaded APK, replaces the one in hand: its download
+                        // and any verified file are for other bytes.
                         platform.cancelDownload()
                         prune(keepTag = null)
                     }
@@ -233,15 +264,15 @@ class Updater(
     }
 
     /** [UpdateDownloadWorker]: fetches and verifies [tag]'s APK; leaves the phase READY or FAILED. */
-    suspend fun download(tag: String, progress: suspend (done: Long, total: Long) -> Unit) {
+    suspend fun download(tag: String, attempt: String, progress: suspend (done: Long, total: Long) -> Unit) {
         val release = prefs.current().release?.takeIf { it.tag == tag } ?: return
         val dir = platform.updatesDir.apply { mkdirs() }
-        val part = File(dir, "$tag.apk.part")
+        // One file per attempt: a cancelled job still unwinding must not delete the file its replacement is writing.
+        val part = File(dir, "$tag-$attempt.part")
         val apk = apkFile(tag)
         try {
-            if (platform.freeBytes() < release.apkSize * 2 + SPACE_MARGIN) {
-                return failDownload(tag, "Not enough free space: the update needs about ${(release.apkSize * 2 + 500_000) / 1_000_000} MB.")
-            }
+            val needed = release.apkSize * 2 + SPACE_MARGIN
+            if (platform.freeBytes() < needed) return failDownload(tag, "Not enough free space: the update needs about ${megabytes(needed)} MB.")
             val (size, sha) = fetch(release, part, progress)
             val problem = verifyApk(release, size, sha, platform.archiveFacts(part), platform.installedFacts())
             if (problem != null) {
@@ -298,11 +329,10 @@ class Updater(
                     if (release != null) prefs.clearRelease()
                 }
 
-                // The process died between commit and an answer; the session can't be resumed without its intent.
-                r.phase == Phase.INSTALLING -> {
-                    r.sessionId?.let { if (platform.sessionExists(it)) platform.abandonSession(it) }
+                // The process died after a commit whose session is gone: no answer will come. A live session is left
+                // alone, because the installer's answer may be what started this process; onForeground frees it later.
+                r.phase == Phase.INSTALLING && r.sessionId?.let(platform::sessionExists) != true ->
                     prefs.setPhase(Phase.FAILED, "The install didn't finish. Try again.")
-                }
 
                 r.phase == Phase.READY && !apkFile(release.tag).exists() -> prefs.setPhase(Phase.AVAILABLE)
             }
@@ -340,6 +370,7 @@ class Updater(
         prefs.setPhase(Phase.INSTALLING)
         try {
             val session = withContext(Dispatchers.IO) { platform.install(apk) }
+            committedSession = session
             prefs.setPhase(Phase.INSTALLING, sessionId = session)
         } catch (e: CancellationException) {
             throw e
@@ -363,8 +394,7 @@ class Updater(
             if (!r.isSuccessful) throw IOException("HTTP ${r.code}")
             val digest = MessageDigest.getInstance("SHA-256")
             var total = 0L
-            var reported = 0L
-            val step = (release.apkSize / 100).coerceAtLeast(1)
+            var reportedAt = 0L
             r.body.byteStream().use { input ->
                 part.outputStream().use { out ->
                     val buf = ByteArray(64 * 1024)
@@ -376,18 +406,24 @@ class Updater(
                         if (total > release.apkSize) throw IOException("larger than the release's ${release.apkSize} bytes")
                         out.write(buf, 0, n)
                         digest.update(buf, 0, n)
-                        if (total - reported >= step) {
-                            reported = total
+                        // At most a few times a second: each report is a WorkManager write and a notification update.
+                        val now = System.nanoTime()
+                        if (now - reportedAt >= PROGRESS_EVERY_NS) {
+                            reportedAt = now
                             progress(total, release.apkSize)
                         }
                     }
                 }
             }
+            progress(total, release.apkSize)
             total to digest.digest().joinToString("") { "%02x".format(it) }
         }
     }
 
     private fun apkFile(tag: String) = File(platform.updatesDir, "$tag.apk")
+
+    /** Same tag and the same bytes: a re-uploaded APK under an old tag is a different offer. */
+    private fun Release.sameAsset(other: Release) = tag == other.tag && apkUrl == other.apkUrl && apkSize == other.apkSize && sha256 == other.sha256
 
     /** Deletes downloads other than [keepTag]'s finished APK. */
     private fun prune(keepTag: String?) {
@@ -431,5 +467,6 @@ class Updater(
 
         /** Headroom on top of twice the APK (the download plus the installer's copy). */
         const val SPACE_MARGIN = 32L shl 20
+        const val PROGRESS_EVERY_NS = 500_000_000L
     }
 }

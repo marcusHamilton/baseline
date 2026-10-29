@@ -64,17 +64,17 @@ class UpdatePrefs(private val store: DataStore<Preferences>) {
         }
     }
 
-    /** Offers [release]. The same tag again keeps its progress; a different one starts over at AVAILABLE. */
+    /** Offers [release]. The same release again keeps its progress; another tag, or a re-uploaded APK, starts over at AVAILABLE. */
     suspend fun offer(release: Release) {
         store.edit { p ->
-            val sameTag = p[TAG] == release.tag
+            val sameRelease = p[TAG] == release.tag && p[APK_URL] == release.apkUrl && p[APK_SIZE] == release.apkSize && p[SHA] == release.sha256
             p[TAG] = release.tag
             p[NOTES] = release.notes
             p[PAGE] = release.pageUrl
             p[APK_URL] = release.apkUrl
             p[APK_SIZE] = release.apkSize
             if (release.sha256 == null) p.remove(SHA) else p[SHA] = release.sha256
-            if (!sameTag) p.resetPhase()
+            if (!sameRelease) p.resetPhase()
         }
     }
 

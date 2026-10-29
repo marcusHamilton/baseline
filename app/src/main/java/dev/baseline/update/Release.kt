@@ -71,3 +71,9 @@ fun plainNotes(markdown: String): String = markdown
     }.joinToString("\n")
     .replace(Regex("\n{3,}"), "\n\n")
     .trim()
+
+/** Whole percent of [total], 0..100; 0 while the size is unknown. Shared by the UI and the download notification. */
+fun percentOf(done: Long, total: Long): Int = if (total > 0) (done * 100 / total).toInt().coerceIn(0, 100) else 0
+
+/** Decimal megabytes, rounded, as Android's own storage screens count them. */
+fun megabytes(bytes: Long): Long = (bytes + 500_000) / 1_000_000

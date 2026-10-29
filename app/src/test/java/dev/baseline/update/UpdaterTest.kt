@@ -170,7 +170,7 @@ class UpdaterTest {
         check()
         primary()
         awaitState { it.state is UpdateState.Downloading }
-        download(tag) { _, _ -> }
+        download(tag, "attempt-1") { _, _ -> }
     }
 
     @Test
@@ -302,7 +302,8 @@ class UpdaterTest {
         val u = updater()
         u.toReady()
         val failed = u.awaitState { it.state is UpdateState.Failed }.state as UpdateState.Failed
-        assertEquals("Not enough free space: the update needs about 1 MB.", failed.message)
+        // Twice the APK (the download and the installer's copy) plus 32 MiB of headroom: what the check really asks for.
+        assertEquals("Not enough free space: the update needs about 34 MB.", failed.message)
         assertEquals(1, server.requestCount) // the release check only, no download
     }
 
@@ -316,7 +317,7 @@ class UpdaterTest {
         u.awaitState { it.state is UpdateState.Available }
         assertEquals(1, platform.cancels)
         // A late finish from the cancelled job doesn't resurrect it.
-        u.download("v0.05") { _, _ -> }
+        u.download("v0.05", "attempt-1") { _, _ -> }
         assertTrue(u.ui.value.state is UpdateState.Available)
         assertTrue(platform.updatesDir.listFiles().isNullOrEmpty())
     }
@@ -376,17 +377,105 @@ class UpdaterTest {
     }
 
     @Test
-    fun aProcessKilledMidInstallAbandonsTheSessionAndOffersARetry() = runBlocking {
+    fun aProcessKilledMidInstallWithTheSessionGoneOffersARetry() = runBlocking {
+        val before = updater()
+        before.onForeground(true)
+        before.toReady()
+        eventually { prefs.current().sessionId == 7 }
+        updaterScopes.forEach { it.cancel() }
+        platform.liveSessions.clear() // no answer can come now
+
+        val after = updater()
+        val failed = after.awaitState { it.state is UpdateState.Failed }.state as UpdateState.Failed
+        assertEquals("The install didn't finish. Try again.", failed.message)
+    }
+
+    @Test
+    fun aColdStartByTheInstallersAnswerKeepsTheSessionAndDeliversIt() = runBlocking {
         val before = updater()
         before.onForeground(true)
         before.toReady()
         eventually { prefs.current().sessionId == 7 }
         updaterScopes.forEach { it.cancel() }
 
+        // The installer's broadcast starts a new process: start() runs first, then the answer arrives.
         val after = updater()
+        delay(200)
+        assertTrue(after.ui.value.state !is UpdateState.Failed)
+        assertTrue(platform.abandoned.isEmpty())
+        val dialog = Intent("android.content.pm.action.CONFIRM_INSTALL")
+        after.onInstallResult(PackageInstaller.STATUS_PENDING_USER_ACTION, null, dialog)
+        assertEquals(dialog, after.userAction.value)
+        // Opening the app with the dialog still waiting to be shown doesn't throw it away.
+        after.onForeground(true)
+        delay(200)
+        assertEquals(Phase.INSTALLING, prefs.current().phase)
+        assertTrue(platform.abandoned.isEmpty())
+    }
+
+    @Test
+    fun aSessionThisProcessCanNeverFinishIsFreedOnResume() = runBlocking {
+        val before = updater()
+        before.onForeground(true)
+        before.toReady()
+        eventually { prefs.current().sessionId == 7 }
+        updaterScopes.forEach { it.cancel() }
+
+        // New process, no answer delivered, and the owner opens the app: nothing can finish that session.
+        val after = updater()
+        after.onForeground(true)
         val failed = after.awaitState { it.state is UpdateState.Failed }.state as UpdateState.Failed
-        assertEquals("The install didn't finish. Try again.", failed.message)
+        assertEquals("Update cancelled.", failed.message)
         assertEquals(listOf(7), platform.abandoned)
+    }
+
+    @Test
+    fun backingOutOfTheSystemDialogFreesTheInstall() = runBlocking {
+        val u = updater()
+        u.onForeground(true)
+        u.toReady()
+        eventually { prefs.current().sessionId == 7 }
+        // Resuming before the installer answers must not abandon the commit.
+        u.onForeground(true)
+        delay(200)
+        assertTrue(platform.abandoned.isEmpty())
+
+        u.onInstallResult(PackageInstaller.STATUS_PENDING_USER_ACTION, null, Intent("android.content.pm.action.CONFIRM_INSTALL"))
+        u.userActionLaunched()
+        u.onForeground(false)
+        // Back on Android's dialog: no status arrives, and the owner is back in the app.
+        u.onForeground(true)
+        val failed = u.awaitState { it.state is UpdateState.Failed }.state as UpdateState.Failed
+        assertEquals("Update cancelled.", failed.message)
+        assertEquals(listOf(7), platform.abandoned)
+        // Retry installs the verified file again.
+        u.primary()
+        eventually { platform.installs.size == 2 }
+    }
+
+    @Test
+    fun aReUploadedApkUnderTheSameTagIsDownloadedAgain() = runBlocking {
+        val u = updater()
+        u.toReady()
+        u.awaitState { it.state is UpdateState.Ready }
+        servedSha = "11".repeat(32) // same tag, new bytes on GitHub
+        u.check()
+        u.awaitState { it.state is UpdateState.Available }
+        assertTrue(platform.updatesDir.listFiles().isNullOrEmpty())
+        u.primary()
+        eventually { platform.downloads.size == 2 }
+    }
+
+    @Test
+    fun eachDownloadAttemptWritesItsOwnFile() = runBlocking {
+        val u = updater()
+        u.check()
+        u.primary()
+        u.awaitState { it.state is UpdateState.Downloading }
+        var seen: List<String>? = null
+        u.download("v0.05", "attempt-2") { _, _ -> seen = platform.updatesDir.list()?.toList() }
+        // A cancelled attempt-1 unwinding can only ever delete its own file, never this one.
+        assertEquals(listOf("v0.05-attempt-2.part"), seen)
     }
 
     @Test

@@ -33,6 +33,8 @@ import dev.baseline.ui.theme.Surface2
 import dev.baseline.ui.theme.TextBody
 import dev.baseline.ui.theme.TextMuted
 import dev.baseline.update.UpdateState
+import dev.baseline.update.megabytes
+import dev.baseline.update.percentOf
 
 /** The one line that says where an offered update is; shared by Today's banner and Settings' App card. */
 fun updateHeadline(state: UpdateState.Offer): String {
@@ -40,7 +42,7 @@ fun updateHeadline(state: UpdateState.Offer): String {
     return when (state) {
         is UpdateState.Available -> "Baseline $v is available."
         is UpdateState.NeedsPermission -> "To update, allow Baseline to install apps."
-        is UpdateState.Downloading -> "Downloading Baseline $v… ${percent(state.done, state.total)} %"
+        is UpdateState.Downloading -> "Downloading Baseline $v… ${percentOf(state.done, state.total)} %"
         is UpdateState.Ready -> "Baseline $v is ready to install."
         is UpdateState.Installing -> "Installing Baseline $v…"
         is UpdateState.Failed -> state.message
@@ -49,18 +51,13 @@ fun updateHeadline(state: UpdateState.Offer): String {
 
 /** The label on the one button ([dev.baseline.update.Updater.primary]); null while the system installer has it. */
 fun updateButton(state: UpdateState.Offer): String? = when (state) {
-    is UpdateState.Available -> "Update (${state.release.apkSize.toMegabytes()} MB)"
+    is UpdateState.Available -> "Update (${megabytes(state.release.apkSize)} MB)"
     is UpdateState.NeedsPermission -> "Allow"
     is UpdateState.Downloading -> "Cancel"
     is UpdateState.Ready -> "Install"
     is UpdateState.Installing -> null
     is UpdateState.Failed -> "Retry"
 }
-
-internal fun percent(done: Long, total: Long) = if (total > 0) (done * 100 / total).toInt().coerceIn(0, 100) else 0
-
-/** Decimal megabytes, as Android's own storage screens count them. */
-internal fun Long.toMegabytes() = (this + 500_000) / 1_000_000
 
 /** Today's update notice: neutral, not alarming, under the key banner. Dismissing it hides this release only. */
 @Composable
@@ -72,7 +69,7 @@ fun UpdateBanner(state: UpdateState.Offer, onPrimary: () -> Unit, onDismiss: () 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 updateHeadline(state),
-                Modifier.weight(1f).padding(top = 8.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                Modifier.weight(1f).padding(top = 8.dp).updateAnnouncements(state),
                 color = TextBody,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
@@ -95,11 +92,24 @@ fun UpdateBanner(state: UpdateState.Offer, onPrimary: () -> Unit, onDismiss: () 
     }
 }
 
+/**
+ * The headline speaks its state changes (available, ready, failed…) but not each percent of a download: the progress
+ * bar carries that, so TalkBack isn't flooded with 100 announcements.
+ */
+fun Modifier.updateAnnouncements(state: UpdateState.Offer): Modifier = if (state is UpdateState.Downloading) {
+    this
+} else {
+    semantics {
+        liveRegion =
+            LiveRegionMode.Polite
+    }
+}
+
 @Composable
 fun UpdateProgress(state: UpdateState.Downloading, modifier: Modifier = Modifier) {
     LinearProgressIndicator(
-        progress = { percent(state.done, state.total) / 100f },
-        modifier = modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = "Download ${percent(state.done, state.total)} percent" },
+        progress = { percentOf(state.done, state.total) / 100f },
+        modifier = modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = "Download ${percentOf(state.done, state.total)} percent" },
         color = StrainBlue,
         trackColor = Surface2,
         gapSize = 0.dp,
