@@ -49,7 +49,10 @@ android {
             versionCode = versionOverride.split('.').let { (major, minor) -> major.toInt() * 100 + minor.toInt() }
         }
         buildConfigField("String", "GARMIN_BASE_URL", "\"${fakeGarminUrl ?: "https://personal.connectapi.garmin.com"}\"")
-        buildConfigField("String", "UPDATES_URL", "\"${fakeUpdatesUrl ?: "https://api.github.com/repos/marcusHamilton/baseline/releases/latest"}\"")
+        // One source for the real URL: updatesEnabled() compares against DEFAULT_UPDATES_URL.
+        val releasesUrl = "https://api.github.com/repos/marcusHamilton/baseline/releases/latest"
+        buildConfigField("String", "DEFAULT_UPDATES_URL", "\"$releasesUrl\"")
+        buildConfigField("String", "UPDATES_URL", "\"${fakeUpdatesUrl ?: releasesUrl}\"")
         manifestPlaceholders["cleartext"] = testBuild
         if (testBuild) versionNameSuffix = "-fake"
     }
@@ -91,6 +94,9 @@ android {
         // No Timber dependency: android.util.Log is the logger, and none of the messages carry the key.
         // No core-ktx dependency, so the KTX extension suggestions have nothing to point at.
         disable += setOf("LogNotTimber", "UseKtx")
+        // "A newer version of … is available" turns CI red whenever Google publishes a release, with no code change.
+        // Version bumps are deliberate changes of their own (gradle/libs.versions.toml), not lint failures.
+        disable += setOf("AndroidGradlePluginVersion", "GradleDependency")
     }
 
     testOptions {
