@@ -148,6 +148,7 @@ adb reverse tcp:8080 tcp:8080                                                 # 
 
 ```bash
 U=http://127.0.0.1:8080/repos/marcusHamilton/baseline/releases/latest
+[ -s /tmp/test.jks ] || keytool -genkeypair -keystore /tmp/test.jks -storepass testtest -keypass testtest -alias test -keyalg RSA -dname CN=test   # cloud_setup.sh makes it in the cloud
 for v in 0.05 0.06 0.07; do                                  # versionName v (+ -fake), versionCode 5, 6, 7
   ./gradlew -q :app:assembleRelease -PupdatesUrl=$U -PgarminBaseUrl=http://127.0.0.1:8080 -PversionOverride=$v
   apksigner sign --ks /tmp/test.jks --ks-pass pass:testtest --out /tmp/b-$v.apk app/build/outputs/apk/release/app-release-unsigned.apk
