@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -80,7 +81,7 @@ fun ActivitiesContent(state: ActivitiesUiState, onFilter: (SportFamily?) -> Unit
             item(key = "day-${group.date}") {
                 Text(
                     Formatters.dayHeader(group.date, state.today),
-                    Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp),
+                    Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp).semantics { heading() },
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = TextMuted,
@@ -98,7 +99,16 @@ fun ActivitiesContent(state: ActivitiesUiState, onFilter: (SportFamily?) -> Unit
 private fun Header(selected: SportFamily?, onFilter: (SportFamily?) -> Unit, onOpenRecords: () -> Unit) {
     Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 8.dp), Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-            Text("ACTIVITIES", fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 28.sp, letterSpacing = 1.12.sp)
+            Text(
+                "ACTIVITIES",
+                Modifier.semantics {
+                    heading()
+                },
+                fontFamily = BarlowCondensed,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 28.sp,
+                letterSpacing = 1.12.sp,
+            )
             Row(
                 Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(RecordsBg)
                     .semantics { contentDescription = "Records" }
