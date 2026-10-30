@@ -15,13 +15,13 @@ import androidx.work.WorkManager
 import androidx.work.testing.WorkManagerTestInitHelper
 import dev.baseline.data.Repository
 import dev.baseline.data.db.AppDatabase
-import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.db.TaskCounts
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.garmin.KeyStatus
 import dev.baseline.prefs.UserPrefs
 import dev.baseline.sync.SyncScheduler
 import dev.baseline.sync.closeWorkManagerDb
+import dev.baseline.testutil.inMemoryDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -63,7 +63,7 @@ class EditModeTest {
         Dispatchers.setMain(Dispatchers.Unconfined)
         context = ApplicationProvider.getApplicationContext()
         WorkManagerTestInitHelper.initializeTestWorkManager(context)
-        db = Room.inMemoryDatabaseBuilder<AppDatabase>(context) { AppDatabase_Impl() }.allowMainThreadQueries().build()
+        db = inMemoryDatabase(context)
         storeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         file = File.createTempFile("editmode", ".preferences_pb").also { it.delete() }
         val store: DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = storeScope) { file }

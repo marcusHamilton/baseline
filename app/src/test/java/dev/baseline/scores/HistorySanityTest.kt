@@ -1,14 +1,11 @@
 package dev.baseline.scores
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
-import androidx.room3.Room
-import androidx.test.core.app.ApplicationProvider
-import dev.baseline.data.db.AppDatabase
-import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.parse.fixture
 import dev.baseline.garmin.GarminEndpoint
 import dev.baseline.prefs.UserPrefs
 import dev.baseline.sync.RawIngest
+import dev.baseline.testutil.inMemoryDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -32,11 +29,7 @@ class HistorySanityTest {
 
     @Test
     fun fullHistoryIsSane() = runBlocking {
-        val db =
-            Room
-                .inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
-                .allowMainThreadQueries()
-                .build()
+        val db = inMemoryDatabase()
         try {
             val file = File.createTempFile("prefs", ".preferences_pb").also { it.delete() }
             val prefs = UserPrefs(PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO)) { file })

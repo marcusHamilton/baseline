@@ -76,6 +76,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 ## Conventions
 
 - Match the surrounding code: comment density, naming and Compose patterns. Every behaviour fix gets a regression test (Robolectric/Compose tests live under `app/src/test`). Add no new dependencies without a reason in the spec.
+- Tests build their Room database with `testutil.inMemoryDatabase()`, never `Room.inMemoryDatabaseBuilder` directly: it opens the database up front, because with Room 3.0.3 a cancelled first open can leave an in-memory database without its tables ("no such table" mid-test).
 - Use Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`).
 - Test fixtures in `app/src/test/resources/fixtures/` are anonymized, never raw (see below). `tools/fetch_sample.py` pulls samples from the user's own account into the git-ignored `tools/out/`; `tools/make_fixtures.py` (JSON, via `tools/anonymize.py`) and `tools/anonymize_fit.py` (each `.fit`) turn them into fixtures. Run them with `uv run --python 3.12 --no-project python -I …`; they read the key from `~/.config/garmin/.env` and never print it.
 

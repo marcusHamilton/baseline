@@ -52,3 +52,15 @@ dispatch; Robolectric's looper reset drops it, and the dispatcher stays marked a
 `OnboardingScreenTest` ran first). `OnboardingScreenTest` drains the main looper in an outer rule; copy that rule into
 any new test that focuses a text field. Gradle runs previously failed classes first, so delete
 `app/build/test-results/testDebugUnitTest` before re-running to reproduce an order-dependent failure.
+
+## The Trends "flake" was a Room first-open race
+
+`TrendsViewModelTest.rangeEndFollowsTheTodayFlow` failed once in PR CI (then passed on re-run), and the leaked exception
+also failed `ReadinessWidgetTest` with `UncaughtExceptionsBeforeTest`. Cause, in Room 3.0.3: the first open of a database
+creates the schema and sets `isConfigured`, then hands the connection back through `withReentrantLock`'s `withContext`,
+which throws if the caller was cancelled meanwhile. The configured connection is dropped; the next query opens a fresh
+`:memory:` database that Room no longer sets up, so every query fails with "no such table". That test's first database
+access was its ViewModel's flows, which `flatMapLatest` cancels when "today" moves. A file database reopens its own file,
+so the app is not affected (it leaks one connection at most). Tests now build databases with `testutil.inMemoryDatabase()`,
+which opens them up front; `TestDatabaseTest` repeats the race (48 of 100 rounds lost the schema without the eager open).
+Worth reporting upstream to Room.

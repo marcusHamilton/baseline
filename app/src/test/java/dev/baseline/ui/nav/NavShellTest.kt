@@ -21,13 +21,11 @@ import androidx.compose.ui.test.performTextInput
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
-import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.WorkManager
 import androidx.work.testing.WorkManagerTestInitHelper
 import dev.baseline.AppContainer
 import dev.baseline.data.db.AppDatabase
-import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.garmin.GarminEndpoint
 import dev.baseline.garmin.GarminResult
@@ -35,6 +33,7 @@ import dev.baseline.garmin.KeyTest
 import dev.baseline.sync.SyncEngine
 import dev.baseline.sync.SyncScheduler
 import dev.baseline.testutil.ScopeCleanup
+import dev.baseline.testutil.inMemoryDatabase
 import dev.baseline.ui.theme.BaselineTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -68,7 +67,7 @@ private class TestContainer(context: Context, private val store: DataStore<Prefe
     override val scheduler = CountingScheduler(WorkManager.getInstance(context))
     override val apiKeyVault by lazy { ApiKeyVault(store, { it }, { it }, clock) }
     override val db: AppDatabase by lazy {
-        Room.inMemoryDatabaseBuilder<AppDatabase>(context) { AppDatabase_Impl() }.allowMainThreadQueries().build()
+        inMemoryDatabase(context)
     }
     override val testKey: KeyTest = { _, onValid ->
         fetch(GarminEndpoint.PROFILE, "").also { if (it is GarminResult.Ok || it == GarminResult.Empty) onValid() }

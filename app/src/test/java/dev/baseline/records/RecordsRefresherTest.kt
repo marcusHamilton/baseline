@@ -1,10 +1,8 @@
 package dev.baseline.records
 
-import androidx.room3.Room
-import androidx.test.core.app.ApplicationProvider
 import dev.baseline.data.SportFamily
 import dev.baseline.data.db.AppDatabase
-import dev.baseline.data.db.AppDatabase_Impl
+import dev.baseline.testutil.inMemoryDatabase
 import dev.baseline.ui.activities.act
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -19,11 +17,7 @@ class RecordsRefresherTest {
     private lateinit var db: AppDatabase
 
     @Before fun setUp() {
-        db =
-            Room
-                .inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
-                .allowMainThreadQueries()
-                .build()
+        db = inMemoryDatabase()
     }
 
     @After fun tearDown() = db.close()

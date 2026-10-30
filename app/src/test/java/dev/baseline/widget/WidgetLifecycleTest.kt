@@ -8,7 +8,6 @@ import android.widget.TextView
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
-import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.ListenableWorker
 import androidx.work.ListenableWorker.Result
@@ -23,7 +22,6 @@ import dev.baseline.data.SportFamily
 import dev.baseline.data.db.ActivityEntity
 import dev.baseline.data.db.ActivityScoreEntity
 import dev.baseline.data.db.AppDatabase
-import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.db.LoadSource
 import dev.baseline.data.db.SyncTaskEntity
 import dev.baseline.data.db.TaskStatus
@@ -35,6 +33,7 @@ import dev.baseline.sync.SyncScheduler
 import dev.baseline.sync.SyncWorker
 import dev.baseline.sync.SyncWorkerDeps
 import dev.baseline.testutil.ScopeCleanup
+import dev.baseline.testutil.inMemoryDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -72,7 +71,7 @@ private class LifecycleTestContainer(context: Context, private val store: DataSt
     override val scheduler = SyncScheduler(WorkManager.getInstance(context), { false })
     override val apiKeyVault by lazy { ApiKeyVault(store, { it }, { it }, clock, dateTicker.today) }
     override val db: AppDatabase by lazy {
-        Room.inMemoryDatabaseBuilder<AppDatabase>(context) { AppDatabase_Impl() }.allowMainThreadQueries().build()
+        inMemoryDatabase(context)
     }
     override val syncEngine by lazy { SyncEngine({ _: GarminEndpoint, _: String -> GarminResult.Empty }, db, clock) {} }
 }

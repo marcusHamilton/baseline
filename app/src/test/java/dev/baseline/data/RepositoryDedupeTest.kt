@@ -4,11 +4,9 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.room3.Room
-import androidx.test.core.app.ApplicationProvider
 import dev.baseline.data.db.ActivityEntity
 import dev.baseline.data.db.ActivityStreamEntity
 import dev.baseline.data.db.AppDatabase
-import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.db.BodyBatteryDayEntity
 import dev.baseline.data.db.DayEntity
 import dev.baseline.data.db.HrDayEntity
@@ -18,6 +16,7 @@ import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.prefs.UserPrefs
 import dev.baseline.scores.HrPoint
 import dev.baseline.testutil.ScopeCleanup
+import dev.baseline.testutil.inMemoryDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -57,7 +56,7 @@ class RepositoryDedupeTest {
 
     @Before
     fun setUp() {
-        db = Room.inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }.allowMainThreadQueries().build()
+        db = inMemoryDatabase()
         file = File.createTempFile("repodedupe", ".preferences_pb").also { it.delete() }
         val store: DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = scopes.storeScope) { file }
         repo = Repository(db, UserPrefs(store), ApiKeyVault(store, { it }, { it }, Clock.systemUTC()))
