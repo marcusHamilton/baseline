@@ -37,93 +37,105 @@ import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 
-/** The UI's only data source: Flows over Room, prefs and the vault. It never touches the network. */
+/**
+ * The UI's only data source: Flows over Room, prefs and the vault. It never touches the network.
+ *
+ * Room re-runs a query on every write to its table, even when the rows it returns are unchanged (a backfill writes
+ * ~1,200 responses), so every Flow here drops repeats before its collectors rebuild UI state. Entities with a
+ * [ByteArray] are not data classes: those are compared by content, or mapped to value types first.
+ */
 class Repository(private val db: AppDatabase, val prefs: UserPrefs, private val vault: ApiKeyVault) {
-    fun day(date: LocalDate): Flow<DayEntity?> = db.dayDao().observe(date)
+    fun day(date: LocalDate): Flow<DayEntity?> = db.dayDao().observe(date).distinctUntilChanged()
 
-    fun days(from: LocalDate, to: LocalDate): Flow<List<DayEntity>> = db.dayDao().range(from, to)
+    fun days(from: LocalDate, to: LocalDate): Flow<List<DayEntity>> = db.dayDao().range(from, to).distinctUntilChanged()
 
-    fun activitiesOn(date: LocalDate): Flow<List<ActivityEntity>> = db.activityDao().observeByDay(date)
+    fun activitiesOn(date: LocalDate): Flow<List<ActivityEntity>> = db.activityDao().observeByDay(date).distinctUntilChanged()
 
-    fun activityScores(date: LocalDate): Flow<List<ActivityScoreEntity>> = db.activityScoreDao().forDay(date)
+    fun activityScores(date: LocalDate): Flow<List<ActivityScoreEntity>> = db.activityScoreDao().forDay(date).distinctUntilChanged()
 
-    fun score(date: LocalDate): Flow<ScoreEntity?> = db.scoreDao().observe(date)
+    fun score(date: LocalDate): Flow<ScoreEntity?> = db.scoreDao().observe(date).distinctUntilChanged()
 
-    fun scores(from: LocalDate, to: LocalDate): Flow<List<ScoreEntity>> = db.scoreDao().range(from, to)
+    fun scores(from: LocalDate, to: LocalDate): Flow<List<ScoreEntity>> = db.scoreDao().range(from, to).distinctUntilChanged()
 
-    fun activities(): Flow<List<ActivityEntity>> = db.activityDao().all()
+    fun activities(): Flow<List<ActivityEntity>> = db.activityDao().all().distinctUntilChanged()
 
-    fun activity(id: Long): Flow<ActivityEntity?> = db.activityDao().observe(id)
+    fun activity(id: Long): Flow<ActivityEntity?> = db.activityDao().observe(id).distinctUntilChanged()
 
-    fun activityScore(id: Long): Flow<ActivityScoreEntity?> = db.activityScoreDao().observe(id)
+    fun activityScore(id: Long): Flow<ActivityScoreEntity?> = db.activityScoreDao().observe(id).distinctUntilChanged()
 
     /** Null until the activity's FIT file is ingested. */
-    fun activityStream(id: Long): Flow<ActivityStreamEntity?> = db.activityStreamDao().observe(id)
+    fun activityStream(id: Long): Flow<ActivityStreamEntity?> =
+        db.activityStreamDao().observe(id).distinctUntilChanged { a, b -> a?.activityId == b?.activityId && sameBytes(a?.packed, b?.packed) }
 
-    fun swimLengths(id: Long): Flow<List<SwimLengthEntity>> = db.swimLengthDao().observe(id)
+    fun swimLengths(id: Long): Flow<List<SwimLengthEntity>> = db.swimLengthDao().observe(id).distinctUntilChanged()
 
-    fun strengthSets(id: Long): Flow<List<StrengthSetEntity>> = db.strengthSetDao().observe(id)
+    fun strengthSets(id: Long): Flow<List<StrengthSetEntity>> = db.strengthSetDao().observe(id).distinctUntilChanged()
 
-    fun bestEfforts(): Flow<List<BestEffortEntity>> = db.bestEffortDao().all()
+    fun bestEfforts(): Flow<List<BestEffortEntity>> = db.bestEffortDao().all().distinctUntilChanged()
 
-    fun allActivityScores(): Flow<List<ActivityScoreEntity>> = db.activityScoreDao().all()
+    fun allActivityScores(): Flow<List<ActivityScoreEntity>> = db.activityScoreDao().all().distinctUntilChanged()
 
     /** Active (non-rest) set count per strength activity; absent until the FIT file is ingested. */
-    fun activeSetCounts(): Flow<Map<Long, Int>> = db.strengthSetDao().activeCounts().map { rows -> rows.associate { it.activityId to it.sets } }
+    fun activeSetCounts(): Flow<Map<Long, Int>> = db.strengthSetDao().activeCounts().map { rows ->
+    }.distinctUntilChanged()
 
-    fun activitiesBetween(from: LocalDate, to: LocalDate): Flow<List<ActivityEntity>> = db.activityDao().between(from, to)
+
+    fun activitiesBetween(from: LocalDate, to: LocalDate): Flow<List<ActivityEntity>> = db.activityDao().between(from, to).distinctUntilChanged()
 
     /** The day's all-day heart-rate samples in time order (about every 2 minutes); empty when none are stored. */
-    fun heartRate(date: LocalDate): Flow<List<HrPoint>> = db.hrDayDao().observe(date).map { row ->
-        row?.let { HrPacking.unpack(it.packed) }.orEmpty().sortedBy { it.epochSec }
-    }
+    fun heartRate(date: LocalDate): Flow<List<HrPoint>> = db
+        .hrDayDao()
+        .observe(date)
+        .distinctUntilChanged { a, b -> sameBytes(a?.packed, b?.packed) }
+        .map { row -> row?.let { HrPacking.unpack(it.packed) }.orEmpty().sortedBy { it.epochSec } }
 
     /** Overnight HRV readings (about every 5 minutes) of the night ending on [date]; null until the HRV_DAY row is stored. */
-    fun hrvReadings(date: LocalDate): Flow<List<Pair<Instant, Int>>?> =
-        db.rawDao().json(GarminEndpoint.HRV_DAY.name, date.toString()).map { rows -> rows.firstOrNull()?.let(::parseHrvReadings) }
+    fun hrvReadings(date: LocalDate): Flow<List<Pair<Instant, Int>>?> = db
+        .rawDao()
+        .json(GarminEndpoint.HRV_DAY.name, date.toString())
+        .distinctContent()
+        .map { rows -> rows.firstOrNull()?.let(::parseHrvReadings) }
+        .distinctUntilChanged()
 
     /** Queues the activity's FIT download as a PENDING priority-0 task (the caller then asks the scheduler to sync). */
     suspend fun requestFit(id: Long) = db.taskDao().upsertAll(listOf(SyncTaskEntity(GarminEndpoint.FIT.name, id.toString(), 0, TaskStatus.PENDING, 0, null)))
 
-    fun taskStatus(endpoint: GarminEndpoint, key: String): Flow<TaskStatus?> = db.taskDao().status(endpoint.name, key)
+    fun taskStatus(endpoint: GarminEndpoint, key: String): Flow<TaskStatus?> = db.taskDao().status(endpoint.name, key).distinctUntilChanged()
 
     /** The day's Body Battery samples (level 0..100) in time order; empty when Garmin sent none. */
-    fun bodyBatteryCurve(date: LocalDate): Flow<List<Pair<Instant, Int>>> = db.bodyBatteryDayDao().flow(date).map { row ->
-        row
-            ?.let { HrPacking.unpack(it.packed) }
-            .orEmpty()
-            .sortedBy { it.epochSec }
-            .map { Instant.ofEpochSecond(it.epochSec) to it.bpm }
-    }
+    fun bodyBatteryCurve(date: LocalDate): Flow<List<Pair<Instant, Int>>> = db
+        .bodyBatteryDayDao()
+        .flow(date)
+        .distinctUntilChanged { a, b -> sameBytes(a?.packed, b?.packed) }
+        .map { row ->
+            row
+                ?.let { HrPacking.unpack(it.packed) }
+                .orEmpty()
+                .sortedBy { it.epochSec }
+                .map { Instant.ofEpochSecond(it.epochSec) to it.bpm }
+        }
+
+    /** The stored Garmin profile, parsed once per change; null when absent or not a JSON object. Shared by [imperial] and [firstDayOfWeek]. */
+    private val profile: Flow<JsonObject?> =
+        db
+            .rawDao()
+            .profileJson()
+            .distinctContent()
+            .map { rows -> rows.firstOrNull()?.let { runCatching { Json.parseToJsonElement(String(it)).jsonObject }.getOrNull() } }
+            .distinctUntilChanged()
 
     /** True when the Garmin profile's measurementSystem is a statute one ("statute_us"); metric when unknown. */
     val imperial: Flow<Boolean> =
-        db
-            .rawDao()
-            .profileJson()
-            .map { rows ->
-                val system =
-                    rows.firstOrNull()?.let {
-                        runCatching {
-                            Json
-                                .parseToJsonElement(String(it))
-                                .jsonObject["measurementSystem"]
-                                ?.jsonPrimitive
-                                ?.contentOrNull
-                        }.getOrNull()
-                    }
-                system?.startsWith("statute") == true
-            }.distinctUntilChanged()
+        profile
+            .map { p -> runCatching { p?.get("measurementSystem")?.jsonPrimitive?.contentOrNull }.getOrNull()?.startsWith("statute") == true }
+            .distinctUntilChanged()
 
     /** The Garmin profile's first day of the week ("firstDayOfWeek": {"dayName": "sunday"}, or the bare name); Monday when unknown. */
     val firstDayOfWeek: Flow<DayOfWeek> =
-        db
-            .rawDao()
-            .profileJson()
-            .map { rows ->
-                val el = rows.firstOrNull()?.let { runCatching { Json.parseToJsonElement(String(it)).jsonObject["firstDayOfWeek"] }.getOrNull() }
+        profile
+            .map { p ->
                 val name =
-                    when (el) {
+                    when (val el = p?.get("firstDayOfWeek")) {
                         is JsonObject -> el["dayName"]?.jsonPrimitive?.contentOrNull
                         is JsonPrimitive -> el.contentOrNull
                         else -> null
@@ -133,15 +145,21 @@ class Repository(private val db: AppDatabase, val prefs: UserPrefs, private val 
 
     /** True when a response holding [date] was stored raw but could not be parsed (spec §10 "Malformed JSON"). */
     fun dayUnreadable(date: LocalDate, sleepOnly: Boolean = false): Flow<Boolean> =
-        db.taskDao().unreadableDay(date.toString(), if (sleepOnly) SLEEP_ENDPOINTS else DAY_ENDPOINTS)
+        db.taskDao().unreadableDay(date.toString(), if (sleepOnly) SLEEP_ENDPOINTS else DAY_ENDPOINTS).distinctUntilChanged()
 
     /** Earliest stored health day and activity day; null while there are none. */
     val historyStart: Flow<Pair<LocalDate?, LocalDate?>> =
-        combine(db.dayDao().firstDate(), db.activityDao().firstDay()) { health, activities -> health to activities }
+        combine(db.dayDao().firstDate(), db.activityDao().firstDay()) { health, activities -> health to activities }.distinctUntilChanged()
 
     val keyStatus: Flow<KeyStatus> get() = vault.status
-    val syncProgress: Flow<TaskCounts> get() = db.taskDao().counts()
+    val syncProgress: Flow<TaskCounts> get() = db.taskDao().counts().distinctUntilChanged()
 }
+
+private fun sameBytes(a: ByteArray?, b: ByteArray?): Boolean = if (a == null || b == null) a == b else a.contentEquals(b)
+
+/** Drops a repeat of the same blobs, so the parse after it only runs when a stored response actually changed. */
+internal fun Flow<List<ByteArray>>.distinctContent(): Flow<List<ByteArray>> =
+    distinctUntilChanged { a, b -> a.size == b.size && a.indices.all { a[it].contentEquals(b[it]) } }
 
 private fun parseHrvReadings(json: ByteArray): List<Pair<Instant, Int>> = runCatching {
     val readings = Json.parseToJsonElement(String(json)).jsonObject["hrvReadings"] as? JsonArray ?: return emptyList()
