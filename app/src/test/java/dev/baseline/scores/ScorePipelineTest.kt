@@ -16,6 +16,7 @@ import dev.baseline.data.db.LoadSource
 import dev.baseline.data.db.ScoreEntity
 import dev.baseline.data.db.SyncTaskEntity
 import dev.baseline.data.db.TaskStatus
+import dev.baseline.fit.ActivityStreams
 import dev.baseline.fit.FitReader
 import dev.baseline.fit.fitFixture
 import dev.baseline.garmin.GarminEndpoint
@@ -459,5 +460,111 @@ class ScorePipelineTest {
         val cal = prefs.strainCalibration.first()!!
         assertEquals(2, cal.version)
         assertFalse(cal.provisional)
+    }
+
+    /** Three scored days, each with one stored stream and an all-day HR row. */
+    private suspend fun seedStreamHistory(): List<LocalDate> {
+        zones()
+        val days = (0 until 3).map { oct24.minusDays(it.toLong()) }
+        days.forEachIndexed { i, d ->
+            db.dayDao().upsert(DayEntity(d))
+            withStrengthStream(i + 1L, d, SportFamily.RUN, garmin = null)
+            val base = d.atStartOfDay().toEpochSecond(ZoneOffset.UTC)
+            db.hrDayDao().upsert(HrDayEntity(d, HrPacking.pack(List(100) { HrPoint(base + it * 120L, 70 + (it + i) % 60) })))
+        }
+        return days
+    }
+
+    private suspend fun scored(days: List<LocalDate>) = Pair(
+        days.map { db.scoreDao().get(it)!! },
+        days.indices.map { db.activityScoreDao().get(it + 1L)!! },
+    )
+
+    @Test
+    fun aSecondRunOverUnchangedDataGivesIdenticalScores() = runBlocking {
+        val days = seedStreamHistory()
+        val p = pipeline()
+        p.recalibrateAndRescore(true)
+        val first = scored(days)
+        assertTrue(first.first.all { it.dayLoad > 0 })
+
+        p.recompute(days.last())
+        p.recalibrateAndRescore(true)
+        val (scores, activityScores) = scored(days)
+        assertEquals(first.second, activityScores)
+        // Rescoring only moves the calibration version.
+        assertEquals(first.first.map { it.copy(calibrationVersion = 0) }, scores.map { it.copy(calibrationVersion = 0) })
+    }
+
+    @Test
+    fun changingTheBanisterSetOrZonesInvalidatesTheCachedLoads() = runBlocking {
+        val days = seedStreamHistory()
+        val p = pipeline()
+        p.recompute(days.last())
+        val before = scored(days)
+
+        prefs.setBanister(BanisterSet.FEMALE_FITTED)
+        p.recompute(days.last())
+        val female = scored(days)
+        assertTrue(before.second[0].load != female.second[0].load)
+        // A pipeline with nothing cached must agree bit for bit.
+        val fresh = pipeline()
+        fresh.recompute(days.last())
+        assertEquals(female, scored(days))
+
+        zones(max = 190, rest = 50)
+        p.recompute(days.last())
+        val newZones = scored(days)
+        assertTrue(female.second[0].load != newZones.second[0].load)
+        fresh.recompute(days.last())
+        assertEquals(newZones, scored(days))
+    }
+
+    @Test
+    fun aReplacedStreamIsRescoredNotServedFromTheCache() = runBlocking {
+        val days = seedStreamHistory()
+        val p = pipeline()
+        p.recompute(days.last())
+        val before = scored(days)
+
+        // Same size and activity, different heart rates.
+        val fit = FitReader.read(fitFixture("strength"))
+        val s = fit.streams
+        val hotter = ActivityStreams(
+            s.epochSec,
+            IntArray(s.hr.size) {
+                if (s.hr[it] >
+                    0
+                ) {
+                    s.hr[it] + 15
+                } else {
+                    s.hr[it]
+                }
+            },
+            s.distanceM, s.speedMs, s.powerW, s.altitudeM, s.lat, s.lon, s.cadence,
+        )
+        db.activityStreamDao().upsert(ActivityStreamEntity(1, hotter.pack()))
+        p.recompute(days.last())
+        val after = scored(days)
+        assertTrue(after.second[0].load > before.second[0].load)
+        assertEquals(before.second.drop(1), after.second.drop(1))
+
+        val fresh = pipeline()
+        fresh.recompute(days.last())
+        assertEquals(after, scored(days))
+    }
+
+    @Test
+    fun recalibrateAndRescoreMatchesAFreshRecomputeAndScoresEachDayOnce() = runBlocking {
+        val days = seedStreamHistory()
+        val p = pipeline()
+        p.recalibrateAndRescore(true)
+        val viaRescore = scored(days)
+        val cal = prefs.strainCalibration.first()!!
+
+        pipeline().recompute(days.last())
+        val viaRecompute = scored(days)
+        assertEquals(viaRescore.second, viaRecompute.second)
+        assertEquals(viaRescore.first, viaRecompute.first.map { it.copy(calibrationVersion = cal.version) })
     }
 }
