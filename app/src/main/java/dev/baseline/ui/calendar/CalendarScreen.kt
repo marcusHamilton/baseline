@@ -7,6 +7,8 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +35,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -105,7 +108,7 @@ fun CalendarContent(
             CircleButton(R.drawable.ic_chevron_left, "Back to Today", true, onBack)
             Text(
                 state.month.atDay(1).format(Title).uppercase(),
-                Modifier.weight(1f),
+                Modifier.weight(1f).semantics { heading() },
                 fontFamily = BarlowCondensed,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 22.sp,
@@ -209,9 +212,15 @@ private fun DayCell(cell: CalendarCell, selected: Boolean, onClick: () -> Unit, 
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Legend() {
-    Row(Modifier.padding(start = PageInset, top = 6.dp).clearAndSetSemantics {}, Arrangement.spacedBy(14.dp)) {
+internal fun Legend() {
+    // Wraps onto a second line on a narrow screen or at a large font scale, rather than clipping the last item.
+    FlowRow(
+        Modifier.padding(start = PageInset, top = 6.dp).clearAndSetSemantics {},
+        Arrangement.spacedBy(14.dp),
+        Arrangement.spacedBy(6.dp),
+    ) {
         listOf("Recovered" to RecoveryGreen, "Maintaining" to RecoveryAmber, "Low" to RecoveryRed).forEach { (label, color) ->
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Spacer(Modifier.size(10.dp).border(2.dp, color, CircleShape))

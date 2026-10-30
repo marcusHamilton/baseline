@@ -4,6 +4,8 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -52,9 +54,25 @@ class TrendsScreenTest {
         assertEquals(listOf(TrendRange.D90), picked)
     }
 
+    @Test fun everyCardLabelsTheRangeStartAndToday() {
+        val days = (0L..6).map { DayEntity(today.minusDays(it), restingHr = 48, hrvLastNight = 58.0, sleepSeconds = 26_400, sleepNeedMinutes = 480) }
+        rule.setContent { BaselineTheme { TrendsContent(buildTrendsState(TrendRange.D7, today, days, emptyList()), {}) } }
+        // The axis is hidden from TalkBack (the chart descriptions give the span), so look in the unmerged tree.
+        rule.onAllNodesWithText("Oct 18", useUnmergedTree = true).assertCountEquals(4)
+        rule.onAllNodesWithText("Today", useUnmergedTree = true).assertCountEquals(4)
+        rule.onAllNodesWithText("Oct 18").assertCountEquals(0)
+    }
+
     @Test fun emptyStateShowsDashesNotNaN() {
         rule.setContent { BaselineTheme { TrendsContent(buildTrendsState(TrendRange.D30, today, emptyList(), emptyList()), {}) } }
         rule.onAllNodesWithText("avg —").assertCountEquals(2)
         rule.onAllNodesWithText("— · avg —").assertCountEquals(2)
+    }
+
+    @Test fun screenAndCardTitlesAreHeadings() {
+        rule.setContent { BaselineTheme { TrendsContent(buildTrendsState(TrendRange.D7, today, emptyList(), emptyList()), {}) } }
+        listOf("TRENDS", "RECOVERY", "HRV · OVERNIGHT", "RESTING HEART RATE", "SLEEP vs NEED").forEach {
+            rule.onNode(isHeading() and hasText(it)).assertExists()
+        }
     }
 }

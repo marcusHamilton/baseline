@@ -1,6 +1,11 @@
 package dev.baseline.ui.calendar
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertHeightIsAtLeast
@@ -10,12 +15,15 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import dev.baseline.data.SportFamily
 import dev.baseline.data.db.ActivityEntity
@@ -128,4 +136,27 @@ class CalendarScreenTest {
     @Test
     @Config(qualifiers = "w411dp")
     fun selectedSundayStaysInsideTheCardsAt411() = sundayHighlightEndsWithinTheCards()
+
+    // Robolectric's stand-in font is a pixel or so per glyph, so real label widths can't overflow a phone-sized screen here.
+    // A narrow box gives the same squeeze a 320 dp screen at large font scale puts on the real font.
+    @Test
+    fun legendWrapsInsteadOfClippingWhenItIsSqueezed() {
+        rule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1.5f)) {
+                BaselineTheme { Box(Modifier.width(110.dp)) { Legend() } }
+            }
+        }
+        // The legend hides its semantics from TalkBack, so read it from the unmerged tree.
+        val labels = listOf("Recovered", "Maintaining", "Low", "Activity").map { rule.onNodeWithText(it, useUnmergedTree = true).getBoundsInRoot() }
+        labels.forEach { assertTrue("$it outside the 110 dp box", it.left >= 0.dp && it.right <= 110.dp) }
+        // Wrapped onto a second row rather than squeezed into one.
+        assertTrue("labels $labels", labels.last().top > labels.first().top)
+    }
+
+    @Test
+    fun monthTitleIsAHeading() {
+        rule.setContent { BaselineTheme { CalendarContent(state, {}, {}, {}, {}, {}) } }
+        rule.onNode(isHeading() and hasText("OCTOBER 2026")).assertExists()
+    }
 }
