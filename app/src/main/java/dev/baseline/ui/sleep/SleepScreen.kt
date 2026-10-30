@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -84,7 +85,16 @@ fun SleepContent(state: SleepUiState, is24h: Boolean, onBack: () -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             CircleButton(R.drawable.ic_chevron_left, "Back", true, onBack)
             Column {
-                Text("SLEEP", fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, letterSpacing = 0.88.sp)
+                Text(
+                    "SLEEP",
+                    Modifier.semantics {
+                        heading()
+                    },
+                    fontFamily = BarlowCondensed,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 22.sp,
+                    letterSpacing = 0.88.sp,
+                )
                 Text("Night of ${nightLabel(state.date)}", fontSize = 13.sp, color = TextMuted)
             }
         }
@@ -125,8 +135,17 @@ private fun Hero(state: SleepUiState, is24h: Boolean) {
 }
 
 @Composable
-private fun CardTitle(text: String) =
-    Text(text, fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, letterSpacing = 1.28.sp, color = TextMuted)
+private fun CardTitle(text: String) = Text(
+    text,
+    Modifier.semantics {
+        heading()
+    },
+    fontFamily = BarlowCondensed,
+    fontWeight = FontWeight.SemiBold,
+    fontSize = 16.sp,
+    letterSpacing = 1.28.sp,
+    color = TextMuted,
+)
 
 @Composable
 private fun OvernightCard(state: SleepUiState, is24h: Boolean) {

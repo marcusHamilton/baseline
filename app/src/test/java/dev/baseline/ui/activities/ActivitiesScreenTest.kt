@@ -12,6 +12,7 @@ import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -91,5 +92,12 @@ class ActivitiesScreenTest {
     fun emptyWeekShowsDashes() {
         rule.setContent { BaselineTheme { ActivitiesContent(build(emptyList()), {}, {}, {}) } }
         rule.onNodeWithContentDescription("This week: 0 activities, — hours, — km, average strain —").assertExists()
+    }
+
+    @Test
+    fun screenTitleAndDayHeadersAreHeadings() {
+        rule.setContent { BaselineTheme { ActivitiesContent(state(null), {}, {}, {}) } }
+        rule.onNode(isHeading() and hasText("ACTIVITIES")).assertExists()
+        rule.onNode(isHeading() and hasText("Today · Sat, Oct 24")).assertExists()
     }
 }

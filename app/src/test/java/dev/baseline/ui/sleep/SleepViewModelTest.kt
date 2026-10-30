@@ -27,6 +27,7 @@ import dev.baseline.testutil.ScopeCleanup
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.resetMain
@@ -47,6 +48,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -113,6 +115,21 @@ class SleepViewModelTest {
         assertEquals(Duration.ZERO, need.adjustment)
         assertEquals(listOf("Sleep history ▼", "HRV ▲"), need.reasons)
         assertEquals(LocalTime.of(23, 40), need.bedtimeStart)
+    }
+
+    @Test
+    fun bedAndWakeFollowTheZoneFlow() = runBlocking {
+        seedFixtureNight()
+        val zone = MutableStateFlow<ZoneId>(ZoneOffset.ofHours(-7))
+        val vm = scopes.track(SleepViewModel(repo, db.taskDao(), scheduler, date, today, zone))
+        val before = vm.await { it.bed != null }
+        assertEquals(LocalTime.of(22, 52), before.bed)
+        assertEquals(LocalTime.of(7, 41), before.wake)
+
+        zone.value = ZoneOffset.ofHours(9) // travelling: the same night, in Tokyo time
+        val after = vm.await { it.bed != LocalTime.of(22, 52) }
+        assertEquals(LocalTime.of(14, 52), after.bed)
+        assertEquals(LocalTime.of(23, 41), after.wake)
     }
 
     @Test

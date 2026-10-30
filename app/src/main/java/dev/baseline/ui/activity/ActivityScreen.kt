@@ -19,6 +19,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,6 +64,7 @@ fun ActivityContent(state: ActivityUiState, onBack: () -> Unit, mapContent: @Com
             Column {
                 Text(
                     (state.header?.title ?: "ACTIVITY").uppercase(),
+                    Modifier.semantics { heading() },
                     fontFamily = BarlowCondensed,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 22.sp,

@@ -24,6 +24,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -43,11 +45,15 @@ import dev.baseline.ui.theme.SleepPurple
 import dev.baseline.ui.theme.TextBody
 import dev.baseline.ui.theme.TextMuted
 import dev.baseline.ui.theme.TextPrimary
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private val Ranges = listOf(TrendRange.D7 to "7 days", TrendRange.D30 to "30 days", TrendRange.D90 to "90 days")
 private val SleepCap = Color(0xFF2E2A45)
 private const val SLEEP_SCALE_MIN_H = 10 * 3600f
 private const val MISSING = "—"
+private val AXIS_DATE = DateTimeFormatter.ofPattern("MMM d", Locale.US)
 
 @Composable
 fun TrendsScreen(vm: TrendsViewModel) {
@@ -59,12 +65,22 @@ fun TrendsScreen(vm: TrendsViewModel) {
 fun TrendsContent(state: TrendsUiState, onRange: (TrendRange) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("screen-trends").padding(bottom = 24.dp)) {
         Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 8.dp), Arrangement.spacedBy(14.dp)) {
-            Text("TRENDS", fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 28.sp, letterSpacing = 1.12.sp)
+            Text(
+                "TRENDS",
+                Modifier.semantics {
+                    heading()
+                },
+                fontFamily = BarlowCondensed,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 28.sp,
+                letterSpacing = 1.12.sp,
+            )
             RangeChips(state.range, onRange)
         }
         Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp), Arrangement.spacedBy(12.dp)) {
             val n = state.range.days
             val a = state.averages
+            val start = state.recovery.firstOrNull()?.first
             TrendCard("RECOVERY", a.recovery?.let { "avg $it%" } ?: "avg $MISSING") {
                 val have = state.recovery.count { it.second != null }
                 BarChart(
@@ -72,6 +88,7 @@ fun TrendsContent(state: TrendsUiState, onRange: (TrendRange) -> Unit) {
                     SleepCap,
                     "Daily recovery, $have of $n days with data, bars coloured by zone",
                 )
+                TimeAxis(start)
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     Legend(RecoveryGreen, "67–100")
                     Legend(RecoveryAmber, "34–66")
@@ -87,6 +104,7 @@ fun TrendsContent(state: TrendsUiState, onRange: (TrendRange) -> Unit) {
                     band = state.hrv.map { band[it.first] },
                     height = 110.dp,
                 )
+                TimeAxis(start)
                 if (band.isNotEmpty()) Text("Shaded band = your normal range (Garmin HRV baseline)", fontSize = 11.sp, color = TextMuted)
             }
             TrendCard("RESTING HEART RATE", state.rhrHeader()) {
@@ -99,6 +117,7 @@ fun TrendsContent(state: TrendsUiState, onRange: (TrendRange) -> Unit) {
                     midline = a.rhr,
                     height = 90.dp,
                 )
+                TimeAxis(start)
             }
             TrendCard("SLEEP vs NEED", a.sleep?.let { "avg ${Formatters.hoursMinutes(it)}" } ?: "avg $MISSING") {
                 val scale = maxOf(SLEEP_SCALE_MIN_H, state.sleepVsNeed.maxOf { maxOf(it.second?.seconds ?: 0L, it.third?.seconds ?: 0L).toFloat() })
@@ -111,6 +130,7 @@ fun TrendsContent(state: TrendsUiState, onRange: (TrendRange) -> Unit) {
                         it.second != null
                     }} of $n nights with data",
                 )
+                TimeAxis(start)
             }
         }
     }
@@ -134,10 +154,30 @@ private fun RangeChips(selected: TrendRange, onRange: (TrendRange) -> Unit) {
 private fun TrendCard(title: String, average: String, content: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).padding(16.dp), Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.Bottom) {
-            Text(title, fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, letterSpacing = 1.28.sp, color = TextMuted)
+            Text(
+                title,
+                Modifier.semantics {
+                    heading()
+                },
+                fontFamily = BarlowCondensed,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp,
+                letterSpacing = 1.28.sp,
+                color = TextMuted,
+            )
             Text(average, fontSize = 13.sp, color = TextBody)
         }
         content()
+    }
+}
+
+/** First day of the range on the left, "Today" on the right. The chart's description already gives the span, so TalkBack skips this. */
+@Composable
+private fun TimeAxis(start: LocalDate?) {
+    if (start == null) return
+    Row(Modifier.fillMaxWidth().clearAndSetSemantics {}, Arrangement.SpaceBetween) {
+        Text(AXIS_DATE.format(start), fontSize = 11.sp, color = TextMuted)
+        Text("Today", fontSize = 11.sp, color = TextMuted)
     }
 }
 

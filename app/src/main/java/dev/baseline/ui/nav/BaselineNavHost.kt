@@ -14,6 +14,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
@@ -73,7 +74,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
-import java.time.ZoneId
 
 object Routes {
     const val TODAY = "today"
@@ -189,7 +189,8 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
             }
         },
     ) { padding ->
-        Column(Modifier.padding(padding)) {
+        // consumeWindowInsets: the padding already covers the system bars, so a screen's imePadding only adds the keyboard's extra height.
+        Column(Modifier.padding(padding).consumeWindowInsets(padding)) {
             if (destination?.route != Routes.ONBOARDING) ConnectivityLine(container)
             NavHost(
                 nav,
@@ -260,7 +261,7 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                                 container.scheduler,
                                 date,
                                 today,
-                                ZoneId.systemDefault(),
+                                container.dateTicker.zone,
                             )
                         },
                         onBack = { nav.popBackStack() },
