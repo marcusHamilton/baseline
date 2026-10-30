@@ -77,6 +77,8 @@ data class TodayUiState(
     val rows: List<StatRowUi>,
     val bodyBattery: BodyBatteryUi,
     val lastSynced: Instant?,
+    /** The view model's today, so the screen words "Synced yesterday" from it and never reads the clock itself. */
+    val today: LocalDate,
     /** True until the first real emission, so the screen shows a placeholder instead of "Not enough data". */
     val loading: Boolean = false,
     /** Baseline-list edit mode: [rows] then include the hidden ones. */
@@ -253,7 +255,7 @@ class TodayViewModel(
 
 private fun emptyState(today: LocalDate) = TodayUiState(
     today, true, null, null, null, null, null, emptyList(), emptyList(),
-    BodyBatteryUi(null, emptyList(), null, null, false), null, loading = true,
+    BodyBatteryUi(null, emptyList(), null, null, false), null, today, loading = true,
 )
 
 @Suppress("LongParameterList")
@@ -307,6 +309,7 @@ internal fun buildTodayState(
         rows = statRows(day, window, baseline, order, hidden, date == today, editing),
         bodyBattery = BodyBatteryUi(curve.lastOrNull()?.second, curve, day?.bodyBatteryCharged, null, bodyBatteryExpanded),
         lastSynced = lastSynced,
+        today = today,
         editing = editing,
         unreadable = unreadable,
     )
