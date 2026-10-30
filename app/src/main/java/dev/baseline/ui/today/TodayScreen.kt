@@ -14,6 +14,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -66,11 +67,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -106,6 +109,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /** Today: the permission prompt, pull-to-refresh and the sync line around the stateless [TodayContent]. */
@@ -195,6 +199,7 @@ private fun BaselineSection(
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Text(
                 "VS. 30-DAY BASELINE",
+                Modifier.semantics { heading() },
                 fontFamily = BarlowCondensed,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 16.sp,
@@ -393,7 +398,7 @@ private fun Section(title: String, content: @Composable () -> Unit) {
     Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp), Arrangement.spacedBy(8.dp)) {
         Text(
             title,
-            Modifier.padding(bottom = 4.dp),
+            Modifier.padding(bottom = 4.dp).semantics { heading() },
             fontFamily = BarlowCondensed,
             fontWeight = FontWeight.SemiBold,
             fontSize = 16.sp,
@@ -406,10 +411,10 @@ private fun Section(title: String, content: @Composable () -> Unit) {
 
 private val DateLine = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)
 
-private fun subtitle(date: LocalDate, lastSynced: Instant?, zone: ZoneId): String = listOfNotNull(
+private fun subtitle(date: LocalDate, today: LocalDate, lastSynced: Instant?, zone: ZoneId): String = listOfNotNull(
     date.format(DateLine),
     lastSynced?.let {
-        Formatters.synced(it, LocalDate.now(zone), zone)
+        Formatters.synced(it, today, zone)
     },
 ).joinToString(" · ")
 
@@ -427,61 +432,89 @@ private fun Header(state: TodayUiState, zone: ZoneId, onPrev: () -> Unit, onNext
                 Icon(painterResource(R.drawable.ic_calendar), contentDescription = null, Modifier.size(18.dp))
                 Text(
                     if (state.isToday) "TODAY" else state.date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.US).uppercase(),
+                    Modifier.semantics { heading() },
                     fontFamily = BarlowCondensed,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 22.sp,
                     letterSpacing = 0.88.sp,
                 )
             }
-            Text(subtitle(state.date, state.lastSynced, zone), fontSize = 13.sp, color = TextMuted)
+            Text(subtitle(state.date, state.today, state.lastSynced, zone), fontSize = 13.sp, color = TextMuted)
         }
         CircleButton(R.drawable.ic_chevron_right, "Next day", !state.isToday, onNext)
     }
+}
+
+// The dials at their natural size, each as (diameter, stroke, value text size in sp).
+private val SideDial = Triple(96.dp, 8.dp, 30)
+private val MiddleDial = Triple(132.dp, 7.dp, 44)
+private val DialRowPadding = 20.dp
+private val MinTouchTarget = 48.dp
+
+/** One factor for all three dials: 1 while [available] fits them side by side at natural size, else the share that fits. */
+internal fun dialScale(available: Dp): Float {
+    val natural = SideDial.first * 2 + MiddleDial.first
+    return (available / natural).coerceIn(0.5f, 1f)
 }
 
 @Composable
 private fun Dials(state: TodayUiState, onOpenSleep: () -> Unit) {
     val recovery = state.recovery
     val recoveryColor = recovery?.let { zoneColor(it.zone) } ?: TextMuted
-    Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp), Arrangement.SpaceBetween, Alignment.Bottom) {
-        Column(
-            Modifier.width(96.dp).clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClick = onOpenSleep),
-            Arrangement.spacedBy(8.dp),
-            Alignment.CenterHorizontally,
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val scale = dialScale(maxWidth - DialRowPadding * 2)
+
+        // Whole dp, rounded down, so the three never add up to more than the row has.
+        fun scaled(d: Dp) = if (scale >= 1f) d else floor(d.value * scale).dp
+        val side = scaled(SideDial.first)
+        val sideStroke = SideDial.second * scale
+        val sideText = (SideDial.third * scale).roundToInt()
+        val middle = scaled(MiddleDial.first)
+        Row(
+            Modifier.fillMaxWidth().padding(start = DialRowPadding, end = DialRowPadding, top = 20.dp, bottom = 8.dp),
+            Arrangement.SpaceBetween,
+            Alignment.Bottom,
         ) {
-            Dial(
-                state.sleepPct?.let { it / 100f },
-                state.sleepPct?.toString() ?: "—",
-                if (state.sleepPct != null) "%" else "",
-                SleepPurple,
-                96.dp,
-                8.dp,
-                30,
-                state.sleepPct?.let { "Sleep performance $it percent" } ?: "Sleep unavailable",
-            )
-            DialLabel("SLEEP", SleepPurpleLight)
-        }
-        Column(Modifier.width(132.dp), Arrangement.spacedBy(8.dp), Alignment.CenterHorizontally) {
-            Dial(
-                recovery?.let { it.score / 100f }, recovery?.score?.toString() ?: "—", if (recovery != null) "%" else "", recoveryColor,
-                132.dp, 7.dp, 44, recovery?.let { "Recovery ${it.score} percent" } ?: "Recovery unavailable",
-                note = if (recovery?.partial == true) "Partial" else null,
-            )
-            DialLabel("RECOVERY", recoveryColor)
-        }
-        Column(Modifier.width(96.dp), Arrangement.spacedBy(8.dp), Alignment.CenterHorizontally) {
-            val strain = state.strain
-            Dial(
-                strain?.let { (it / 21.0).coerceIn(0.0, 1.0).toFloat() },
-                strain?.let { "%.1f".format(Locale.US, it) } ?: "—",
-                "",
-                StrainBlue,
-                96.dp,
-                8.dp,
-                30,
-                strain?.let { "Strain ${"%.1f".format(Locale.US, it)} of 21" } ?: "Strain unavailable",
-            )
-            DialLabel("STRAIN", StrainBlueLight)
+            Column(
+                Modifier.width(side).heightIn(min = MinTouchTarget).clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClick = onOpenSleep),
+                Arrangement.spacedBy(8.dp),
+                Alignment.CenterHorizontally,
+            ) {
+                Dial(
+                    state.sleepPct?.let { it / 100f },
+                    state.sleepPct?.toString() ?: "—",
+                    if (state.sleepPct != null) "%" else "",
+                    SleepPurple,
+                    side,
+                    sideStroke,
+                    sideText,
+                    state.sleepPct?.let { "Sleep performance $it percent" } ?: "Sleep unavailable",
+                )
+                DialLabel("SLEEP", SleepPurpleLight)
+            }
+            Column(Modifier.width(middle), Arrangement.spacedBy(8.dp), Alignment.CenterHorizontally) {
+                Dial(
+                    recovery?.let { it.score / 100f }, recovery?.score?.toString() ?: "—", if (recovery != null) "%" else "", recoveryColor,
+                    middle, MiddleDial.second * scale, (MiddleDial.third * scale).roundToInt(),
+                    recovery?.let { "Recovery ${it.score} percent" } ?: "Recovery unavailable",
+                    note = if (recovery?.partial == true) "Partial" else null,
+                )
+                DialLabel("RECOVERY", recoveryColor)
+            }
+            Column(Modifier.width(side), Arrangement.spacedBy(8.dp), Alignment.CenterHorizontally) {
+                val strain = state.strain
+                Dial(
+                    strain?.let { (it / 21.0).coerceIn(0.0, 1.0).toFloat() },
+                    strain?.let { "%.1f".format(Locale.US, it) } ?: "—",
+                    "",
+                    StrainBlue,
+                    side,
+                    sideStroke,
+                    sideText,
+                    strain?.let { "Strain ${"%.1f".format(Locale.US, it)} of 21" } ?: "Strain unavailable",
+                )
+                DialLabel("STRAIN", StrainBlueLight)
+            }
         }
     }
 }
@@ -512,6 +545,6 @@ private fun InsightCard(state: TodayUiState, modifier: Modifier = Modifier) {
         }
         val body = recovery?.let { insightSentence(it.top) } ?: state.recoveryReason?.replaceFirstChar(Char::uppercase)
         if (!body.isNullOrEmpty()) Text(body, fontSize = 14.sp, lineHeight = 21.sp, color = TextBody)
-        state.strainTarget?.let { Text("Strain target today: ${targetText(it)}", fontSize = 12.sp, color = TextMuted) }
+        state.strainTarget?.let { Text("Strain target${if (state.isToday) " today" else ""}: ${targetText(it)}", fontSize = 12.sp, color = TextMuted) }
     }
 }

@@ -174,6 +174,8 @@ class TodayViewModelTest {
         flow.value = today.plusDays(1)
         val stayed = withTimeout(10_000) { live.state.first { it.date == today.minusDays(2) && !it.isToday } }
         assertEquals(today.minusDays(2), stayed.date)
+        val rolled = withTimeout(10_000) { live.state.first { it.date == today.minusDays(2) && it.today == today.plusDays(1) } }
+        assertTrue(!rolled.isToday) // the screen words "Synced ..." from this today, not from the clock
         repeat(3) { live.nextDay() }
         val s = withTimeout(10_000) { live.state.first { it.date == today.plusDays(1) } }
         assertTrue(s.isToday)

@@ -18,6 +18,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -26,6 +27,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.width
 import dev.baseline.data.SportFamily
 import dev.baseline.scores.Contributor
 import dev.baseline.scores.RecoveryResult
@@ -43,6 +45,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.time.Instant
 import java.time.LocalDate
 
@@ -74,6 +77,7 @@ class TodayScreenTest {
             rows,
             BodyBatteryUi(80, curve, 62, null, false),
             Instant.ofEpochSecond(1_792_738_800L),
+            date,
         )
 
     private fun show(
@@ -533,5 +537,80 @@ class TodayScreenTest {
         rule.onNodeWithText("Garmin rejected your key", substring = true).assertDoesNotExist()
         status = dev.baseline.garmin.KeyStatus.Invalid
         rule.onNodeWithText("Garmin rejected your key, so new data can't sync. Paste a new key in Settings.").assertExists()
+    }
+
+    private fun dialWidths(): List<Float> = listOf("Sleep performance 86 percent", "Recovery 72 percent", "Strain 11.4 of 21").map {
+        rule.onNodeWithContentDescription(it, useUnmergedTree = true).getUnclippedBoundsInRoot().width.value
+    }
+
+    @Test
+    @Config(qualifiers = "w320dp-h800dp")
+    fun dialsShrinkTogetherOnANarrowScreen() {
+        show(full)
+        val bounds = listOf("Sleep performance 86 percent", "Recovery 72 percent", "Strain 11.4 of 21").map {
+            rule.onNodeWithContentDescription(it, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        }
+        val (sleep, recovery, strain) = bounds
+        assertEquals(sleep.width.value, strain.width.value, 0.01f) // Strain is no longer squeezed below Sleep
+        assertTrue("recovery stays the largest", recovery.width > sleep.width)
+        assertTrue("sleep is shrunk", sleep.width < 96.dp)
+        assertTrue("sleep touch target", sleep.width >= 48.dp)
+        bounds.forEach { assertTrue("$it inside the 320 dp screen", it.left >= 0.dp && it.right <= 320.dp) }
+        assertTrue(sleep.right <= recovery.left && recovery.right <= strain.left)
+    }
+
+    @Test
+    @Config(qualifiers = "w480dp-h800dp")
+    fun dialsKeepTheirNaturalSizeWhenThereIsRoom() {
+        show(full)
+        assertEquals(listOf(96f, 132f, 96f), dialWidths())
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp")
+    fun sleepAndStrainDialsStayEqualOnA360Phone() {
+        // 360 - 40 padding = 320 dp for 324 dp of dials: a barely perceptible shrink that keeps the three in the row.
+        show(full)
+        val (sleep, _, strain) = dialWidths()
+        assertEquals(sleep, strain, 0.01f)
+    }
+
+    @Test
+    fun dialScaleIsOneWhenTheDialsFitAndProportionalWhenTheyDoNot() {
+        assertEquals(1f, dialScale(324.dp), 0f)
+        assertEquals(1f, dialScale(500.dp), 0f)
+        assertEquals(0.5f, dialScale(162.dp), 0.001f)
+        assertEquals(0.5f, dialScale(100.dp), 0f) // never smaller than half
+    }
+
+    @Test
+    fun strainTargetOnlySaysTodayOnToday() {
+        var state by mutableStateOf(full)
+        rule.setContent { BaselineTheme { TodayContent(state, null, {}, {}, {}, {}, {}, {}) } }
+        rule.onNodeWithText("Strain target today: 14 – 18").assertExists()
+        state = full.copy(date = date.minusDays(1), isToday = false)
+        rule.onNodeWithText("Strain target: 14 – 18").assertExists()
+        rule.onNodeWithText("Strain target today", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun subtitleWordsTheSyncFromTheStatesTodayNotTheClock() {
+        // 2026-10-23 is long past on the host clock, yet it is "today" as far as the state is concerned.
+        val syncedOn23 = Instant.parse("2026-10-23T19:23:00Z")
+        val asToday = full.copy(date = LocalDate.of(2026, 10, 23), today = LocalDate.of(2026, 10, 23), lastSynced = syncedOn23)
+        var state by mutableStateOf(asToday)
+        rule.setContent { BaselineTheme { TodayContent(state, null, {}, {}, {}, {}, {}, {}, zone = java.time.ZoneOffset.UTC) } }
+        rule.onNodeWithText("Fri, Oct 23 · Synced 7:23 PM").assertExists()
+        // The day rolls over: the same sync reads as yesterday's.
+        state = asToday.copy(today = LocalDate.of(2026, 10, 24), isToday = false)
+        rule.onNodeWithText("Fri, Oct 23 · Synced Oct 23, 7:23 PM").assertExists()
+    }
+
+    @Test
+    fun sectionTitlesAndTheDayTitleAreHeadings() {
+        show(full.copy(activities = listOf(run)))
+        listOf("VS. 30-DAY BASELINE", "TODAY'S ACTIVITIES", "TODAY").forEach {
+            rule.onNodeWithText(it, useUnmergedTree = true).assert(isHeading())
+        }
     }
 }
