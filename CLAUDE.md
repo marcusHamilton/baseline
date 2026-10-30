@@ -136,6 +136,6 @@ adb reverse tcp:8080 tcp:8080                                                 # 
 
 ## Known follow-ups
 
-- A long re-score after a sync can exceed WorkManager's ~10-minute limit. The work reruns.
+- A long re-score after a sync can exceed WorkManager's ~10-minute limit. The work reruns. `ScorePipeline` computes each day's load once per run and caches per-stream TRIMP in memory (keyed by blob fingerprint, HR zones, Banister set and duration), which shortens it but does not remove the limit.
 - `stat-label`, `day-highlight` and `day-card` test tags in production composables are deliberate: they mark layout-only nodes with no semantics, and the tests need their bounds.
 - Not yet verified on a device: replacing the key with a valid key in Settings, and API 36.
