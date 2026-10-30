@@ -42,3 +42,13 @@ Branch `claude/design-performance-audit-1d2c0l`. No emulator in the container, s
   day title is inside a clickable column, so it probably reads as heading plus button).
 - A minified release: no R8 or baseline-profile change was made, but `enableEdgeToEdge` and the new text auto-size
   are new code paths at startup.
+
+## Test trap found on the way
+
+A Robolectric Compose test that ends with a focused text field can wedge Compose's process-wide
+`AndroidUiDispatcher.Main` for every later test in the JVM. Disposing the field queues one last snapshot-apply
+dispatch; Robolectric's looper reset drops it, and the dispatcher stays marked as scheduled. Tests that turn
+`mainClock.autoAdvance` off then never recompose (here `TodayScreenTest`'s drag auto-scroll failed only when
+`OnboardingScreenTest` ran first). `OnboardingScreenTest` drains the main looper in an outer rule; copy that rule into
+any new test that focuses a text field. Gradle runs previously failed classes first, so delete
+`app/build/test-results/testDebugUnitTest` before re-running to reproduce an order-dependent failure.
