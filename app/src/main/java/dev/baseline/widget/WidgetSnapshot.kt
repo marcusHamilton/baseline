@@ -352,9 +352,14 @@ suspend fun loadWidgetSnapshot(container: AppContainer, is24h: Boolean, syncing:
     val firstDay = repo.firstDayOfWeek.first()
     val weekStart = today.with(TemporalAdjusters.previousOrSame(firstDay))
     val weekScores = repo.scores(weekStart, weekStart.plusDays(6)).first().associateBy { it.date }
-    val allActivities = repo.activities().first()
-    val strains = repo.allActivityScores().first().associate { it.activityId to it.strain }
-    val sets = repo.activeSetCounts().first()
+    // This week's activities plus the newest one overall (which may be from an earlier week, e.g. on a Monday morning);
+    // strains and set counts are read only for those ids, not the whole history.
+    val weekActivities = repo.activitiesBetween(weekStart, weekStart.plusDays(6)).first()
+    val latest = repo.latestActivity().first()
+    val recent = if (latest == null || weekActivities.any { it.id == latest.id }) weekActivities else weekActivities + latest
+    val ids = recent.map { it.id }
+    val strains = repo.activityScoresFor(ids).first().associate { it.activityId to it.strain }
+    val sets = repo.activeSetCountsFor(ids).first()
     return buildWidgetSnapshot(
         today = today,
         zone = zone,
@@ -371,7 +376,7 @@ suspend fun loadWidgetSnapshot(container: AppContainer, is24h: Boolean, syncing:
         hidden = hidden,
         imperial = imperial,
         firstDayOfWeek = firstDay,
-        recentActivities = allActivities,
+        recentActivities = recent,
         activityStrains = strains,
         activeSets = sets,
         weekScores = weekScores,

@@ -61,7 +61,12 @@ class Repository(private val db: AppDatabase, val prefs: UserPrefs, private val 
 
     fun activity(id: Long): Flow<ActivityEntity?> = db.activityDao().observe(id).distinctUntilChanged()
 
+    /** The newest activity by local start time, or null while there is none. */
+    fun latestActivity(): Flow<ActivityEntity?> = db.activityDao().latest().distinctUntilChanged()
+
     fun activityScore(id: Long): Flow<ActivityScoreEntity?> = db.activityScoreDao().observe(id).distinctUntilChanged()
+
+    fun activityScoresFor(ids: List<Long>): Flow<List<ActivityScoreEntity>> = db.activityScoreDao().forIds(ids).distinctUntilChanged()
 
     /** Null until the activity's FIT file is ingested. */
     fun activityStream(id: Long): Flow<ActivityStreamEntity?> =
@@ -77,8 +82,12 @@ class Repository(private val db: AppDatabase, val prefs: UserPrefs, private val 
 
     /** Active (non-rest) set count per strength activity; absent until the FIT file is ingested. */
     fun activeSetCounts(): Flow<Map<Long, Int>> = db.strengthSetDao().activeCounts().map { rows ->
+        rows.associate { it.activityId to it.sets }
     }.distinctUntilChanged()
 
+    /** Like [activeSetCounts], for just [ids]. */
+    fun activeSetCountsFor(ids: List<Long>): Flow<Map<Long, Int>> =
+        db.strengthSetDao().activeCounts(ids).map { rows -> rows.associate { it.activityId to it.sets } }.distinctUntilChanged()
 
     fun activitiesBetween(from: LocalDate, to: LocalDate): Flow<List<ActivityEntity>> = db.activityDao().between(from, to).distinctUntilChanged()
 
