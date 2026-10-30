@@ -24,14 +24,29 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.ExternalResource
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.shadows.ShadowLooper
 import java.io.File
 import java.time.Clock
 
 @RunWith(RobolectricTestRunner::class)
 class OnboardingScreenTest {
-    @get:Rule
+    /**
+     * Runs after the compose rule has torn the activity down. Disposing a focused text field writes snapshot state one last
+     * time, which queues a dispatch on the process-wide AndroidUiDispatcher.Main; Robolectric then resets the looper and drops
+     * that message, leaving the dispatcher marked as scheduled for good. Every later test in the JVM that relies on apply
+     * notifications without idling (TodayScreenTest's manual-clock drag) then never recomposes. Draining the looper here lets
+     * the queued dispatch run.
+     */
+    @get:Rule(order = 0)
+    val drainMainLooper =
+        object : ExternalResource() {
+            override fun after() = ShadowLooper.idleMainLooper()
+        }
+
+    @get:Rule(order = 1)
     val rule = createAndroidComposeRule<ComponentActivity>()
 
     private val scopes = ScopeCleanup()
