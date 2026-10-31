@@ -88,8 +88,11 @@ import dev.baseline.ui.components.CircleButton
 import dev.baseline.ui.components.Dial
 import dev.baseline.ui.components.KeyBanner
 import dev.baseline.ui.components.StatRow
-import dev.baseline.ui.components.TrainingLoadCard
 import dev.baseline.ui.components.UpdateBanner
+import dev.baseline.ui.components.weekCallout
+import dev.baseline.ui.components.weekCalloutColor
+import dev.baseline.ui.components.weekLine
+import dev.baseline.ui.components.weekTag
 import dev.baseline.ui.components.zoneColor
 import dev.baseline.ui.format.Formatters
 import dev.baseline.ui.theme.BarlowCondensed
@@ -126,6 +129,7 @@ fun TodayScreen(
     onOpenActivity: (Long) -> Unit,
     zone: StateFlow<ZoneId>,
     updater: Updater? = null,
+    onOpenTrends: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
@@ -149,7 +153,7 @@ fun TodayScreen(
             state, sync, vm::prevDay, vm::nextDay, onOpenCalendar, { onOpenSleep(state.date) }, onOpenActivity, vm::toggleBodyBattery,
             keyStatus, vm::toggleEdit, vm::moveRow, vm::toggleHidden, zoneNow,
             update, { updater?.primary() }, { tag -> updater?.dismiss(tag) },
-            onToggleTrainingLoad = vm::toggleTrainingLoad,
+            onOpenTrends = onOpenTrends,
         )
     }
 }
@@ -172,7 +176,7 @@ fun TodayContent(
     update: UpdateUi? = null,
     onUpdate: () -> Unit = {},
     onDismissUpdate: (String) -> Unit = {},
-    onToggleTrainingLoad: () -> Unit = {},
+    onOpenTrends: () -> Unit = {},
 ) {
     val scroll = rememberScrollState()
     var viewport by remember { mutableStateOf(Rect.Zero) }
@@ -198,8 +202,7 @@ fun TodayContent(
         syncLine?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 20.dp), fontSize = 12.sp, color = TextMuted, textAlign = TextAlign.Center) }
         Dials(state, onOpenSleep)
         BodyBatteryCard(state.bodyBattery, onToggleBodyBattery, Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp), state.isToday)
-        state.trainingLoad?.let { TrainingLoadCard(it, onToggleTrainingLoad, Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp)) }
-        InsightCard(state, Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp))
+        InsightCard(state, onOpenTrends, Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp))
         if (state.activities.isNotEmpty()) {
             Section(if (state.isToday) "TODAY'S ACTIVITIES" else "ACTIVITIES") {
                 state.activities.forEach { a -> ActivityCard(a, { onOpenActivity(a.id) }) }
@@ -547,11 +550,25 @@ private fun DialLabel(text: String, color: Color) = Text(text, fontSize = 12.sp,
 
 private fun targetText(r: ClosedFloatingPointRange<Double>) = "${r.start.roundToInt()} – ${r.endInclusive.roundToInt()}"
 
+/**
+ * Recovery's verdict plus the week's training load (fitness-fatigue-form spec §4): a tag, a callout only when the week
+ * needs attention, and the strain-target and week lines. Tapping it opens the Training load card on Trends.
+ */
 @Composable
-private fun InsightCard(state: TodayUiState, modifier: Modifier = Modifier) {
+private fun InsightCard(state: TodayUiState, onOpenTrends: () -> Unit, modifier: Modifier = Modifier) {
     val recovery = state.recovery
     val color = recovery?.let { zoneColor(it.zone) } ?: Surface2
-    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).padding(16.dp), Arrangement.spacedBy(8.dp)) {
+    val load = state.trainingLoad
+    val callout = load?.let(::weekCallout)
+    val tappable = if (load != null && !state.loading) {
+        Modifier.clickable(onClickLabel = "Open training load in Trends", role = Role.Button, onClick = onOpenTrends)
+    } else {
+        Modifier
+    }
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).then(tappable).heightIn(min = 48.dp).padding(16.dp),
+        Arrangement.spacedBy(8.dp),
+    ) {
         if (state.loading) {
             Text("Loading…", fontSize = 14.sp, color = TextMuted)
             return@Column
@@ -560,14 +577,49 @@ private fun InsightCard(state: TodayUiState, modifier: Modifier = Modifier) {
             Spacer(Modifier.size(10.dp).clip(CircleShape).background(color))
             Text(
                 (recovery?.let { zoneTitle(it.zone) } ?: "Not enough data for Recovery yet").uppercase(),
+                Modifier.weight(1f),
                 fontFamily = BarlowCondensed,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 18.sp,
                 letterSpacing = 0.54.sp,
             )
+            load?.let {
+                Text(
+                    weekTag(it.day),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (callout !=
+                        null
+                    ) {
+                        weekCalloutColor(it)
+                    } else {
+                        TextMuted
+                    },
+                )
+            }
         }
         val body = recovery?.let { insightSentence(it.top) } ?: state.recoveryReason?.replaceFirstChar(Char::uppercase)
         if (!body.isNullOrEmpty()) Text(body, fontSize = 14.sp, lineHeight = 21.sp, color = TextBody)
-        state.strainTarget?.let { Text("Strain target${if (state.isToday) " today" else ""}: ${targetText(it)}", fontSize = 12.sp, color = TextMuted) }
+        if (load != null && callout != null) WeekCallout(callout, weekCalloutColor(load))
+        val target = state.strainTarget?.let {
+            "Strain target${if (state.isToday) " today" else ""}: ${targetText(it)}${if (state.strainTargetEased) " (eased for this week)" else ""}"
+        }
+        val footer = listOfNotNull(target, load?.budget?.let(::weekLine))
+        if (footer.isNotEmpty()) {
+            Column(Modifier.padding(top = 2.dp), Arrangement.spacedBy(2.dp)) { footer.forEach { Text(it, fontSize = 12.sp, color = TextMuted) } }
+        }
+    }
+}
+
+/** A tinted note inside the Recovery card; the text carries the meaning, the colour only backs it up. */
+@Composable
+private fun WeekCallout(text: String, color: Color) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(color.copy(alpha = 0.12f)).padding(horizontal = 12.dp, vertical = 10.dp),
+        Arrangement.spacedBy(8.dp),
+        Alignment.Top,
+    ) {
+        Spacer(Modifier.padding(top = 7.dp).size(6.dp).clip(CircleShape).background(color))
+        Text(text, fontSize = 13.sp, lineHeight = 19.sp, color = color)
     }
 }

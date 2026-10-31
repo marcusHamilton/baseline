@@ -11,6 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -23,6 +25,7 @@ import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -46,7 +49,6 @@ import dev.baseline.ui.components.BodyBatteryFillColor
 import dev.baseline.ui.components.bodyBatteryChartDescription
 import dev.baseline.ui.components.bodyBatteryColor
 import dev.baseline.ui.components.statRowDescription
-import dev.baseline.ui.components.trainingLoadDescription
 import dev.baseline.ui.theme.BaselineTheme
 import dev.baseline.update.Release
 import dev.baseline.update.UpdateState
@@ -113,7 +115,6 @@ class TodayScreenTest {
                     onSleep,
                     onActivity,
                     onToggleBodyBattery = { state = state.copy(bodyBattery = state.bodyBattery.copy(expanded = !state.bodyBattery.expanded)) },
-                    onToggleTrainingLoad = { state = state.copy(trainingLoad = state.trainingLoad?.let { it.copy(expanded = !it.expanded) }) },
                 )
             }
         }
@@ -672,50 +673,66 @@ class TodayScreenTest {
     }
 
     private val weekStart = date.minusDays(2)
-    private val trainingLoad = TrainingLoadUi(
-        TrainingLoadDay(date, 64.0, 76.0, -18, FormState.PRODUCTIVE, null),
-        WeekBudget(weekStart, 62, false, 2, 4),
-        false,
-    )
-    private val budgetText = "62% of a normal week · room for ~2 hard days"
+
+    private fun load(state: FormState, budget: WeekBudget? = WeekBudget(weekStart, 62, false, 2, 4), formPct: Int? = -18) =
+        TrainingLoadUi(TrainingLoadDay(date, 64.0, 76.0, formPct, state, if (state == FormState.CALIBRATING) 12 else null), budget)
 
     @Test
-    fun trainingLoadCollapsedShowsStateAndBudget() {
-        show(full.copy(trainingLoad = trainingLoad))
-        rule.onNodeWithText("Training load").assertExists()
-        rule.onNodeWithText("Productive").assertExists()
-        rule.onNodeWithText(budgetText).assertExists()
-        rule.onNodeWithText("Fitness 64 load · your 6-week average").assertDoesNotExist()
+    fun aNormalWeekIsAQuietTagAndAFooterLine() {
+        show(full.copy(trainingLoad = load(FormState.PRODUCTIVE)))
+        rule.onNodeWithText("Productive week").assertExists()
+        rule.onNodeWithText("This week: 62% of normal · ~2 hard days left").assertExists()
+        rule.onNodeWithText("Strain target today: 14 – 18").assertExists()
+        rule.onNodeWithText("Keep today easy", substring = true).assertDoesNotExist()
+        rule.onNodeWithText("Training load").assertDoesNotExist() // no separate card any more
     }
 
     @Test
-    fun trainingLoadExpandsOnTap() {
-        show(full.copy(trainingLoad = trainingLoad))
-        rule.onNode(hasContentDescription(trainingLoadDescription(trainingLoad))).performScrollTo().performClick()
-        rule.onNodeWithText("Form \u221218%: You're building fitness at a pace you can absorb.").assertExists()
-        rule.onNodeWithText("Fitness 64 load · your 6-week average").assertExists()
-        rule.onNodeWithText("Fatigue 76 load · your last-week average").assertExists()
+    fun anOverreachingWeekCallsItOutAndEasesTheTarget() {
+        show(full.copy(trainingLoad = load(FormState.OVERREACHING, formPct = -60), strainTarget = 10.0..14.0, strainTargetEased = true))
+        rule.onNodeWithText("Overreaching week").assertExists()
+        rule.onNodeWithText("Fatigue is well above your fitness. Keep today easy.").assertExists()
+        rule.onNodeWithText("Strain target today: 10 – 14 (eased for this week)").assertExists()
     }
 
     @Test
-    fun trainingLoadCalibrating() {
-        val cal = TrainingLoadUi(TrainingLoadDay(date, 0.0, 0.0, null, FormState.CALIBRATING, 12), null, false)
-        show(full.copy(trainingLoad = cal))
-        rule.onNodeWithText("Calibrating · 12 days to go").assertExists()
-        rule.onNodeWithText("of a normal week", substring = true).assertDoesNotExist()
+    fun aFreshWeekCallsOutTheOpportunity() {
+        show(full.copy(trainingLoad = load(FormState.FRESH, formPct = 12)))
+        rule.onNodeWithText("You're rested. A good day for a hard session.").assertExists()
     }
 
     @Test
-    fun trainingLoadHiddenWhenNull() {
+    fun pastTheSafeRangeCallsItOut() {
+        show(full.copy(trainingLoad = load(FormState.PRODUCTIVE, WeekBudget(weekStart, 141, true, 0, 4))))
+        rule.onNodeWithText("You're past your safe range for the week. Keep the rest easy.").assertExists()
+        rule.onNodeWithText("This week: 141% of normal").assertExists()
+    }
+
+    @Test
+    fun calibratingIsAMutedTagWithoutAWeekLine() {
+        show(full.copy(trainingLoad = load(FormState.CALIBRATING, budget = null, formPct = null)))
+        rule.onNodeWithText("Calibrating").assertExists()
+        rule.onNodeWithText("This week", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun tappingTheRecoveryCardOpensTrends() {
+        var opened = 0
+        rule.setContent {
+            BaselineTheme { TodayContent(full.copy(trainingLoad = load(FormState.PRODUCTIVE)), null, {}, {}, {}, {}, {}, {}, onOpenTrends = { opened++ }) }
+        }
+        val card = rule.onNode(hasClickAction() and hasText("Productive week", substring = true))
+        card.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        assertEquals("Open training load in Trends", card.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+        assertTrue(card.getUnclippedBoundsInRoot().let { it.bottom - it.top } >= 48.dp)
+        card.performScrollTo().performClick()
+        assertEquals(1, opened)
+    }
+
+    @Test
+    fun withoutTrainingLoadTheRecoveryCardIsNotClickable() {
         show(full.copy(trainingLoad = null))
-        rule.onNodeWithText("Training load").assertDoesNotExist()
-    }
-
-    @Test
-    fun trainingLoadTouchTargetAndDescription() {
-        show(full.copy(trainingLoad = trainingLoad))
-        val node = rule.onNode(hasContentDescription(trainingLoadDescription(trainingLoad)) and hasClickAction())
-        node.assertExists()
-        assertTrue(node.getUnclippedBoundsInRoot().let { it.bottom - it.top } >= 48.dp)
+        rule.onNodeWithText("RECOVERED").assertExists()
+        rule.onNode(hasClickAction() and hasText("RECOVERED", substring = true)).assertDoesNotExist()
     }
 }

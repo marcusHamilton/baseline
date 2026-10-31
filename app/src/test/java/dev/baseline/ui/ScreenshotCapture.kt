@@ -112,7 +112,7 @@ class ScreenshotCapture {
         )
     }
 
-    private fun todayState(scores: List<ScoreEntity>, expanded: Boolean = false, earliest: LocalDate = first) = TodayUiState(
+    private fun todayState(scores: List<ScoreEntity>, earliest: LocalDate = first, bodyBatteryExpanded: Boolean = false) = TodayUiState(
         today, true, 86,
         RecoveryResult(72, false, RecoveryZone.GREEN, listOf(Contributor("hrv", 1.0, 6.2), Contributor("rhr", 1.0, -2.0))),
         null, 11.4, 14.0..18.0,
@@ -121,21 +121,30 @@ class ScreenshotCapture {
             StatRowUi("hrv", "HRV (overnight)", "58", "ms", "55 ms", "▲ 6%", true, "better"),
             StatRowUi("rhr", "Resting heart rate", "49", "bpm", "47 bpm", "▲ 2", false, "worse"),
         ),
-        BodyBatteryUi(81, (0..60).map { Instant.ofEpochSecond(1_792_738_800L + it * 600L) to (25 + it).coerceAtMost(81) }, 62, null, false),
+        BodyBatteryUi(81, (0..60).map { Instant.ofEpochSecond(1_792_738_800L + it * 600L) to (25 + it).coerceAtMost(81) }, 62, null, bodyBatteryExpanded),
         Instant.ofEpochSecond(1_792_738_800L),
         today,
-        trainingLoad = buildTrainingLoadUi(today, scores, earliest, DayOfWeek.MONDAY, 100.0, expanded),
+        trainingLoad = buildTrainingLoadUi(today, scores, earliest, DayOfWeek.MONDAY, 100.0),
     )
 
     private fun today(name: String, state: TodayUiState) = capture(name, heightDp = 1040) { TodayContent(state, null, {}, {}, {}, {}, {}, {}) }
 
-    @Test fun todayCollapsed() = today("today-collapsed", todayState(scores()))
+    /** Today as the app builds it, so an Overreaching week eases the strain target exactly as on the phone. */
+    private fun todayBuilt(s: TodayUiState): TodayUiState {
+        val stored = 14.0..18.0
+        val eased = dev.baseline.scores.TrainingLoad.easedTarget(stored, s.trainingLoad?.day?.state)
+        return s.copy(strainTarget = eased ?: stored, strainTargetEased = eased != null)
+    }
 
-    @Test fun todayExpanded() = today("today-expanded", todayState(scores(), expanded = true))
+    @Test fun todayNormalWeek() = today("today-normal-week", todayBuilt(todayState(scores())))
 
-    @Test fun todayOverreaching() = today("today-overreaching", todayState(scores(build = 2.6, window = 10), expanded = true))
+    @Test fun todayOverreaching() = today("today-overreaching", todayBuilt(todayState(scores(build = 2.6, window = 10))))
 
-    @Test fun todayCalibrating() = today("today-calibrating", todayState(scores(), earliest = today.minusDays(30)))
+    @Test fun todayFresh() = today("today-fresh", todayBuilt(todayState(scores(build = 0.8, window = 7))))
+
+    @Test fun todayCalibrating() = today("today-calibrating", todayBuilt(todayState(scores(), earliest = today.minusDays(30))))
+
+    @Test fun todayBodyBatteryExpanded() = today("today-body-battery-expanded", todayBuilt(todayState(scores(), bodyBatteryExpanded = true)))
 
     @Test fun trends90Days() = capture("trends-90d", heightDp = 1380) {
         TrendsContent(buildTrendsState(TrendRange.D90, today, days(), scores(), first, 100.0), {})
