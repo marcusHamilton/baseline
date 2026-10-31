@@ -6,6 +6,7 @@ import dev.baseline.data.db.DayEntity
 import dev.baseline.data.db.ScoreEntity
 import dev.baseline.garmin.KeyStatus
 import dev.baseline.prefs.DEFAULT_BASELINE_ORDER
+import dev.baseline.scores.FormState
 import dev.baseline.scores.RecoveryZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -95,6 +96,7 @@ class WidgetSnapshotTest {
         activityStrains: Map<Long, Double> = emptyMap(),
         activeSets: Map<Long, Int> = emptyMap(),
         weekScores: Map<LocalDate, ScoreEntity> = emptyMap(),
+        weekState: FormState? = null,
     ): WidgetSnapshot = buildWidgetSnapshot(
         today = today,
         zone = zone,
@@ -115,7 +117,15 @@ class WidgetSnapshotTest {
         activityStrains = activityStrains,
         activeSets = activeSets,
         weekScores = weekScores,
+        weekState = weekState,
     )
+
+    @Test
+    fun anOverreachingWeekEasesTheStrainTargetLikeToday() {
+        assertEquals("14–18", sampleSnapshot().readiness.strainTargetText)
+        assertEquals("14–18", sampleSnapshot(weekState = FormState.PRODUCTIVE).readiness.strainTargetText)
+        assertEquals("10–14", sampleSnapshot(weekState = FormState.OVERREACHING).readiness.strainTargetText)
+    }
 
     @Test
     fun morningBeforeSyncDoesNotLeakYesterday() {
