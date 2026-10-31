@@ -190,4 +190,14 @@ class TrainingLoadTest {
         val loads = flat(100, 0.0, mon.minusDays(100)) + mapOf(mon to 100.0, mon.plusDays(1) to 100.0)
         assertNull(budget(loads, earliest = mon.minusDays(100), tau = null))
     }
+
+    @Test fun noBudgetWhenTheWeekStartedAfterALayoff() {
+        // Fitness at the week's start is ~0.07 (under 1 % of tau) but two hard days since lift today's to a real state:
+        // a normal week of ~0.5 load would read as tens of thousands of percent.
+        val first = mon.minusDays(500)
+        val loads = flat(200, 100.0, first) + flat(300, 0.0, first.plusDays(200)) + mapOf(mon to 200.0, mon.plusDays(1) to 200.0)
+        assertNotEquals(FormState.NO_RECENT_TRAINING, last(loads, wed, first, 100.0).state)
+        assertTrue(normal(loads) < 7 * 0.01 * 100.0)
+        assertNull(budget(loads, earliest = first))
+    }
 }

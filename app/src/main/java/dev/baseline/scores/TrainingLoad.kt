@@ -43,6 +43,8 @@ object TrainingLoad {
     /** No recent training below this fraction of the strain calibration's tau, so form % can't blow up after a break. */
     private const val MIN_FITNESS_OF_TAU = 0.01
 
+    private fun tooLittleFitness(fitness: Double, tau: Double?) = fitness <= 0 || (tau != null && fitness < MIN_FITNESS_OF_TAU * tau)
+
     fun stateOf(formPct: Int): FormState = when {
         formPct < -30 -> FormState.OVERREACHING
         formPct < -10 -> FormState.PRODUCTIVE
@@ -80,7 +82,7 @@ object TrainingLoad {
             else -> null
         }
         if (calibrating != null) return TrainingLoadDay(date, fitness, fatigue, null, FormState.CALIBRATING, calibrating)
-        if (fitness <= 0 || (tau != null && fitness < MIN_FITNESS_OF_TAU * tau)) {
+        if (tooLittleFitness(fitness, tau)) {
             return TrainingLoadDay(date, fitness, fatigue, null, FormState.NO_RECENT_TRAINING, null)
         }
         val pct = ((fitness - fatigue) / fitness * 100).roundToInt()
@@ -89,14 +91,16 @@ object TrainingLoad {
 
     /**
      * [date]'s week budget (spec §3.4); null while calibrating, with no recent training, or when the week started with
-     * no fitness. Pass loads from `date − 7 − WARM_UP_DAYS`. A hard day is a strain-14 day: `tau × ln 3` in load.
+     * (next to) no fitness. Pass loads from `date − 7 − WARM_UP_DAYS`. A hard day is a strain-14 day: `tau × ln 3` in load.
      */
     fun weekBudget(loads: Map<LocalDate, Double>, date: LocalDate, firstDayOfWeek: DayOfWeek, earliestScore: LocalDate?, tau: Double?): WeekBudget? {
         val state = series(loads, date, date, earliestScore, tau).single().state
         if (state == FormState.CALIBRATING || state == FormState.NO_RECENT_TRAINING) return null
         val weekStart = date.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
-        val normal = 7 * series(loads, weekStart, weekStart, earliestScore, tau).single().fitness
-        if (normal <= 0) return null
+        val startFitness = series(loads, weekStart, weekStart, earliestScore, tau).single().fitness
+        // A week begun after a layoff has next to no "normal" to compare with; it would read as thousands of percent.
+        if (tooLittleFitness(startFitness, tau)) return null
+        val normal = 7 * startFitness
         var weekLoad = 0.0
         var d = weekStart
         while (!d.isAfter(date)) {

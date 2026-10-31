@@ -136,7 +136,8 @@ data class WeekBudget(val weekStart: LocalDate, val pct: Int, val overBand: Bool
 
 - `overBand` is `weekLoad > 1.3 × normal`.
 - `hardDaysLeft` is null when there is no calibration.
-- No budget (`null`) while the state is Calibrating or No recent training, or when `normal` is 0.
+- No budget (`null`) while the state is Calibrating or No recent training, or when the fitness the week started with is
+  0 or under `0.01 × tau` (a week begun after a layoff has next to no normal to compare with).
 
 `TrainingLoad.weekBudget(loads, date, firstDayOfWeek, tau)` computes it; it needs loads from `W − 1 − WARM_UP_DAYS`
 to D.
