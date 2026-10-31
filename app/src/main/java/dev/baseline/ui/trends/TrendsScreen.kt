@@ -12,11 +12,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -60,13 +63,21 @@ private const val MISSING = "—"
 private val AXIS_DATE = DateTimeFormatter.ofPattern("MMM d", Locale.US)
 
 @Composable
-fun TrendsScreen(vm: TrendsViewModel) {
+fun TrendsScreen(vm: TrendsViewModel, focusTrainingLoad: Boolean = false, onFocused: () -> Unit = {}) {
     val state by vm.state.collectAsStateWithLifecycle()
-    TrendsContent(state, vm::setRange)
+    TrendsContent(state, vm::setRange, focusTrainingLoad, onFocused)
 }
 
+/** [focusTrainingLoad]: opened from Today's Recovery card, so scroll the Training load card into view, then [onFocused]. */
 @Composable
-fun TrendsContent(state: TrendsUiState, onRange: (TrendRange) -> Unit) {
+fun TrendsContent(state: TrendsUiState, onRange: (TrendRange) -> Unit, focusTrainingLoad: Boolean = false, onFocused: () -> Unit = {}) {
+    val trainingLoad = remember { BringIntoViewRequester() }
+    LaunchedEffect(focusTrainingLoad) {
+        if (focusTrainingLoad) {
+            trainingLoad.bringIntoView()
+            onFocused()
+        }
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("screen-trends").padding(bottom = 24.dp)) {
         Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 8.dp), Arrangement.spacedBy(14.dp)) {
             Text(
@@ -136,7 +147,7 @@ fun TrendsContent(state: TrendsUiState, onRange: (TrendRange) -> Unit) {
                 )
                 TimeAxis(start)
             }
-            TrendCard("TRAINING LOAD", state.trainingLoadHeader()) {
+            TrendCard("TRAINING LOAD", state.trainingLoadHeader(), Modifier.bringIntoViewRequester(trainingLoad)) {
                 TrendLine(
                     state.trainingLoad.map { it?.fitness?.roundToInt() },
                     StrainBlue,
@@ -171,8 +182,8 @@ private fun RangeChips(selected: TrendRange, onRange: (TrendRange) -> Unit) {
 }
 
 @Composable
-private fun TrendCard(title: String, average: String, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).padding(16.dp), Arrangement.spacedBy(10.dp)) {
+private fun TrendCard(title: String, average: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).padding(16.dp), Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.Bottom) {
             Text(
                 title,

@@ -5,6 +5,8 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -96,5 +98,19 @@ class TrendsScreenTest {
         rule.setContent { BaselineTheme { TrendsContent(state, {}) } }
         rule.onNode(hasContentDescription(state.trainingLoadDescription()), useUnmergedTree = true)
             .assert(hasAnyDescendant(hasText("No data in this range")))
+    }
+
+    @Test fun openingFromTodayScrollsToTheTrainingLoadCard() {
+        var focused = 0
+        val state = buildTrendsState(TrendRange.D30, today, emptyList(), emptyList())
+        rule.setContent { BaselineTheme { TrendsContent(state, {}, focusTrainingLoad = true, onFocused = { focused++ }) } }
+        rule.onNodeWithText("TRAINING LOAD").assertIsDisplayed()
+        assertEquals(1, focused)
+    }
+
+    @Test fun openedFromTheTabTheTrainingLoadCardIsBelowTheFold() {
+        val state = buildTrendsState(TrendRange.D30, today, emptyList(), emptyList())
+        rule.setContent { BaselineTheme { TrendsContent(state, {}) } }
+        rule.onNodeWithText("TRAINING LOAD").assertIsNotDisplayed()
     }
 }

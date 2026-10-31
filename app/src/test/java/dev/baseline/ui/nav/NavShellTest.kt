@@ -245,4 +245,22 @@ class NavShellTest {
         openDayFromCalendar(today.minusDays(2), today)
         awaitText(weekday(today.minusDays(2)))
     }
+
+    @Test
+    fun theRecoveryCardOpensTrendsAtTheTrainingLoadCard() {
+        val today = LocalDate.now(container.clock)
+        runBlocking {
+            for (i in 0..300L) { // long enough for fitness to catch up with fatigue: a steady, Maintaining week
+                container.db.dayDao().upsert(dev.baseline.data.db.DayEntity(today.minusDays(i)))
+                container.db.scoreDao().upsert(dev.baseline.data.db.ScoreEntity(today.minusDays(i), null, false, null, 100.0, 10.0, null, null, 1))
+            }
+        }
+        showWithKey()
+        awaitText("Maintaining week")
+        rule.onNode(androidx.compose.ui.test.hasClickAction() and androidx.compose.ui.test.hasText("Maintaining week", substring = true))
+            .performScrollTo().performClick()
+        awaitTag("screen-trends")
+        rule.waitUntil(5_000) { runCatching { rule.onNodeWithText("TRAINING LOAD").assertIsDisplayed() }.isSuccess }
+        rule.onNodeWithText("TRAINING LOAD").assertIsDisplayed()
+    }
 }
