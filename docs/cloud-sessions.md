@@ -44,7 +44,36 @@ Don't export the Android Studio `JAVA_HOME` from CLAUDE.md, because that path do
 | `tools/fake_garmin.py` | Yes | Check it with curl; see CLAUDE.md for the fake key and endpoints. |
 | Signed release | No | The keystore is only on the owner's Mac. `assembleRelease` gives an unsigned APK. |
 | Android emulator | **No** | No `/dev/kvm`. A software-emulated API 35 image takes ~35 min to boot, then system apps and the app itself ANR ("failed to complete startup"). Don't try it; hand on-device checks to a local session. |
+| Screenshots of Compose screens | Yes | Rendered by Robolectric, not a device; see "Screenshots without an emulator". |
 | Real Garmin API | No | The owner's key lives in `~/.config/garmin/.env` on the Mac. Use the fake server. |
+
+## Screenshots without an emulator
+
+`app/src/test/java/dev/baseline/ui/ScreenshotCapture.kt` renders the real composables to PNGs with Robolectric's native
+graphics. Use it to review layout and copy, and to put screenshots in a PR. Its tests are skipped unless Gradle gets
+`-Pscreenshots=<dir>`, so the normal suite and CI don't run them:
+
+```bash
+./gradlew :app:testDebugUnitTest --tests 'dev.baseline.ui.ScreenshotCapture' -Pscreenshots=<dir>   # a scratch dir
+```
+
+- **Add a test per screen or state.** Build the screen's UI state from synthetic data and pass the stateless content
+  composable to `capture(name, heightDp) { … }`. The screens' own state builders (`buildTodayState`,
+  `buildTrendsState`, `buildTrainingLoadUi`) are easier to feed than a database. Expect to tune the data: the first
+  numbers you pick often land in a different state than the one you meant to show.
+- **Look at every PNG** (open it with the Read tool) before using it. A passing test only means a file was written.
+- **What `capture` already handles:**
+  - `@GraphicsMode(NATIVE)`. The default mode fakes text measurement, so text neither wraps nor renders like the app.
+  - A `Surface` with the app's content colour. The app gets it from its `Scaffold`; under a bare `BaselineTheme`,
+    headings and dial numbers that don't set a colour come out black.
+  - A 400 × 1500 dp screen (`@Config(qualifiers = …)`), cropped to `heightDp` and halved, so a shot is ~130 KB.
+- **What it can't show:** system bars and insets, cold start, animations, the MapLibre activity map, and the
+  `RemoteViews` widgets (render their bitmaps from `WidgetGraphics` the way `WidgetGraphicsTest` does instead). Say in
+  the PR that the shots are rendered, not captured on a device, and that the on-device check is still owed.
+- **In a PR:** the GitHub tools here can't upload images. Commit the PNGs to the branch (e.g. `docs/screenshots/<feature>/`)
+  and link them as `https://raw.githubusercontent.com/marcusHamilton/baseline/<branch>/<path>`. Mention that the commit
+  can be dropped before merging.
+- Only made-up data goes in a screenshot, as in fixtures ("No personal data in the repo" in CLAUDE.md).
 
 ## Checking R8 and the baseline profile without a device
 

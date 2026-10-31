@@ -8,7 +8,7 @@ A personal Android app that turns your own Garmin data (Garmin Personal API) int
 
 ## Build and test
 
-> **Cloud session (Linux container, not the owner's Mac)?** Read `docs/cloud-sessions.md` first and run `tools/cloud_setup.sh`. There's no emulator, keystore or Garmin key there, and the commands below need that setup.
+> **Cloud session (Linux container, not the owner's Mac)?** Read `docs/cloud-sessions.md` first and run `tools/cloud_setup.sh`. There's no emulator, keystore or Garmin key there, and the commands below need that setup. Screens can still be rendered to PNGs for review ("Screenshots without an emulator" there).
 
 On the owner's Mac there's no system JDK; use Android Studio's:
 
