@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -543,7 +544,7 @@ class TodayScreenTest {
     private val offer = Release("v0.05", "Notes", "https://x", "https://x/a.apk", 54_815_418, null)
 
     @Test
-    fun anOfferedUpdateShowsUnderTheKeyBannerUntilDismissed() {
+    fun anOfferedUpdateShowsAboveTheDateHeaderUntilDismissed() {
         var tapped = 0
         var dismissed: String? = null
         var update by mutableStateOf(UpdateUi("0.04", true, state = UpdateState.Available(offer)))
@@ -556,11 +557,22 @@ class TodayScreenTest {
             }
         }
         rule.onNodeWithText("Baseline 0.05 is available.").assertIsDisplayed()
+        val banner = rule.onNodeWithText("Baseline 0.05 is available.").getUnclippedBoundsInRoot()
+        val header = rule.onNodeWithContentDescription("Previous day").getUnclippedBoundsInRoot()
+        assertTrue("banner ${banner.top} should be above the header ${header.top}", banner.bottom <= header.top)
         rule.onNodeWithText("Update (55 MB)").assertHeightIsAtLeast(48.dp).performClick()
         assertEquals(1, tapped)
         rule.onNodeWithContentDescription("Hide this update").assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp).performClick()
         assertEquals("v0.05", dismissed)
         rule.onNodeWithText("Baseline 0.05 is available.").assertDoesNotExist()
+    }
+
+    @Test
+    fun theBannerReportsDownloadProgressToAccessibility() {
+        val update = UpdateUi("0.04", true, state = UpdateState.Downloading(offer, 25, 100))
+        rule.setContent { BaselineTheme { TodayContent(full, null, {}, {}, {}, {}, {}, {}, update = update) } }
+        rule.onNode(SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo(0.25f, 0f..1f))).assertExists()
+        rule.onNodeWithText("Cancel").assertHeightIsAtLeast(48.dp)
     }
 
     @Test

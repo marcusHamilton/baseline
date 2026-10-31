@@ -174,11 +174,11 @@ fun TodayContent(
             viewport = it.boundsInWindow()
         }.verticalScroll(scroll).padding(bottom = 16.dp),
     ) {
+        (update?.state as? UpdateState.Offer)?.takeIf { update.showBanner }?.let { offer ->
+            UpdateBanner(offer, onUpdate, { onDismissUpdate(offer.release.tag) }, Modifier)
+        }
         Header(state, zone, onPrevDay, onNextDay, onOpenCalendar)
         KeyBanner(keyStatus, Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-        (update?.state as? UpdateState.Offer)?.takeIf { update.showBanner }?.let { offer ->
-            UpdateBanner(offer, onUpdate, { onDismissUpdate(offer.release.tag) }, Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-        }
         if (state.unreadable) {
             Text(
                 NOTE_UNREADABLE,
