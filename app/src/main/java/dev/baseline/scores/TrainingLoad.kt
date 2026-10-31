@@ -1,6 +1,10 @@
 package dev.baseline.scores
 
+import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.temporal.TemporalAdjusters
+import kotlin.math.floor
+import kotlin.math.ln
 import kotlin.math.roundToInt
 
 enum class FormState { CALIBRATING, NO_RECENT_TRAINING, OVERREACHING, PRODUCTIVE, MAINTAINING, FRESH, DETRAINING }
@@ -19,6 +23,12 @@ data class TrainingLoadDay(
     val calibratingDaysLeft: Int?,
 )
 
+/**
+ * This week's load against a normal week (7 × fitness the day before the week started). [daysLeft] is the days after
+ * the date within its week, 0 on the week's last day; [hardDaysLeft] is null without a strain calibration.
+ */
+data class WeekBudget(val weekStart: LocalDate, val pct: Int, val overBand: Boolean, val hardDaysLeft: Int?, val daysLeft: Int)
+
 /** Fitness (42-day) and fatigue (7-day) exponentially weighted day loads, form and its state (fitness-fatigue-form spec §3). */
 object TrainingLoad {
     /** Read this many days before the first shown date: starting at 0 that far back leaves ~5 % error in fitness. */
@@ -26,6 +36,9 @@ object TrainingLoad {
     private const val FITNESS_DAYS = 42.0
     private const val FATIGUE_DAYS = 7.0
     private const val CALIBRATION_DAYS = 42L
+
+    /** The top of the safe range, as a multiple of a normal week. */
+    private const val SAFE_BAND = 1.3
 
     /** No recent training below this fraction of the strain calibration's tau, so form % can't blow up after a break. */
     private const val MIN_FITNESS_OF_TAU = 0.01
@@ -72,5 +85,26 @@ object TrainingLoad {
         }
         val pct = ((fitness - fatigue) / fitness * 100).roundToInt()
         return TrainingLoadDay(date, fitness, fatigue, pct, stateOf(pct), null)
+    }
+
+    /**
+     * [date]'s week budget (spec §3.4); null while calibrating, with no recent training, or when the week started with
+     * no fitness. Pass loads from `date − 7 − WARM_UP_DAYS`. A hard day is a strain-14 day: `tau × ln 3` in load.
+     */
+    fun weekBudget(loads: Map<LocalDate, Double>, date: LocalDate, firstDayOfWeek: DayOfWeek, earliestScore: LocalDate?, tau: Double?): WeekBudget? {
+        val state = series(loads, date, date, earliestScore, tau).single().state
+        if (state == FormState.CALIBRATING || state == FormState.NO_RECENT_TRAINING) return null
+        val weekStart = date.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
+        val normal = 7 * series(loads, weekStart, weekStart, earliestScore, tau).single().fitness
+        if (normal <= 0) return null
+        var weekLoad = 0.0
+        var d = weekStart
+        while (!d.isAfter(date)) {
+            weekLoad += loadOn(loads, d)
+            d = d.plusDays(1)
+        }
+        val daysLeft = (weekStart.plusDays(6).toEpochDay() - date.toEpochDay()).toInt()
+        val hardDays = tau?.takeIf { it > 0 }?.let { floor((SAFE_BAND * normal - weekLoad) / (it * ln(3.0))).toInt().coerceIn(0, daysLeft) }
+        return WeekBudget(weekStart, (weekLoad / normal * 100).roundToInt(), weekLoad > SAFE_BAND * normal, hardDays, daysLeft)
     }
 }

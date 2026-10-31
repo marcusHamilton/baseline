@@ -5,7 +5,10 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.DayOfWeek
 import java.time.LocalDate
+import kotlin.math.ln
+import kotlin.math.roundToInt
 
 class TrainingLoadTest {
     private val d0 = LocalDate.of(2026, 1, 1)
@@ -101,5 +104,90 @@ class TrainingLoadTest {
         val got = TrainingLoad.series(bad, d0.plusDays(40), d0.plusDays(99), d0, 50.0)
         assertEquals(TrainingLoad.series(zero, d0.plusDays(40), d0.plusDays(99), d0, 50.0), got)
         got.forEach { assertTrue(it.fitness.isFinite() && it.fatigue.isFinite()) }
+    }
+
+    // Week budget. 2026-03-02 is a Monday; 2026-03-04 (a Wednesday) is the date unless a test says otherwise.
+    private val mon = LocalDate.of(2026, 3, 2)
+    private val wed = mon.plusDays(2)
+    private val start = mon.minusDays(300)
+    private val history = flat(300, 100.0, start)
+
+    private fun week(vararg l: Double) = history + l.withIndex().associate { (i, v) -> mon.plusDays(i.toLong()) to v }
+
+    private fun normal(loads: Map<LocalDate, Double>, weekStart: LocalDate = mon) =
+        7 * TrainingLoad.series(loads, weekStart, weekStart, start, null).single().fitness
+
+    private fun budget(
+        loads: Map<LocalDate, Double>,
+        date: LocalDate = wed,
+        first: DayOfWeek = DayOfWeek.MONDAY,
+        earliest: LocalDate? = start,
+        tau: Double? = 100.0,
+    ) = TrainingLoad.weekBudget(loads, date, first, earliest, tau)
+
+    @Test fun budgetTakesNormalFromTheDayBeforeTheWeek() {
+        val loads = week(200.0, 0.0, 100.0)
+        val b = budget(loads)!!
+        assertEquals(mon, b.weekStart)
+        assertEquals((300 / normal(loads) * 100).roundToInt(), b.pct)
+        assertEquals(4, b.daysLeft)
+    }
+
+    @Test fun sundayStartWeek() {
+        val b = budget(week(200.0, 0.0, 100.0), first = DayOfWeek.SUNDAY)!!
+        assertEquals(mon.minusDays(1), b.weekStart)
+        assertEquals(3, b.daysLeft)
+    }
+
+    @Test fun todaysPartialLoadCounts() {
+        val before = week(200.0, 0.0, 100.0)
+        val after = week(200.0, 0.0, 150.0)
+        assertEquals((350 / normal(after) * 100).roundToInt(), budget(after)!!.pct)
+        assertTrue(budget(after)!!.pct > budget(before)!!.pct)
+    }
+
+    @Test fun hardDaysLeftIsCappedToDaysLeftAndZero() {
+        val low = budget(week(100.0, 0.0, 0.0), tau = 10.0)!!
+        assertEquals(low.daysLeft, low.hardDaysLeft)
+        val n = normal(history)
+        val full = budget(week(1.29 * n, 0.0, 0.0), tau = 1000.0)!!
+        assertEquals(0, full.hardDaysLeft)
+        assertEquals(false, full.overBand)
+    }
+
+    @Test fun hardDayIsAStrain14Day() {
+        val n = normal(history)
+        val b = budget(week(1.3 * n - 2.5 * 100.0 * ln(3.0), 0.0, 0.0))!!
+        assertEquals(2, b.hardDaysLeft)
+    }
+
+    @Test fun overBand() {
+        val b = budget(week(1.31 * normal(history), 0.0, 0.0))!!
+        assertEquals(131, b.pct)
+        assertTrue(b.overBand)
+        assertEquals(0, b.hardDaysLeft)
+    }
+
+    @Test fun pastWeekLastDay() {
+        val b = budget(week(100.0, 100.0, 100.0, 0.0, 0.0, 0.0, 0.0), date = mon.plusDays(6))!!
+        assertEquals(0, b.daysLeft)
+        assertEquals(0, b.hardDaysLeft)
+    }
+
+    @Test fun noCalibrationNoHardDays() {
+        val b = budget(week(200.0, 0.0, 100.0), tau = null)!!
+        assertNull(b.hardDaysLeft)
+        assertTrue(b.pct > 0)
+    }
+
+    @Test fun noBudgetWhileCalibratingOrNoTraining() {
+        assertNull(budget(week(200.0, 0.0, 100.0), earliest = wed.minusDays(10)))
+        val rested = flat(200, 100.0, start) + flat(300, 0.0, start.plusDays(200))
+        assertNull(budget(rested, date = start.plusDays(500)))
+    }
+
+    @Test fun zeroNormalGivesNoBudget() {
+        val loads = flat(100, 0.0, mon.minusDays(100)) + mapOf(mon to 100.0, mon.plusDays(1) to 100.0)
+        assertNull(budget(loads, earliest = mon.minusDays(100), tau = null))
     }
 }
