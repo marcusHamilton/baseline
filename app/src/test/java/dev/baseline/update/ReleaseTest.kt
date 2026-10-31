@@ -10,7 +10,7 @@ class ReleaseTest {
     private val latest = checkNotNull(javaClass.getResource("/fixtures/github_release_latest.json")).readText()
 
     @Test
-    fun parsesTheRealLatestReleaseResponse() {
+    fun parsesAGitHubLatestReleaseResponse() {
         val r = (parseRelease(latest) as ParsedRelease.Ok).release
         assertEquals("v0.04", r.tag)
         assertEquals("0.04", r.version)
