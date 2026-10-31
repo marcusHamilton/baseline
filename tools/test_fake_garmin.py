@@ -137,5 +137,45 @@ class FakeGarminDates(unittest.TestCase):
         self.assertEqual(e.exception.code, 400)
 
 
+class FakeRelease(unittest.TestCase):
+    """--release-apk: the in-app updater's view of GitHub (spec: 2026-10-29-in-app-updates-design.md §8)."""
+
+    def setUp(self):
+        import hashlib
+        import tempfile
+        self.apk = Path(tempfile.mkdtemp()) / "test.apk"
+        self.apk.write_bytes(bytes(range(256)) * 40)
+        self.sha = hashlib.sha256(self.apk.read_bytes()).hexdigest()
+        release = fg.fake_release(self.apk, "v0.05")
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), fg.make_handler(KEY, fg.Dataset(date(2026, 10, 26)), release))
+        self.base = f"http://127.0.0.1:{self.httpd.server_port}"
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        self.addCleanup(self.httpd.server_close)
+        self.addCleanup(self.httpd.shutdown)
+
+    def test_latest_release_needs_no_token_and_matches_the_apk(self):
+        r = urllib.request.urlopen(self.base + fg.RELEASE_PATH)
+        doc = json.loads(r.read())
+        self.assertEqual(doc["tag_name"], "v0.05")
+        [asset] = doc["assets"]
+        self.assertEqual(asset["size"], self.apk.stat().st_size)
+        self.assertEqual(asset["digest"], f"sha256:{self.sha}")
+        self.assertEqual(urllib.request.urlopen(asset["browser_download_url"]).read(), self.apk.read_bytes())
+        # The app sends the ETag back; an unchanged release is a 304, as on GitHub.
+        again = urllib.request.Request(self.base + fg.RELEASE_PATH, headers={"If-None-Match": r.headers["ETag"]})
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(again)
+        self.assertEqual(e.exception.code, 304)
+
+    def test_without_release_apk_there_is_no_release(self):
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), fg.make_handler(KEY, fg.Dataset(date(2026, 10, 26))))
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        self.addCleanup(httpd.server_close)
+        self.addCleanup(httpd.shutdown)
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(f"http://127.0.0.1:{httpd.server_port}{fg.RELEASE_PATH}")
+        self.assertEqual(e.exception.code, 404)
+
+
 if __name__ == "__main__":
     unittest.main()

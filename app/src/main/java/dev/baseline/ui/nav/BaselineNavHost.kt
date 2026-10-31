@@ -240,6 +240,7 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                         onOpenSleep = { date -> nav.navigate("sleep/$date") },
                         onOpenActivity = { id -> nav.navigate("activity/$id") },
                         zone = container.dateTicker.zone,
+                        updater = container.updater,
                     )
                 }
                 composable(Routes.CALENDAR) {
@@ -312,6 +313,7 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                             )
                         },
                         container.dateTicker.zone,
+                        container.updater,
                         container.clock,
                     )
                 }

@@ -9,6 +9,7 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.work.Configuration
 import dev.baseline.sync.SyncWorker
+import dev.baseline.update.UpdateDownloadWorker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +29,9 @@ class BaselineApp :
         super.onCreate()
         container = AppContainer(this)
         SyncWorker.createChannel(this)
+        UpdateDownloadWorker.createChannel(this)
+        // Tidies up after an update, then keeps the daily release check in step with Settings.
+        container.updater.start()
         // Midnight and clock/timezone changes while the process is alive; MainActivity.onResume covers the rest.
         val dateChanged =
             object : BroadcastReceiver() {

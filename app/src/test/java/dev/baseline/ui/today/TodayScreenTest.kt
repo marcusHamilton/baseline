@@ -10,10 +10,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertWidthIsAtLeast
@@ -39,6 +42,9 @@ import dev.baseline.ui.components.bodyBatteryChartDescription
 import dev.baseline.ui.components.bodyBatteryColor
 import dev.baseline.ui.components.statRowDescription
 import dev.baseline.ui.theme.BaselineTheme
+import dev.baseline.update.Release
+import dev.baseline.update.UpdateState
+import dev.baseline.update.UpdateUi
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -537,6 +543,50 @@ class TodayScreenTest {
         rule.onNodeWithText("Garmin rejected your key", substring = true).assertDoesNotExist()
         status = dev.baseline.garmin.KeyStatus.Invalid
         rule.onNodeWithText("Garmin rejected your key, so new data can't sync. Paste a new key in Settings.").assertExists()
+    }
+
+    private val offer = Release("v0.05", "Notes", "https://x", "https://x/a.apk", 54_815_418, null)
+
+    @Test
+    fun anOfferedUpdateShowsAboveTheDateHeaderUntilDismissed() {
+        var tapped = 0
+        var dismissed: String? = null
+        var update by mutableStateOf(UpdateUi("0.04", true, state = UpdateState.Available(offer)))
+        rule.setContent {
+            BaselineTheme {
+                TodayContent(full, null, {}, {}, {}, {}, {}, {}, update = update, onUpdate = { tapped++ }, onDismissUpdate = {
+                    dismissed = it
+                    update = update.copy(dismissedTag = it)
+                })
+            }
+        }
+        rule.onNodeWithText("Baseline 0.05 is available.").assertIsDisplayed()
+        val banner = rule.onNodeWithText("Baseline 0.05 is available.").getUnclippedBoundsInRoot()
+        val header = rule.onNodeWithContentDescription("Previous day").getUnclippedBoundsInRoot()
+        assertTrue("banner ${banner.top} should be above the header ${header.top}", banner.bottom <= header.top)
+        rule.onNodeWithText("Update (55 MB)").assertHeightIsAtLeast(48.dp).performClick()
+        assertEquals(1, tapped)
+        rule.onNodeWithContentDescription("Hide this update").assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp).performClick()
+        assertEquals("v0.05", dismissed)
+        rule.onNodeWithText("Baseline 0.05 is available.").assertDoesNotExist()
+    }
+
+    @Test
+    fun theBannerReportsDownloadProgressToAccessibility() {
+        val update = UpdateUi("0.04", true, state = UpdateState.Downloading(offer, 25, 100))
+        rule.setContent { BaselineTheme { TodayContent(full, null, {}, {}, {}, {}, {}, {}, update = update) } }
+        rule.onNode(SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo(0.25f, 0f..1f))).assertExists()
+        rule.onNodeWithText("Cancel").assertHeightIsAtLeast(48.dp)
+    }
+
+    @Test
+    fun noUpdateBannerWhenUpToDateOrInADebugBuild() {
+        var update by mutableStateOf(UpdateUi("0.04", true))
+        rule.setContent { BaselineTheme { TodayContent(full, null, {}, {}, {}, {}, {}, {}, update = update) } }
+        rule.onNodeWithContentDescription("Hide this update").assertDoesNotExist()
+        update = UpdateUi("0.04", enabled = false, state = UpdateState.Available(offer))
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("Hide this update").assertDoesNotExist()
     }
 
     private fun dialWidths(): List<Float> = listOf("Sleep performance 86 percent", "Recovery 72 percent", "Strain 11.4 of 21").map {

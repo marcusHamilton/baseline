@@ -355,7 +355,7 @@ All screens follow the mockups.
 | Activity detail | Built from sections that depend on the sport: **Run**: map, summary, HR chart, zones, splits, cadence/power/stride. **Ride**: map, speed/power/elevation, zones, laps. **Swim**: lengths, pace per 100 m, strokes, zones. **Strength**: sets by exercise, HR chart. **Other**: summary, HR, zones. Garmin's training load is shown next to Baseline strain. |
 | Records | Run / Ride / Swim tabs, plus a best-power row for rides. |
 | Trends | 7 / 30 / 90-day range. Recovery bars, HRV line with Garmin's balanced band, RHR line, sleep vs need. |
-| Settings | Key status, expiry and replace; sync interval and "Sync now"; "N items couldn't sync" + "Retry failed" when any sync task is FAILED (re-queues them and syncs now); history coverage; strain coefficient set; recalculate history; units. |
+| Settings | Key status, expiry and replace; sync interval and "Sync now"; "N items couldn't sync" + "Retry failed" when any sync task is FAILED (re-queues them and syncs now); history coverage; strain coefficient set; recalculate history; units. An **App** card: version, the update on offer with its notes and one button (Update / Allow / Cancel / Install / Retry), "Check now" and a daily-check switch (`2026-10-29-in-app-updates-design.md`). Today shows the same offer as a dismissable banner under the key banner. |
 
 **Navigation:**
 - Four tabs: Today, Activities, Trends, Settings. Tapping a tab always opens that tab's own page, never a page left open under it (Activities → Records, then Activities, shows Activities). Tapping Today also returns it to the current day. A page opened from a tab keeps that tab highlighted. Back from any tab lands on Today.
@@ -423,11 +423,16 @@ stays private (local, or a private GitHub repo).
 | FIT files | Garmin FIT SDK for Java. The Maven coordinates are confirmed at scaffold time. |
 | Charts | Vico |
 | Maps | MapLibre Android with OpenFreeMap vector tiles (no API key) |
+| Updates | GitHub's public releases API and `PackageInstaller`, with the libraries above; no new dependency (`2026-10-29-in-app-updates-design.md`) |
 | Reordering | A small custom drag-reorder (`RowReorder.kt`, with edge auto-scroll); no library |
 | Tests | JUnit, MockWebServer, kotlinx-coroutines-test |
 | Start-up speed | `androidx.profileinstaller` with a hand-written baseline profile (`app/src/main/baseline-prof.txt`) |
 
 Versions are pinned in `gradle/libs.versions.toml` at scaffold time.
+
+**Hosts the app talks to:** Garmin (`personal.connectapi.garmin.com`), OpenFreeMap for map tiles, and, for
+in-app updates, `api.github.com` once a day plus GitHub's download CDN when the owner taps Update. Only Garmin ever
+sees the key; the update client has no authenticator (`UpdatesUrlTest`). The daily check can be turned off in Settings.
 
 **Release build:** R8 (`isMinifyEnabled`) and resource shrinking are on for `release`; the keep rules are
 in `app/proguard-rules.pro`, which also records why each library needs none of its own. `SyncWorker`'s

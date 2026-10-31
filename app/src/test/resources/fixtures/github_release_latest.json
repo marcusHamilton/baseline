@@ -1,0 +1,20 @@
+{
+  "url": "https://api.github.com/repos/marcusHamilton/baseline/releases/1",
+  "html_url": "https://github.com/marcusHamilton/baseline/releases/tag/v0.04",
+  "tag_name": "v0.04",
+  "name": "Baseline 0.04",
+  "draft": false,
+  "prerelease": false,
+  "body": "Adds five home-screen widgets: Readiness, Vitals, Body Battery, Sleep and Weekly Activity. They refresh after each sync and follow the phone's time zone and 12/24h setting. Signed with the same key as earlier releases, so it installs over 0.03.",
+  "assets": [
+    {
+      "url": "https://api.github.com/repos/marcusHamilton/baseline/releases/assets/1",
+      "name": "Baseline-0.04.apk",
+      "content_type": "application/vnd.android.package-archive",
+      "state": "uploaded",
+      "size": 54815418,
+      "digest": "sha256:80430eaf23dd74f890c9b95c9d7c31486f02259747e3bc23e4d51303bfe26fff",
+      "browser_download_url": "https://github.com/marcusHamilton/baseline/releases/download/v0.04/Baseline-0.04.apk"
+    }
+  ]
+}

@@ -7,16 +7,32 @@ server (2026-10-26).
 ## Setup: run this first
 
 ```bash
-tools/cloud_setup.sh
+tools/cloud_setup.sh            # add --warm to also resolve dependencies and compile once
 ```
 
-It's idempotent and takes about 2 minutes. It:
+It's idempotent: about 2 minutes on a fresh container, a few seconds after that. If a session starts without the SDK
+(no `~/android-sdk`), run it first.
+
+The owner can make every session start ready instead: the cloud environment's **Setup script** (environment menu in the
+session's title bar → Edit) holds the whole of `tools/cloud_env_setup.sh`, pasted in. It has to be self-contained,
+because it runs before the repo is cloned. So it sets `ANDROID_HOME` in `~/.bashrc` and `~/.profile` rather than writing
+`local.properties`; Gradle falls back to that. It does everything below except `--warm`. When you change one of the
+two scripts, change the other, and tell the owner to re-paste.
+
+The scripts:
 
 - Installs the Android SDK into `~/android-sdk` (platform 37.0, build-tools 37.0.0, platform-tools) and writes `local.properties`.
   The container has no SDK. The bootstrap `cmdline-tools` zip is too old to see `platforms;android-37.0`, so the script uses it
   only to install `cmdline-tools;19.0`. The platform package is `android-37.0`, not `android-37`.
 - Adds a Gradle init script (`~/.gradle/init.d/`) that tries Google's Maven Central mirror first. Through the
   cloud proxy, `repo.maven.apache.org` answers **429 Too Many Requests** on a cold cache, which fails the first build.
+- Pre-fetches Robolectric's Android runtimes (API 36, and API 30 for `WidgetLifecycleTest`) from the same mirror into
+  `~/.m2`. Robolectric downloads them itself, outside Gradle, so the mirror doesn't cover it and the tests fail with
+  "Failed to fetch maven artifact org.robolectric:android-all-instrumented:…". After a Robolectric upgrade, put the
+  new names from that error into the script.
+- Makes `/tmp/test.jks` (password `testtest`), a throwaway key for signing test builds (CLAUDE.md's update test and
+  R8 smoke tests). It's never the release key.
+- Installs the emulator and a `Medium_Phone_API_35` AVD **only if `/dev/kvm` exists**. No container has had it so far.
 
 Don't export the Android Studio `JAVA_HOME` from CLAUDE.md, because that path doesn't exist here. The system JDK 21 works.
 
@@ -50,6 +66,9 @@ You can't run the minified APK here, but you can check what R8 did:
   real-time timeouts (10 s) and can flake under load. If a test fails, re-run it on an idle machine before you call it
   a regression. `TrendsViewModelTest.rangeEndFollowsTheTodayFlow` used to be listed here; its failures were not load
   but a Room first-open race that left the in-memory database empty, fixed by `testutil.inMemoryDatabase()`.
+- **A Robolectric runtime the script doesn't know** (after an upgrade, or a new `@Config(sdk = …)`) fails with 429
+  ("Failed to fetch maven artifact org.robolectric:android-all-instrumented:…"). Add its name to `tools/cloud_setup.sh`
+  and re-run the script.
 - **`pkill -f <pattern>` kills your own shell** when the pattern is also in the command line you're running.
   Kill by PID instead.
 - Long Gradle runs can go over the 10-minute tool timeout. Run them in the background, or use `-q` and filter the output.
