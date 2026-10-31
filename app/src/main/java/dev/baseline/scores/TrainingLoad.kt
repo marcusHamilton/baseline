@@ -89,6 +89,16 @@ object TrainingLoad {
         return TrainingLoadDay(date, fitness, fatigue, pct, stateOf(pct), null)
     }
 
+    /** The amber strain-target band (spec §7.2), which an Overreaching week caps a higher target at. */
+    private val EASED_TARGET = 10.0..14.0
+
+    /**
+     * The strain target to show when the week is [state]: an Overreaching week eases a target above the amber band down to
+     * it (fitness-fatigue-form spec §4). Null when nothing changes, so callers keep the stored target.
+     */
+    fun easedTarget(target: ClosedFloatingPointRange<Double>, state: FormState?): ClosedFloatingPointRange<Double>? =
+        EASED_TARGET.takeIf { state == FormState.OVERREACHING && target.endInclusive > EASED_TARGET.endInclusive }
+
     /**
      * [date]'s week budget (spec §3.4); null while calibrating, with no recent training, or when the week started with
      * (next to) no fitness. Pass loads from `date − 7 − WARM_UP_DAYS`. A hard day is a strain-14 day: `tau × ln 3` in load.

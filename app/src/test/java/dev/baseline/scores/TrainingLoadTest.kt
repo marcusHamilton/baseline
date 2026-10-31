@@ -200,4 +200,12 @@ class TrainingLoadTest {
         assertTrue(normal(loads) < 7 * 0.01 * 100.0)
         assertNull(budget(loads, earliest = first))
     }
+
+    @Test fun anOverreachingWeekEasesAGreenTargetToTheAmberBand() {
+        assertEquals(10.0..14.0, TrainingLoad.easedTarget(14.0..18.0, FormState.OVERREACHING))
+        assertNull(TrainingLoad.easedTarget(10.0..14.0, FormState.OVERREACHING)) // already amber: nothing to ease
+        assertNull(TrainingLoad.easedTarget(0.0..10.0, FormState.OVERREACHING))
+        FormState.entries.filter { it != FormState.OVERREACHING }.forEach { assertNull(it.name, TrainingLoad.easedTarget(14.0..18.0, it)) }
+        assertNull(TrainingLoad.easedTarget(14.0..18.0, null))
+    }
 }
