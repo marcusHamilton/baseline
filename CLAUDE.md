@@ -38,10 +38,12 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
   1. Bump `versionCode` and `versionName` in `app/build.gradle.kts`.
   2. Run `./gradlew :app:assembleRelease`.
   3. Check the signature: `apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk`.
-  4. Tag `vX.Y` and attach the APK to a GitHub release (`gh release create`).
+  4. Write `release-notes/vX.YY.md` in the house format (`docs/release-notes.md`; `ReleaseNotesTest` checks it), get the owner's OK on the notes (see below), then copy the APK to `Baseline-X.YY.apk` and create the release: `gh release create vX.YY Baseline-X.YY.apk --notes-file release-notes/vX.YY.md`.
 - The phone's in-app updater offers every new non-draft, non-pre-release release within a day, so releases follow its rules:
   - `versionCode` must go up; the updater refuses an APK whose code isn't higher. Keep `vX.YY` tags (`0.10` > `0.09`; `0.4` and `0.04` compare equal).
-  - Exactly one `.apk` asset (`Baseline-X.YY.apk`). The first lines of the release notes are what Settings shows.
+  - **Never publish a release without the owner's OK on the notes.** Paste the full `release-notes/vX.YY.md` into the chat, list the PRs and commits it covers, and wait for a yes (or fixes, then show it again) before tagging or running `gh release create`.
+  - **Release notes follow `docs/release-notes.md`**: one summary line, then New / Improved / Fixed bullets, covering every PR and commit merged since the previous release (that page has the `gh` commands). The GitHub release body must be identical to `release-notes/vX.YY.md`; create it with `--notes-file` and `diff` it afterwards.
+  - Exactly one `.apk` asset (`Baseline-X.YY.apk`). The first lines of the release notes are what Settings shows, and the whole body is what the "What's new" dialog shows once after an update.
   - Never attach a `-fake` build. The updater refuses one anyway, but don't rely on that.
   - Publish as a **pre-release** to stage a build without offering it to the phone.
   - Before tagging, also update the previous release to the new one through the app on an emulator (the update test below).

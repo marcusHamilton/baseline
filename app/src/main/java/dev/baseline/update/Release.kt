@@ -8,8 +8,13 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 
-/** A GitHub release the app can install: its tag, notes and its one APK asset. [sha256] is lowercase hex, or null if GitHub sent no digest. */
-data class Release(val tag: String, val notes: String, val pageUrl: String, val apkUrl: String, val apkSize: Long, val sha256: String?) {
+/**
+ * A GitHub release the app can install: its tag, notes and its one APK asset. [markdown] is the release body as written
+ * (docs/release-notes.md); [notes] is the plain-text form Settings shows. [sha256] is lowercase hex, or null if GitHub sent no digest.
+ */
+data class Release(val tag: String, val markdown: String, val pageUrl: String, val apkUrl: String, val apkSize: Long, val sha256: String?) {
+    val notes: String get() = plainNotes(markdown)
+
     /** "0.05" for "v0.05": what the UI shows. */
     val version: String get() = tag.removePrefix("v")
 }
@@ -31,7 +36,7 @@ fun parseRelease(body: String): ParsedRelease {
     val url = apk.str("browser_download_url") ?: return ParsedRelease.Unusable("Release $tag has no download link")
     val size = apk.lng("size")?.takeIf { it > 0 } ?: return ParsedRelease.Unusable("Release $tag has no APK size")
     val sha = apk.str("digest")?.takeIf { it.startsWith("sha256:") }?.removePrefix("sha256:")?.lowercase()?.takeIf { it.length == 64 }
-    return ParsedRelease.Ok(Release(tag, plainNotes(o.str("body").orEmpty()), o.str("html_url") ?: url, url, size, sha))
+    return ParsedRelease.Ok(Release(tag, o.str("body").orEmpty().trim(), o.str("html_url") ?: url, url, size, sha))
 }
 
 private fun JsonObject.flag(key: String) = (this[key] as? JsonPrimitive)?.booleanOrNull == true
@@ -57,12 +62,15 @@ fun isNewer(tag: String, installed: String): Boolean {
 private val Link = Regex("""\[([^\]]*)]\([^)]*\)""")
 private val Emphasis = Regex("""\*\*|__|`""")
 
+/** Inline Markdown as plain text: links become their text, bold and code marks go. */
+internal fun stripInline(line: String): String = line.replace(Link, "$1").replace(Emphasis, "")
+
 /** Release notes are Markdown; the app shows them as plain text: no heading marks, bullets as "•", links as their text. */
 fun plainNotes(markdown: String): String = markdown
     .replace("\r\n", "\n")
     .lines()
     .map { line ->
-        val t = line.trimEnd().replace(Link, "$1").replace(Emphasis, "")
+        val t = stripInline(line.trimEnd())
         when {
             t.trimStart().startsWith("#") -> t.trimStart().trimStart('#').trim()
             t.trimStart().startsWith("- ") || t.trimStart().startsWith("* ") -> "• " + t.trimStart().drop(2)

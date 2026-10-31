@@ -16,6 +16,11 @@ import java.time.Instant
 /** Where an offered release is in the one-tap flow. Stored by name. */
 enum class Phase { AVAILABLE, NEEDS_PERMISSION, DOWNLOADING, READY, INSTALLING, FAILED }
 
+/** The release this process was installed from, waiting for the one "What's new" dialog. */
+data class WhatsNew(val tag: String, val markdown: String) {
+    val version: String get() = tag.removePrefix("v")
+}
+
 /** Everything the updater keeps between runs; [release] is null when nothing newer is on offer. */
 data class UpdateRecord(
     val autoCheck: Boolean = true,
@@ -27,6 +32,7 @@ data class UpdateRecord(
     val failure: String? = null,
     val sessionId: Int? = null,
     val dismissedTag: String? = null,
+    val whatsNew: WhatsNew? = null,
 )
 
 /** The updater's state in the app's DataStore (spec: in-app updates §4). No Room table: nothing here is history. */
@@ -46,6 +52,7 @@ class UpdatePrefs(private val store: DataStore<Preferences>) {
             failure = p[FAILURE],
             sessionId = p[SESSION],
             dismissedTag = p[DISMISSED],
+            whatsNew = p[WN_TAG]?.let { WhatsNew(it, p[WN_NOTES].orEmpty()) },
         )
     }
 
@@ -69,7 +76,7 @@ class UpdatePrefs(private val store: DataStore<Preferences>) {
         store.edit { p ->
             val sameRelease = p[TAG] == release.tag && p[APK_URL] == release.apkUrl && p[APK_SIZE] == release.apkSize && p[SHA] == release.sha256
             p[TAG] = release.tag
-            p[NOTES] = release.notes
+            p[NOTES] = release.markdown
             p[PAGE] = release.pageUrl
             p[APK_URL] = release.apkUrl
             p[APK_SIZE] = release.apkSize
@@ -80,10 +87,22 @@ class UpdatePrefs(private val store: DataStore<Preferences>) {
 
     /** Nothing newer is on offer (the check said so, or the update was installed). */
     suspend fun clearRelease() {
+        store.edit { it.removeOffer() }
+    }
+
+    /** [release] is what this process was installed from: clears the offer and keeps its notes for the "What's new" dialog. */
+    suspend fun installed(release: Release) {
         store.edit { p ->
-            listOf(TAG, NOTES, PAGE, APK_URL, SHA, DISMISSED).forEach { p.remove(it) }
-            p.remove(APK_SIZE)
-            p.resetPhase()
+            p[WN_TAG] = release.tag
+            p[WN_NOTES] = release.markdown
+            p.removeOffer()
+        }
+    }
+
+    suspend fun clearWhatsNew() {
+        store.edit {
+            it.remove(WN_TAG)
+            it.remove(WN_NOTES)
         }
     }
 
@@ -97,6 +116,12 @@ class UpdatePrefs(private val store: DataStore<Preferences>) {
 
     suspend fun dismiss(tag: String) {
         store.edit { it[DISMISSED] = tag }
+    }
+
+    private fun MutablePreferences.removeOffer() {
+        listOf(TAG, NOTES, PAGE, APK_URL, SHA, DISMISSED).forEach { remove(it) }
+        remove(APK_SIZE)
+        resetPhase()
     }
 
     private fun MutablePreferences.resetPhase() {
@@ -120,5 +145,7 @@ class UpdatePrefs(private val store: DataStore<Preferences>) {
         val FAILURE = stringPreferencesKey("update_failure")
         val SESSION = intPreferencesKey("update_session")
         val DISMISSED = stringPreferencesKey("update_dismissed_tag")
+        val WN_TAG = stringPreferencesKey("update_whats_new_tag")
+        val WN_NOTES = stringPreferencesKey("update_whats_new_notes")
     }
 }

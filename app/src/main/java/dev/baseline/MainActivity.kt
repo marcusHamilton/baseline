@@ -8,8 +8,10 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.baseline.ui.components.WhatsNewDialog
 import dev.baseline.ui.nav.BaselineNavHost
 import dev.baseline.ui.theme.BaselineTheme
+import dev.baseline.update.parseNotes
 import dev.baseline.widget.WidgetRoutes
 import dev.baseline.widget.WidgetTarget
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +47,10 @@ class MainActivity : ComponentActivity() {
                         runCatching { startActivity(it) }.onFailure { e -> Log.w("MainActivity", "install prompt: ${e.javaClass.simpleName}") }
                     }
                 }
+                // Once, on the first launch after an in-app update (Updater.onAppStart keeps the notes for it).
+                val updater = (application as BaselineApp).container.updater
+                val updateUi by updater.ui.collectAsStateWithLifecycle()
+                updateUi.whatsNew?.let { WhatsNewDialog(it.version, parseNotes(it.markdown), updater::dismissWhatsNew) }
                 BaselineNavHost(
                     container = (application as BaselineApp).container,
                     deepLink = deepLink,

@@ -107,6 +107,7 @@ data class UpdateUi(
     val checkError: String? = null,
     val state: UpdateState = UpdateState.UpToDate,
     val dismissedTag: String? = null,
+    val whatsNew: WhatsNew? = null,
 ) {
     /** Today's banner: any offer the owner hasn't dismissed. Dismissing hides that tag only. */
     val showBanner: Boolean get() = enabled && state is UpdateState.Offer && state.release.tag != dismissedTag
@@ -150,7 +151,7 @@ class Updater(
 
     val ui: StateFlow<UpdateUi> =
         combine(prefs.record, platform.checking, platform.downloadWork) { r, checking, work ->
-            UpdateUi(installedVersion, enabled, r.autoCheck, checking, r.checkedAt, r.checkError, stateOf(r, work), r.dismissedTag)
+            UpdateUi(installedVersion, enabled, r.autoCheck, checking, r.checkedAt, r.checkError, stateOf(r, work), r.dismissedTag, r.whatsNew)
         }.stateIn(scope, SharingStarted.WhileSubscribed(5_000), UpdateUi(installedVersion, enabled))
 
     /** Called once from Application.onCreate: tidies up after an update or a killed process, then keeps the schedule in step. */
@@ -228,6 +229,11 @@ class Updater(
                 }
             }
         }
+    }
+
+    /** The "What's new" dialog was closed; it is shown once per installed release. */
+    fun dismissWhatsNew() {
+        scope.launch { guarded("whatsNew") { prefs.clearWhatsNew() } }
     }
 
     fun dismiss(tag: String) {
@@ -334,7 +340,14 @@ class Updater(
                 release == null || !isNewer(release.tag, installedVersion) -> {
                     // Files first: once the offer is cleared, nothing points at them any more.
                     prune(keepTag = null)
-                    if (release != null) prefs.clearRelease()
+                    when {
+                        release == null -> Unit
+
+                        // Exactly the offered release: keep its notes for the one "What's new" dialog.
+                        versionParts(release.tag) == versionParts(installedVersion) -> prefs.installed(release)
+
+                        else -> prefs.clearRelease()
+                    }
                 }
 
                 // The process died after a commit whose session is gone: no answer will come. A live session is left

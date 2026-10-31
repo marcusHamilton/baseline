@@ -384,6 +384,35 @@ class UpdaterTest {
     }
 
     @Test
+    fun theUpdatedAppKeepsTheOffersNotesForOneWhatsNewUntilDismissed() = runBlocking {
+        val before = updater()
+        before.toReady()
+        before.awaitState { it.state is UpdateState.Ready }
+        stopUpdaters()
+
+        val after = updater(installedVersion = "0.05-fake")
+        val shown = after.awaitState { it.whatsNew != null }.whatsNew!!
+        assertEquals(WhatsNew("v0.05", "- Faster"), shown)
+        assertEquals("0.05", shown.version)
+        assertEquals(null, prefs.current().release)
+
+        after.dismissWhatsNew()
+        eventually { prefs.current().whatsNew == null }
+    }
+
+    @Test
+    fun aNewerManualInstallThanTheOfferShowsNoWhatsNew() = runBlocking {
+        val before = updater()
+        before.check()
+        before.awaitState { it.state is UpdateState.Available }
+        stopUpdaters()
+
+        updater(installedVersion = "0.06")
+        eventually { prefs.current().release == null }
+        assertEquals(null, prefs.current().whatsNew)
+    }
+
+    @Test
     fun aProcessKilledMidInstallWithTheSessionGoneOffersARetry() = runBlocking {
         val before = updater()
         before.onForeground(true)
@@ -513,5 +542,5 @@ class UpdaterTest {
         assertFalse(File(platform.updatesDir, "v0.05.apk.part").exists())
     }
 
-    private fun release() = Release("v0.05", "• Faster", "https://x/v0.05", server.url("/Baseline.apk").toString(), apk.size.toLong(), apkSha)
+    private fun release() = Release("v0.05", "- Faster", "https://x/v0.05", server.url("/Baseline.apk").toString(), apk.size.toLong(), apkSha)
 }

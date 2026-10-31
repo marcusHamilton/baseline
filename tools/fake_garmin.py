@@ -251,7 +251,7 @@ def make_handler(key: str, data: Dataset, release: dict | None = None):
             doc = {
                 "tag_name": release["tag"], "name": f"Baseline {release['tag'].removeprefix('v')} (fake)", "draft": False,
                 "prerelease": False, "html_url": f"http://{host}/releases/tag/{release['tag']}",
-                "body": "## Fake release\n- Served by tools/fake_garmin.py --release-apk",
+                "body": "A fake release, served by tools/fake_garmin.py --release-apk.\n\n## New\n- Update in place from Today or Settings\n- This What's new note, once per update\n## Improved\n- The update notice fills as the download runs\n## Fixed\n- Nothing: this release is made up",
                 "assets": [{"name": release["name"], "size": len(release["bytes"]), "digest": f"sha256:{release['sha256']}",
                             "browser_download_url": f"http://{host}/releases/download/{release['tag']}/{release['name']}"}],
             }
