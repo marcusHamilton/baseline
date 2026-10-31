@@ -17,6 +17,9 @@ import dev.baseline.scores.Baselines
 import dev.baseline.scores.Recovery
 import dev.baseline.scores.RecoveryResult
 import dev.baseline.scores.SleepPerformance
+import dev.baseline.scores.TrainingLoad
+import dev.baseline.scores.TrainingLoadDay
+import dev.baseline.scores.WeekBudget
 import dev.baseline.sync.SyncScheduler
 import dev.baseline.ui.components.ActivityCardUi
 import dev.baseline.ui.format.Formatters
@@ -37,6 +40,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.util.Locale
@@ -46,6 +50,9 @@ import kotlin.math.roundToInt
 
 /** [latest] is the last sample of [curve]; [drained] stays null until the day table stores it. */
 data class BodyBatteryUi(val latest: Int?, val curve: List<Pair<Instant, Int>>, val charged: Int?, val drained: Int?, val expanded: Boolean)
+
+/** Today's Training load bar (fitness-fatigue-form spec §4); [budget] is null while calibrating or with no recent training. */
+data class TrainingLoadUi(val day: TrainingLoadDay, val budget: WeekBudget?, val expanded: Boolean)
 
 /**
  * [delta] is e.g. "▲ 6%"; [better] says whether that move is good (true), bad (false) or neither (null).
@@ -85,6 +92,8 @@ data class TodayUiState(
     val editing: Boolean = false,
     /** The day's data arrived but could not be parsed (spec §10); the screen says so instead of showing blanks silently. */
     val unreadable: Boolean = false,
+    /** Null before the first score, so paging back past the history shows no bar. */
+    val trainingLoad: TrainingLoadUi? = null,
 )
 
 /** The sync line shown above Today; null when WorkManager has nothing to say. */
@@ -152,6 +161,7 @@ class TodayViewModel(
         }
     }
     private val bodyBatteryExpanded = MutableStateFlow(false)
+    private val trainingLoadExpanded = MutableStateFlow(false)
     private val editing = MutableStateFlow(false)
     private val prefsLock = Mutex()
 
@@ -162,6 +172,9 @@ class TodayViewModel(
     fun nextDay() = setDate(date.value.plusDays(1))
     fun toggleBodyBattery() {
         bodyBatteryExpanded.value = !bodyBatteryExpanded.value
+    }
+    fun toggleTrainingLoad() {
+        trainingLoadExpanded.value = !trainingLoadExpanded.value
     }
     fun toggleEdit() {
         editing.value = !editing.value
@@ -191,6 +204,7 @@ class TodayViewModel(
 
     private class DayInputs(val day: DayEntity?, val score: ScoreEntity?, val history: List<DayEntity>, val unreadable: Boolean)
     private class ActivityInputs(val activities: List<ActivityEntity>, val strains: Map<Long, Double>, val curve: List<Pair<Instant, Int>>)
+    private class LoadInputs(val scores: List<ScoreEntity>, val earliest: LocalDate?, val firstDayOfWeek: DayOfWeek, val tau: Double?, val expanded: Boolean)
     private class DisplayInputs(val order: List<String>, val hidden: Set<String>, val imperial: Boolean, val lastSynced: Instant?, val editing: Boolean)
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -203,10 +217,19 @@ class TodayViewModel(
             ::ActivityInputs,
         )
         val displayInputs = combine(prefs.baselineOrder, prefs.hiddenRows, repo.imperial, prefs.lastSyncedAt.distinctUntilChanged(), editing, ::DisplayInputs)
-        combine(dayInputs, activityInputs, displayInputs, bodyBatteryExpanded) { a, b, c, expanded ->
+        val loadInputs = combine(
+            repo.scores(d.minusDays(7 + TrainingLoad.WARM_UP_DAYS), d),
+            repo.historyStart.map { it.first }.distinctUntilChanged(),
+            repo.firstDayOfWeek,
+            prefs.strainCalibration.map { it?.tau }.distinctUntilChanged(),
+            trainingLoadExpanded,
+            ::LoadInputs,
+        )
+        combine(dayInputs, activityInputs, displayInputs, bodyBatteryExpanded, loadInputs) { a, b, c, expanded, l ->
             buildTodayState(
                 d, today, a.day, a.score, a.history, b.activities, b.strains, b.curve,
                 c.order, c.hidden, Formatters(c.imperial), c.lastSynced, expanded, c.editing, a.unreadable,
+                buildTrainingLoadUi(d, l.scores, l.earliest, l.firstDayOfWeek, l.tau, l.expanded),
             )
         }
     }.flowOn(Dispatchers.Default) // backfill rewrites tables constantly; keep the rebuilds off the main thread
@@ -275,6 +298,7 @@ internal fun buildTodayState(
     bodyBatteryExpanded: Boolean,
     editing: Boolean = false,
     unreadable: Boolean = false,
+    trainingLoad: TrainingLoadUi? = null,
 ): TodayUiState {
     val baseline = Baselines.at(date, history)
     val sleepPerf = SleepPerformance.of(day?.sleepSeconds, day?.sleepNeedMinutes)
@@ -312,6 +336,25 @@ internal fun buildTodayState(
         today = today,
         editing = editing,
         unreadable = unreadable,
+        trainingLoad = trainingLoad,
+    )
+}
+
+/** [scores] should reach back `7 + WARM_UP_DAYS` before [date]; null when [date] is before the first score. */
+internal fun buildTrainingLoadUi(
+    date: LocalDate,
+    scores: List<ScoreEntity>,
+    earliestScore: LocalDate?,
+    firstDayOfWeek: DayOfWeek,
+    tau: Double?,
+    expanded: Boolean,
+): TrainingLoadUi? {
+    if (earliestScore != null && date.isBefore(earliestScore)) return null
+    val loads = scores.associate { it.date to it.dayLoad }
+    return TrainingLoadUi(
+        TrainingLoad.series(loads, date, date, earliestScore, tau).single(),
+        TrainingLoad.weekBudget(loads, date, firstDayOfWeek, earliestScore, tau),
+        expanded,
     )
 }
 
