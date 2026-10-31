@@ -1,13 +1,18 @@
 package dev.baseline.ui.trends
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -17,10 +22,13 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.baseline.scores.FormState
+import dev.baseline.ui.components.formStateColor
 import dev.baseline.ui.theme.Surface2
 import dev.baseline.ui.theme.TextMuted
 
@@ -49,9 +57,16 @@ internal fun BarChart(bars: List<Bar?>, capColor: Color, description: String, mo
     }
 }
 
+/** The y range shared by every series, the band and the midline; an empty [secondary] leaves it as before. */
+internal fun lineScale(values: List<Int?>, secondary: List<Int?>, band: List<ClosedRange<Int>?>, midline: Int?): ClosedFloatingPointRange<Float> {
+    val all = values.filterNotNull() + secondary.filterNotNull() + band.filterNotNull().flatMap { listOf(it.start, it.endInclusive) } + listOfNotNull(midline)
+    return all.min().toFloat()..all.max().toFloat()
+}
+
 /**
  * [values] has one entry per day; a null breaks the line (runs of two or more days are joined, a lone day is a dot).
- * [band] is the same length, null where there is no band. [midline] is drawn dashed.
+ * [band] is the same length, null where there is no band. [midline] is drawn dashed. [secondary], when given, is a
+ * thinner line in [secondaryColor] on the same scale, drawn under [values].
  */
 @Composable
 internal fun TrendLine(
@@ -62,12 +77,14 @@ internal fun TrendLine(
     band: List<ClosedRange<Int>?> = emptyList(),
     midline: Int? = null,
     height: androidx.compose.ui.unit.Dp = 96.dp,
+    secondary: List<Int?> = emptyList(),
+    secondaryColor: Color = Color.Unspecified,
 ) {
-    ChartBox(values.any { it != null }, height, description, modifier) {
+    ChartBox(values.any { it != null } || secondary.any { it != null }, height, description, modifier) {
         Canvas(Modifier.fillMaxWidth().height(height)) {
-            val all = values.filterNotNull() + band.filterNotNull().flatMap { listOf(it.start, it.endInclusive) } + listOfNotNull(midline)
-            val lo = all.min().toFloat()
-            val hi = all.max().toFloat()
+            val scale = lineScale(values, secondary, band, midline)
+            val lo = scale.start
+            val hi = scale.endInclusive
             val pad = 6.dp.toPx()
             fun x(i: Int) = if (values.size == 1) size.width / 2 else i * size.width / (values.size - 1)
             fun y(v: Int) = if (hi == lo) size.height / 2 else size.height - pad - (v - lo) / (hi - lo) * (size.height - 2 * pad)
@@ -75,28 +92,34 @@ internal fun TrendLine(
             midline?.let {
                 drawLine(Surface2, Offset(0f, y(it)), Offset(size.width, y(it)), 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(9f, 12f)))
             }
-            val stroke = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-            runs(values.map { it != null }).forEach { run ->
-                if (run.size == 1) {
-                    drawCircle(color, 2.5.dp.toPx(), Offset(x(run[0]), y(values[run[0]]!!)))
-                } else {
-                    drawPath(
-                        Path().apply {
-                            run.forEachIndexed { k, i ->
-                                if (k ==
-                                    0
-                                ) {
-                                    moveTo(x(i), y(values[i]!!))
-                                } else {
-                                    lineTo(x(i), y(values[i]!!))
-                                }
-                            }
-                        },
-                        color,
-                        style = stroke,
-                    )
-                }
+            if (secondary.isNotEmpty()) drawSeries(secondary, secondaryColor, 1.25.dp.toPx(), ::x, ::y)
+            drawSeries(values, color, 2.dp.toPx(), ::x, ::y)
+        }
+    }
+}
+
+private fun DrawScope.drawSeries(values: List<Int?>, color: Color, width: Float, x: (Int) -> Float, y: (Int) -> Float) {
+    val stroke = Stroke(width, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    runs(values.map { it != null }).forEach { run ->
+        if (run.size == 1) {
+            drawCircle(color, 2.5.dp.toPx(), Offset(x(run[0]), y(values[run[0]]!!)))
+        } else {
+            val path = Path().apply { run.forEachIndexed { k, i -> if (k == 0) moveTo(x(i), y(values[i]!!)) else lineTo(x(i), y(values[i]!!)) } }
+            drawPath(path, color, style = stroke)
+        }
+    }
+}
+
+/** One equal-width segment per day, coloured by that day's form state; [Surface2] where there is no state to show. */
+@Composable
+internal fun StateStrip(states: List<FormState?>, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).clearAndSetSemantics {}) {
+        states.forEach { s ->
+            val c = when (s) {
+                null, FormState.CALIBRATING, FormState.NO_RECENT_TRAINING -> Surface2
+                else -> formStateColor(s)
             }
+            Box(Modifier.weight(1f).fillMaxHeight().background(c))
         }
     }
 }

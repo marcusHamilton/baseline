@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,12 +43,15 @@ import dev.baseline.ui.theme.RecoveryAmber
 import dev.baseline.ui.theme.RecoveryGreen
 import dev.baseline.ui.theme.RecoveryRed
 import dev.baseline.ui.theme.SleepPurple
+import dev.baseline.ui.theme.StrainBlue
+import dev.baseline.ui.theme.StrainBlueLight
 import dev.baseline.ui.theme.TextBody
 import dev.baseline.ui.theme.TextMuted
 import dev.baseline.ui.theme.TextPrimary
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private val Ranges = listOf(TrendRange.D7 to "7 days", TrendRange.D30 to "30 days", TrendRange.D90 to "90 days")
 private val SleepCap = Color(0xFF2E2A45)
@@ -131,6 +135,22 @@ fun TrendsContent(state: TrendsUiState, onRange: (TrendRange) -> Unit) {
                     }} of $n nights with data",
                 )
                 TimeAxis(start)
+            }
+            TrendCard("TRAINING LOAD", state.trainingLoadHeader()) {
+                TrendLine(
+                    state.trainingLoad.map { it?.fitness?.roundToInt() },
+                    StrainBlue,
+                    state.trainingLoadDescription(),
+                    height = 110.dp,
+                    secondary = state.trainingLoad.map { it?.fatigue?.roundToInt() },
+                    secondaryColor = StrainBlueLight,
+                )
+                StateStrip(state.trainingLoad.map { it?.state })
+                TimeAxis(start)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Legend(StrainBlue, "Fitness")
+                    Legend(StrainBlueLight, "Fatigue")
+                }
             }
         }
     }
