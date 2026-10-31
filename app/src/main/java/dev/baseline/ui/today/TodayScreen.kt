@@ -83,7 +83,7 @@ import dev.baseline.R
 import dev.baseline.garmin.KeyStatus
 import dev.baseline.ui.activity.NOTE_UNREADABLE
 import dev.baseline.ui.components.ActivityCard
-import dev.baseline.ui.components.BodyBatteryCard
+import dev.baseline.ui.components.BodyBatteryStrip
 import dev.baseline.ui.components.CircleButton
 import dev.baseline.ui.components.Dial
 import dev.baseline.ui.components.KeyBanner
@@ -201,7 +201,7 @@ fun TodayContent(
         }
         syncLine?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 20.dp), fontSize = 12.sp, color = TextMuted, textAlign = TextAlign.Center) }
         Dials(state, onOpenSleep)
-        BodyBatteryCard(state.bodyBattery, onToggleBodyBattery, Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp), state.isToday)
+        BodyBatteryStrip(state.bodyBattery, onToggleBodyBattery, Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp), state.isToday)
         InsightCard(state, onOpenTrends, Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp))
         if (state.activities.isNotEmpty()) {
             Section(if (state.isToday) "TODAY'S ACTIVITIES" else "ACTIVITIES") {

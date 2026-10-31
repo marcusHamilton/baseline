@@ -264,12 +264,11 @@ class TodayScreenTest {
         state = state.copy(bodyBattery = BodyBatteryUi(80, curve, 62, null, false))
         rule.waitForIdle()
         chart().assertDoesNotExist()
-        rule.onNodeWithText("Body Battery").performClick()
+        rule.onNodeWithText("+62 charged").assertExists() // the overnight charge is on the strip itself
+        rule.onNodeWithText("BODY BATTERY").performClick()
         chart().assertExists()
-        rule.onNodeWithText("Charged +62").assertExists()
-        rule.onNodeWithText("Body Battery").performClick()
+        rule.onNodeWithText("BODY BATTERY").performClick()
         chart().assertDoesNotExist()
-        rule.onNodeWithText("Charged +62").assertDoesNotExist()
     }
 
     @Test
@@ -291,7 +290,9 @@ class TodayScreenTest {
     @Test
     fun bodyBatteryWithoutReadingShowsDashAndEmptyTrack() {
         show(full.copy(bodyBattery = BodyBatteryUi(null, emptyList(), null, null, false)))
-        rule.onNodeWithText("Body Battery").assertExists()
+        rule.onNodeWithText("BODY BATTERY").assertExists()
+        rule.onNodeWithText("charged", substring = true).assertDoesNotExist()
+        rule.onNode(hasContentDescription("Body Battery, no reading yet")).assertExists()
         rule.onNodeWithTag(BODY_BATTERY_FILL_TAG, useUnmergedTree = true).assertDoesNotExist()
         rule.onNodeWithText("—").assertExists()
     }
@@ -313,20 +314,29 @@ class TodayScreenTest {
         }
 
         fun label() = rule
-            .onNodeWithText("Body Battery")
+            .onNodeWithText("BODY BATTERY")
             .fetchSemanticsNode()
             .config
             .getOrNull(androidx.compose.ui.semantics.SemanticsActions.OnClick)
             ?.label
         assertEquals("Show Body Battery curve", label())
-        rule.onNodeWithText("Body Battery").performClick()
+        rule.onNodeWithText("BODY BATTERY").performClick()
         assertEquals("Hide Body Battery curve", label())
     }
 
     @Test
     fun expandedTotalsShowDrainedWhenKnown() {
         show(full.copy(bodyBattery = BodyBatteryUi(80, curve, 62, 48, true)))
-        rule.onNodeWithText("Charged +62 · Drained −48").assertExists()
+        rule.onNodeWithText("Drained −48 today").assertExists()
+    }
+
+    @Test
+    fun bodyBatteryIsASlimStripUnderTheDials() {
+        show(full)
+        val strip = rule.onNode(hasClickAction() and hasContentDescription("Body Battery 80, charged 62 overnight"))
+        strip.assertExists()
+        assertTrue(strip.getUnclippedBoundsInRoot().let { it.bottom - it.top } >= 48.dp)
+        rule.onNodeWithText("Body Battery").assertDoesNotExist() // the old card's title
     }
 
     @Test
