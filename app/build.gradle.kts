@@ -40,8 +40,8 @@ android {
         applicationId = "dev.baseline"
         minSdk = 29
         targetSdk = 37
-        versionCode = 4
-        versionName = "0.04"
+        versionCode = 5
+        versionName = "0.05"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         if (versionOverride != null) {
             // "0.05" -> versionCode 5, the same mapping the real releases use.
