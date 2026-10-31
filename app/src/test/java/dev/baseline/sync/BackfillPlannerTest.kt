@@ -1,12 +1,10 @@
 package dev.baseline.sync
 
-import androidx.room3.Room
-import androidx.test.core.app.ApplicationProvider
 import dev.baseline.data.db.AppDatabase
-import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.db.TaskStatus
 import dev.baseline.garmin.GarminEndpoint
 import dev.baseline.garmin.GarminEndpoint.*
+import dev.baseline.testutil.inMemoryDatabase
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -26,9 +24,7 @@ class BackfillPlannerTest {
 
     @Before
     fun setUp() {
-        db = Room.inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
-            .allowMainThreadQueries()
-            .build()
+        db = inMemoryDatabase()
     }
 
     @After

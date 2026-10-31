@@ -93,10 +93,9 @@ android {
         warningsAsErrors = true
         // No Timber dependency: android.util.Log is the logger, and none of the messages carry the key.
         // No core-ktx dependency, so the KTX extension suggestions have nothing to point at.
-        disable += setOf("LogNotTimber", "UseKtx")
-        // "A newer version of … is available" turns CI red whenever Google publishes a release, with no code change.
-        // Version bumps are deliberate changes of their own (gradle/libs.versions.toml), not lint failures.
-        disable += setOf("AndroidGradlePluginVersion", "GradleDependency")
+        // Version-currency checks fail the build whenever Google ships a release, not because of a change here; versions
+        // are bumped deliberately in gradle/libs.versions.toml.
+        disable += setOf("LogNotTimber", "UseKtx", "AndroidGradlePluginVersion", "GradleDependency", "NewerVersionAvailable")
     }
 
     testOptions {

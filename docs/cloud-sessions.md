@@ -63,8 +63,9 @@ You can't run the minified APK here, but you can check what R8 did:
 ## Pitfalls
 
 - **Don't run the unit tests while something else is using the CPU** (a build, an emulator). Some tests wait on
-  real-time timeouts (for example `TrendsViewModelTest.rangeEndFollowsTheTodayFlow`, 10 s) and flake under load.
-  If a test fails, re-run it on an idle machine before you call it a regression.
+  real-time timeouts (10 s) and can flake under load. If a test fails, re-run it on an idle machine before you call it
+  a regression. `TrendsViewModelTest.rangeEndFollowsTheTodayFlow` used to be listed here; its failures were not load
+  but a Room first-open race that left the in-memory database empty, fixed by `testutil.inMemoryDatabase()`.
 - **A Robolectric runtime the script doesn't know** (after an upgrade, or a new `@Config(sdk = …)`) fails with 429
   ("Failed to fetch maven artifact org.robolectric:android-all-instrumented:…"). Add its name to `tools/cloud_setup.sh`
   and re-run the script.

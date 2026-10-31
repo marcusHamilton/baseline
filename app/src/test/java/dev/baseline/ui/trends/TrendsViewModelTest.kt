@@ -4,16 +4,15 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
-import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import dev.baseline.data.Repository
 import dev.baseline.data.db.AppDatabase
-import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.db.DayEntity
 import dev.baseline.data.db.ScoreEntity
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.prefs.UserPrefs
 import dev.baseline.testutil.ScopeCleanup
+import dev.baseline.testutil.inMemoryDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -47,7 +46,7 @@ class TrendsViewModelTest {
     fun setUp() {
         Dispatchers.setMain(Dispatchers.Unconfined)
         val context = ApplicationProvider.getApplicationContext<Context>()
-        db = Room.inMemoryDatabaseBuilder<AppDatabase>(context) { AppDatabase_Impl() }.allowMainThreadQueries().build()
+        db = inMemoryDatabase(context)
         file = File.createTempFile("trendsvm", ".preferences_pb").also { it.delete() }
         val store: DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = scopes.storeScope) { file }
         vm = scopes.track(TrendsViewModel(Repository(db, UserPrefs(store), ApiKeyVault(store, { it }, { it }, Clock.systemUTC())), today))

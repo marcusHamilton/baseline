@@ -9,6 +9,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertWidthIsAtLeast
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -132,5 +134,14 @@ class ActivityScreenTest {
     fun missingActivityShowsNotFound() {
         show(buildActivityState(null, null, null, emptyList(), emptyList(), null, Formatters(false)))
         rule.onNodeWithText("Activity not found").assertExists()
+    }
+
+    @Test
+    fun titleAndSectionTitlesAreHeadings() {
+        show(runState())
+        rule.onNode(isHeading() and hasText("ACTIVITY 1")).assertExists()
+        listOf("HEART RATE", "HEART RATE ZONES", "SPLITS").forEach {
+            rule.onNode(isHeading() and hasText(it)).assertExists()
+        }
     }
 }

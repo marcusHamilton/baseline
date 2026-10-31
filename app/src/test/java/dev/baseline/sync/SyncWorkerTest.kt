@@ -3,7 +3,6 @@ package dev.baseline.sync
 import android.content.Context
 import android.content.pm.ServiceInfo
 import androidx.concurrent.futures.CallbackToFutureAdapter
-import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.ForegroundInfo
 import androidx.work.ForegroundUpdater
@@ -14,11 +13,11 @@ import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
 import com.google.common.util.concurrent.ListenableFuture
 import dev.baseline.data.db.AppDatabase
-import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.db.SyncTaskEntity
 import dev.baseline.data.db.TaskStatus
 import dev.baseline.garmin.GarminEndpoint
 import dev.baseline.garmin.GarminResult
+import dev.baseline.testutil.inMemoryDatabase
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import org.junit.After
@@ -49,7 +48,7 @@ class SyncWorkerTest {
 
     @Before
     fun setUp() {
-        db = Room.inMemoryDatabaseBuilder<AppDatabase>(context) { AppDatabase_Impl() }.allowMainThreadQueries().build()
+        db = inMemoryDatabase(context)
         // A non-empty task table keeps ensureBackfillPlanned from queueing the ~1,000-task plan.
         runBlocking {
             db.taskDao().insertIgnore(

@@ -1,11 +1,9 @@
 package dev.baseline.scores
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
-import androidx.room3.Room
-import androidx.test.core.app.ApplicationProvider
 import dev.baseline.data.db.AppDatabase
-import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.prefs.UserPrefs
+import dev.baseline.testutil.inMemoryDatabase
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,11 +36,7 @@ class AfterSyncTest {
 
     @Before
     fun setUp() {
-        db =
-            Room
-                .inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
-                .allowMainThreadQueries()
-                .build()
+        db = inMemoryDatabase()
         val file = File.createTempFile("prefs", ".preferences_pb").also { it.delete() }
         prefs = UserPrefs(PreferenceDataStoreFactory.create(scope = storeScope) { file })
     }

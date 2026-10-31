@@ -4,13 +4,11 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
-import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.WorkManager
 import androidx.work.testing.WorkManagerTestInitHelper
 import dev.baseline.data.Repository
 import dev.baseline.data.db.AppDatabase
-import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.db.DayEntity
 import dev.baseline.data.db.HrDayEntity
 import dev.baseline.data.db.HrPacking
@@ -24,9 +22,11 @@ import dev.baseline.scores.HrPoint
 import dev.baseline.sync.SyncScheduler
 import dev.baseline.sync.closeWorkManagerDb
 import dev.baseline.testutil.ScopeCleanup
+import dev.baseline.testutil.inMemoryDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.resetMain
@@ -47,6 +47,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -77,7 +78,7 @@ class SleepViewModelTest {
         context = ApplicationProvider.getApplicationContext()
         WorkManagerTestInitHelper.initializeTestWorkManager(context)
         scheduler = CountingScheduler(WorkManager.getInstance(context))
-        db = Room.inMemoryDatabaseBuilder<AppDatabase>(context) { AppDatabase_Impl() }.allowMainThreadQueries().build()
+        db = inMemoryDatabase(context)
         file = File.createTempFile("sleepvm", ".preferences_pb").also { it.delete() }
         val store: DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = scopes.storeScope) { file }
         repo = Repository(db, UserPrefs(store), ApiKeyVault(store, { it }, { it }, Clock.systemUTC()))
@@ -113,6 +114,21 @@ class SleepViewModelTest {
         assertEquals(Duration.ZERO, need.adjustment)
         assertEquals(listOf("Sleep history ▼", "HRV ▲"), need.reasons)
         assertEquals(LocalTime.of(23, 40), need.bedtimeStart)
+    }
+
+    @Test
+    fun bedAndWakeFollowTheZoneFlow() = runBlocking {
+        seedFixtureNight()
+        val zone = MutableStateFlow<ZoneId>(ZoneOffset.ofHours(-7))
+        val vm = scopes.track(SleepViewModel(repo, db.taskDao(), scheduler, date, today, zone))
+        val before = vm.await { it.bed != null }
+        assertEquals(LocalTime.of(22, 52), before.bed)
+        assertEquals(LocalTime.of(7, 41), before.wake)
+
+        zone.value = ZoneOffset.ofHours(9) // travelling: the same night, in Tokyo time
+        val after = vm.await { it.bed != LocalTime.of(22, 52) }
+        assertEquals(LocalTime.of(14, 52), after.bed)
+        assertEquals(LocalTime.of(23, 41), after.wake)
     }
 
     @Test

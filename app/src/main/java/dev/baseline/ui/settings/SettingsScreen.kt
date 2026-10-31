@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -19,10 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -46,6 +45,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -67,7 +67,6 @@ import dev.baseline.ui.components.updateHeadline
 import dev.baseline.ui.format.Formatters
 import dev.baseline.ui.theme.BarlowCondensed
 import dev.baseline.ui.theme.Card
-import dev.baseline.ui.theme.ChipActive
 import dev.baseline.ui.theme.Outline
 import dev.baseline.ui.theme.RecoveryAmber
 import dev.baseline.ui.theme.RecoveryGreen
@@ -173,12 +172,13 @@ fun SettingsContent(
     onAutoCheck: (Boolean) -> Unit = {},
 ) {
     Column(
-        Modifier.fillMaxSize().testTag("screen-settings").verticalScroll(rememberScrollState()).padding(bottom = 24.dp),
+        // imePadding sits above the scroll so the viewport shrinks and the key field and Save button scroll clear of the keyboard.
+        Modifier.fillMaxSize().testTag("screen-settings").imePadding().verticalScroll(rememberScrollState()).padding(bottom = 24.dp),
         Arrangement.spacedBy(12.dp),
     ) {
         Text(
             "SETTINGS",
-            Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 0.dp),
+            Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 0.dp).semantics { heading() },
             fontFamily = BarlowCondensed,
             fontWeight = FontWeight.SemiBold,
             fontSize = 28.sp,
@@ -205,7 +205,17 @@ private fun SettingsCard(title: String, content: @Composable () -> Unit) {
         Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).padding(16.dp),
         Arrangement.spacedBy(12.dp),
     ) {
-        Text(title, fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, letterSpacing = 1.28.sp, color = TextMuted)
+        Text(
+            title,
+            Modifier.semantics {
+                heading()
+            },
+            fontFamily = BarlowCondensed,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 16.sp,
+            letterSpacing = 1.28.sp,
+            color = TextMuted,
+        )
         content()
     }
 }
@@ -277,7 +287,7 @@ private fun KeyCard(status: KeyStatus?, entry: KeyEntryState, onReplace: (String
             onClick = { onReplace(key, lifetime) },
             enabled = !testing && key.isNotBlank(),
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF2F4F7), contentColor = Color(0xFF0E1013)),
+            colors = primaryButtonColors(),
         ) {
             if (testing) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -303,7 +313,7 @@ private fun KeyCard(status: KeyStatus?, entry: KeyEntryState, onReplace: (String
             else -> {}
         }
         TextButton(onClick = { uri.openUri(KEY_URL) }, Modifier.heightIn(min = 48.dp)) {
-            Text("Create a key in Garmin Connect ↗", color = Color(0xFF93C5FD))
+            Text("Create a key in Garmin Connect ↗", color = LinkColor)
         }
         Text(
             "Stored encrypted on this phone (Android Keystore). Never leaves the device except to Garmin.",
@@ -313,20 +323,6 @@ private fun KeyCard(status: KeyStatus?, entry: KeyEntryState, onReplace: (String
         )
     }
 }
-
-/** Selected chip = the Trends range chip's fill with the accent text, so it never reads as bare green text. */
-@Composable
-private fun chipColors() = FilterChipDefaults.filterChipColors(
-    selectedContainerColor = ChipActive,
-    selectedLabelColor = RecoveryGreen,
-    labelColor = TextBody,
-    disabledSelectedContainerColor = ChipActive,
-    disabledLabelColor = TextMuted,
-)
-
-@Composable
-private fun chipBorder(selected: Boolean, enabled: Boolean) =
-    FilterChipDefaults.filterChipBorder(enabled, selected, borderColor = Outline, selectedBorderColor = Outline)
 
 @Composable
 private fun SyncCard(state: SettingsUiState, clock: Clock, zone: ZoneId, onInterval: (SyncInterval) -> Unit, onSyncNow: () -> Unit, onRetryFailed: () -> Unit) {
@@ -445,7 +441,7 @@ private fun AppCard(ui: UpdateUi, clock: Clock, onPrimary: () -> Unit, onCheckNo
                     Button(
                         onClick = onPrimary,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF2F4F7), contentColor = Color(0xFF0E1013)),
+                        colors = primaryButtonColors(),
                     ) { Text(label, fontWeight = FontWeight.SemiBold) }
                 }
             }

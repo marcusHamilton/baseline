@@ -5,6 +5,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -53,6 +55,12 @@ class AppCardTest {
                 update = update, onUpdatePrimary = onPrimary, onCheckUpdates = onCheck, onAutoCheck = onAuto,
             )
         }
+    }
+
+    @Test
+    fun theAppCardTitleIsAHeadingLikeTheOtherCards() {
+        show(UpdateUi("0.04", true))
+        rule.onNode(isHeading() and hasText("APP")).performScrollTo().assertExists()
     }
 
     @Test

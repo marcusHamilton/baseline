@@ -8,7 +8,6 @@ import android.widget.TextView
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
-import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.ListenableWorker
 import androidx.work.ListenableWorker.Result
@@ -19,8 +18,11 @@ import androidx.work.testing.TestListenableWorkerBuilder
 import androidx.work.testing.WorkManagerTestInitHelper
 import dev.baseline.AppContainer
 import dev.baseline.R
+import dev.baseline.data.SportFamily
+import dev.baseline.data.db.ActivityEntity
+import dev.baseline.data.db.ActivityScoreEntity
 import dev.baseline.data.db.AppDatabase
-import dev.baseline.data.db.AppDatabase_Impl
+import dev.baseline.data.db.LoadSource
 import dev.baseline.data.db.SyncTaskEntity
 import dev.baseline.data.db.TaskStatus
 import dev.baseline.garmin.ApiKeyVault
@@ -31,6 +33,7 @@ import dev.baseline.sync.SyncScheduler
 import dev.baseline.sync.SyncWorker
 import dev.baseline.sync.SyncWorkerDeps
 import dev.baseline.testutil.ScopeCleanup
+import dev.baseline.testutil.inMemoryDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -51,6 +54,7 @@ import java.io.File
 import java.io.IOException
 import java.time.Clock
 import java.time.Instant
+import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 
@@ -67,7 +71,7 @@ private class LifecycleTestContainer(context: Context, private val store: DataSt
     override val scheduler = SyncScheduler(WorkManager.getInstance(context), { false })
     override val apiKeyVault by lazy { ApiKeyVault(store, { it }, { it }, clock, dateTicker.today) }
     override val db: AppDatabase by lazy {
-        Room.inMemoryDatabaseBuilder<AppDatabase>(context) { AppDatabase_Impl() }.allowMainThreadQueries().build()
+        inMemoryDatabase(context)
     }
     override val syncEngine by lazy { SyncEngine({ _: GarminEndpoint, _: String -> GarminResult.Empty }, db, clock) {} }
 }
@@ -175,6 +179,39 @@ class WidgetLifecycleTest {
         assertEquals(SyncPillUi.Syncing, loadWidgetSnapshot(container, true, syncing = true).syncPill)
         assertTrue(loadWidgetSnapshot(container, true, syncing = false).syncPill is SyncPillUi.Ready)
         assertTrue(loadWidgetSnapshot(container, true).syncPill is SyncPillUi.Ready)
+    }
+
+    private fun activity(id: Long, start: LocalDateTime, durationSec: Double = 3_600.0, distanceM: Double? = 10_000.0, family: SportFamily = SportFamily.RUN) =
+        ActivityEntity(
+            id, "Workout $id", "running", family, start, start.toLocalDate(), start.toInstant(ZoneOffset.UTC), durationSec, distanceM,
+            null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        )
+
+    @Test
+    fun loadReadsOnlyThisWeeksActivitiesAndTheLatestWorkoutOfAnEarlierWeek() = runBlocking {
+        // Monday 2026-10-26: the week is Oct 26..Nov 1, so everything below is last week or older, bar the Monday run.
+        val db = container.db
+        val oldStrength = activity(1, LocalDateTime.of(2026, 3, 2, 18, 0), family = SportFamily.STRENGTH, distanceM = null)
+        val lastWeekRun = activity(2, LocalDateTime.of(2026, 10, 25, 8, 30))
+        db.activityDao().upsert(oldStrength)
+        db.activityDao().upsert(lastWeekRun)
+        db.activityScoreDao().upsert(ActivityScoreEntity(1, 50.0, LoadSource.HR, 6.0))
+        db.activityScoreDao().upsert(ActivityScoreEntity(2, 120.0, LoadSource.HR, 14.2))
+
+        // Monday morning: no workout yet this week, so the latest one is Sunday's, with its own strain.
+        val monday = loadWidgetSnapshot(container, true, syncing = false).weekly
+        assertEquals("THIS WEEK · 0 ACTIVITIES", monday.headerTitle)
+        assertEquals(2L, monday.latest?.id)
+        assertEquals("14.2", monday.latest?.strainText)
+
+        // A run on Monday joins the week's totals and becomes the latest one.
+        db.activityDao().upsert(activity(3, LocalDateTime.of(2026, 10, 26, 6, 0), durationSec = 1_800.0, distanceM = 5_000.0))
+        db.activityScoreDao().upsert(ActivityScoreEntity(3, 60.0, LoadSource.HR, 7.5))
+        val later = loadWidgetSnapshot(container, true, syncing = false).weekly
+        assertEquals("THIS WEEK · 1 ACTIVITY", later.headerTitle)
+        assertEquals("30m · 5.0 km", later.weekTotalsText)
+        assertEquals(3L, later.latest?.id)
+        assertEquals("7.5", later.latest?.strainText)
     }
 
     @Test

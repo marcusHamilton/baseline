@@ -24,6 +24,7 @@ import kotlinx.serialization.json.Json
 import java.time.Clock
 import java.time.LocalDate
 import java.time.YearMonth
+import java.util.zip.CRC32
 
 /**
  * Raw cache -> ScoreEntity / ActivityScoreEntity (spec §7). Scaling factors are fitted on every activity; rows
@@ -50,6 +51,9 @@ class ScorePipeline(
         val firstUnscored: LocalDate?,
     ) {
         val byDay = activities.groupBy { it.day }
+
+        /** Day loads already computed in this run; calibrating and re-scoring both need every day's. */
+        val dayLoads = mutableMapOf<LocalDate, Double>()
     }
 
     /**
@@ -65,8 +69,9 @@ class ScorePipeline(
         val cur = prefs.strainCalibration.first()
         val finalizing = cur != null && cur.provisional && backfillDone
         if (cur == null || finalizing || newMonth(today)) {
-            calibrate(loads(), (cur?.version ?: 0) + 1, today, provisional = !backfillDone && (cur == null || cur.provisional))
-            if (finalizing) recalculateHistoryLocked()
+            val loads = loads()
+            calibrate(loads, (cur?.version ?: 0) + 1, today, provisional = !backfillDone && (cur == null || cur.provisional))
+            if (finalizing) recalculateHistoryLocked(loads)
         }
     }
 
@@ -79,23 +84,25 @@ class ScorePipeline(
      */
     suspend fun recalibrateAndRescore(backfillDone: Boolean) = exclusive {
         val cur = prefs.strainCalibration.first()
-        calibrate(loads(), (cur?.version ?: 0) + 1, LocalDate.now(clock), provisional = !backfillDone && (cur == null || cur.provisional))
-        recalculateHistoryLocked()
+        val loads = loads()
+        calibrate(loads, (cur?.version ?: 0) + 1, LocalDate.now(clock), provisional = !backfillDone && (cur == null || cur.provisional))
+        recalculateHistoryLocked(loads)
     }
 
     /** Re-scores every day with the current calibration, so old rows take its version. */
     suspend fun recalculateHistory() = exclusive { recalculateHistoryLocked() }
 
-    private suspend fun recalculateHistoryLocked() {
+    /** [loads] may be the ones the caller just calibrated with: calibrating changes neither activities, streams, zones nor the set. */
+    private suspend fun recalculateHistoryLocked(loads: Loads? = null) {
         // No day rows yet: still score today, so the data that triggered this is not left unscored.
-        recomputeLocked(db.dayDao().all().firstOrNull()?.date ?: LocalDate.now(clock))
+        recomputeLocked(db.dayDao().all().firstOrNull()?.date ?: LocalDate.now(clock), loads)
     }
 
     suspend fun recompute(fromDay: LocalDate) = exclusive { recomputeLocked(fromDay) }
 
-    private suspend fun recomputeLocked(fromDay: LocalDate) {
+    private suspend fun recomputeLocked(fromDay: LocalDate, preloaded: Loads? = null) {
         val today = LocalDate.now(clock)
-        val loads = loads()
+        val loads = preloaded ?: loads()
         val from = listOfNotNull(fromDay, loads.firstUnscored).min()
         // Unknown backfill state: let the next recalibrateIfDue finalize it.
         val cal = prefs.strainCalibration.first() ?: calibrate(loads, 1, today, provisional = true)
@@ -152,7 +159,9 @@ class ScorePipeline(
         return cal
     }
 
-    private suspend fun dayLoad(date: LocalDate, l: Loads): Double {
+    private suspend fun dayLoad(date: LocalDate, l: Loads): Double = l.dayLoads.getOrPut(date) { computeDayLoad(date, l) }
+
+    private suspend fun computeDayLoad(date: LocalDate, l: Loads): Double {
         val acts = l.byDay[date].orEmpty()
         val fromActivities = acts.sumOf { l.resolved[it.id]?.load ?: 0.0 }
         val z = l.zones ?: return fromActivities
@@ -164,7 +173,41 @@ class ScorePipeline(
         return fromActivities + NonActivityLoad.compute(HrPacking.unpack(hr.packed), windows, z.zone1Floor, z.restingHr, z.maxHr, l.set)
     }
 
-    // shortcut: unpacks every stored stream on each run to get all TRIMPs for the scaling factors; cache TRIMP if the history grows past a few thousand activities.
+    /**
+     * One stream's TRIMP and HR coverage with everything they were computed from. A stream never changes once ingested,
+     * so a run only needs to read and fingerprint the blob; the entry is stale (and recomputed) when the blob, the HR
+     * zones, the Banister set or the activity's duration differ.
+     */
+    private data class StreamLoad(
+        val size: Int,
+        val crc: Long,
+        val hash: Int,
+        val restingHr: Int,
+        val maxHr: Int,
+        val set: BanisterSet,
+        val durationSec: Double,
+        val trimp: Double,
+        val coverage: Double,
+    )
+
+    /** In memory only (rebuilt after a process restart); touched under [lock] by [loads] alone. */
+    private val streamLoads = mutableMapOf<Long, StreamLoad>()
+
+    private fun streamLoad(a: ActivityEntity, packed: ByteArray, zones: HrZones, set: BanisterSet): StreamLoad? {
+        val crc = CRC32().apply { update(packed) }.value
+        val hash = packed.contentHashCode()
+        streamLoads[a.id]
+            ?.takeIf {
+                it.size == packed.size && it.crc == crc && it.hash == hash && it.restingHr == zones.restingHr && it.maxHr == zones.maxHr &&
+                    it.set == set && it.durationSec == a.durationSec
+            }?.let { return it }
+        val pts = runCatching { ActivityStreams.unpack(packed) }.getOrNull()?.toHrPoints() ?: return null
+        return StreamLoad(
+            packed.size, crc, hash, zones.restingHr, zones.maxHr, set, a.durationSec,
+            Trimp.load(pts, zones.restingHr, zones.maxHr, set), Trimp.coverage(pts, a.durationSec),
+        ).also { streamLoads[a.id] = it }
+    }
+
     private suspend fun loads(): Loads {
         val set = prefs.banister.first()
         val zones = db.rawDao().get("HR_ZONES", "-")
@@ -177,17 +220,19 @@ class ScorePipeline(
         var firstUnscored: LocalDate? = null
         if (zones != null) {
             for (a in activities) {
-                val stream = db.activityStreamDao().get(a.id)
-                    ?.let { runCatching { ActivityStreams.unpack(it.packed) }.getOrNull() } ?: continue
-                val pts = stream.toHrPoints()
-                val trimp = Trimp.load(pts, zones.restingHr, zones.maxHr, set)
-                val cov = Trimp.coverage(pts, a.durationSec)
-                trimps[a.id] = trimp
-                coverage[a.id] = cov
-                samples += LoadSample(a.sportFamily, trimp, cov, a.garminLoad)
+                val blob = db.activityStreamDao().get(a.id)?.packed
+                val load = blob?.let { streamLoad(a, it, zones, set) }
+                if (load == null) {
+                    streamLoads.remove(a.id)
+                    continue
+                }
+                trimps[a.id] = load.trimp
+                coverage[a.id] = load.coverage
+                samples += LoadSample(a.sportFamily, load.trimp, load.coverage, a.garminLoad)
                 if (a.hrCoverage == null) firstUnscored = listOfNotNull(firstUnscored, a.day).min()
             }
         }
+        streamLoads.keys.retainAll(activities.mapTo(mutableSetOf()) { it.id })
 
         val factors = ActivityLoad.scalingFactors(samples)
         val resolved = activities.mapNotNull { a ->

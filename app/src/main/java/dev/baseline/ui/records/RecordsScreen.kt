@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -65,7 +66,7 @@ fun RecordsContent(state: RecordsUiState, onTab: (SportFamily) -> Unit, onBack: 
         item(key = "heading") {
             Text(
                 if (state.tab == SportFamily.SWIM) "FASTEST TIMES · POOL" else "FASTEST TIMES",
-                Modifier.padding(top = 8.dp, bottom = 4.dp),
+                Modifier.padding(top = 8.dp, bottom = 4.dp).semantics { heading() },
                 fontFamily = BarlowCondensed,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 16.sp,
@@ -83,7 +84,16 @@ private fun Header(since: String?, onBack: () -> Unit) {
     Row(Modifier.padding(bottom = 8.dp), Arrangement.spacedBy(12.dp), Alignment.CenterVertically) {
         CircleButton(R.drawable.ic_chevron_left, "Back to Activities", true, onBack)
         Column {
-            Text("ALL-TIME RECORDS", fontFamily = BarlowCondensed, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, letterSpacing = 0.88.sp)
+            Text(
+                "ALL-TIME RECORDS",
+                Modifier.semantics {
+                    heading()
+                },
+                fontFamily = BarlowCondensed,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 22.sp,
+                letterSpacing = 0.88.sp,
+            )
             Text(
                 "Best efforts from every activity" + (since?.let { " since $it" } ?: ""),
                 fontSize = 13.sp,
@@ -144,6 +154,7 @@ private fun PowerCard(power: List<PowerRow>, label: String) {
     Column(Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).padding(16.dp), Arrangement.spacedBy(12.dp)) {
         Text(
             "BEST POWER · ${label.uppercase()}",
+            Modifier.semantics { heading() },
             fontFamily = BarlowCondensed,
             fontWeight = FontWeight.SemiBold,
             fontSize = 16.sp,
