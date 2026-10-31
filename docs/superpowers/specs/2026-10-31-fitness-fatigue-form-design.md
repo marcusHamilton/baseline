@@ -131,7 +131,7 @@ For a day D in the week starting `W = D.with(previousOrSame(firstDayOfWeek))`:
   the days after D in the week (`W + 6 − D`). On past weeks `daysLeft` is 0.
 
 ```kotlin
-data class WeekBudget(val weekStart: LocalDate, val pct: Int, val overBand: Boolean, val hardDaysLeft: Int?)
+data class WeekBudget(val weekStart: LocalDate, val pct: Int, val overBand: Boolean, val hardDaysLeft: Int?, val daysLeft: Int)
 ```
 
 - `overBand` is `weekLoad > 1.3 × normal`.
@@ -171,7 +171,8 @@ from that date, so a past Wednesday still says how many hard days were left then
 **Accessibility.**
 
 - The bar is one TalkBack node: "Training load: Productive, form minus 18 percent. 62 percent of a normal week, room
-  for about 2 hard days. Double-tap to expand."
+  for about 2 hard days." The expand action and state come from its click label ("Show training load details") and
+  Expanded/Collapsed state description, as on the Body Battery bar.
 - The whole bar is the click target and is at least 48 dp tall.
 - The state is always written out, so colour is never the only signal.
 

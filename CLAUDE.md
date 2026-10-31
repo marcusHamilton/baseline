@@ -64,7 +64,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
   - `RawIngest` stores raw responses before parsing, so data can be re-parsed.
   - `SyncScheduler` wraps WorkManager.
 - `data/`: `Repository` plus Room `data/db/AppDatabase`, at schema version 2. Schemas are exported to `app/schemas/`; any schema change needs a migration and a new exported schema.
-- `scores/ScorePipeline` holds recovery, sleep performance and strain (0–21). The strain scale is calibrated so your 90th-percentile day is about 17 (spec §7). `records/RecordsRefresher` maintains all-time records.
+- `scores/ScorePipeline` holds recovery, sleep performance and strain (0–21). The strain scale is calibrated so your 90th-percentile day is about 17 (spec §7). `scores/TrainingLoad` derives fitness, fatigue, form and the weekly budget from stored day loads at read time (nothing persisted). `records/RecordsRefresher` maintains all-time records.
 - `fit/` parses FIT files with the Garmin FIT SDK and builds activity streams.
 - `update/`: one-tap in-app updates from GitHub releases (`docs/superpowers/specs/2026-10-29-in-app-updates-design.md`).
   - `Updater` is the state machine behind Settings' App card and Today's banner: `UpdateCheckWorker` offers a newer release once a day, `UpdateDownloadWorker` downloads it as a foreground job, `verifyApk` checks size, SHA-256, versionCode, the `-fake` suffix and the signing key, and `AndroidUpdatePlatform` hands it to `PackageInstaller`. `InstallResultReceiver` takes the answer.
