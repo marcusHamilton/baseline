@@ -1,9 +1,14 @@
 package dev.baseline.ui.trends
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -58,8 +63,8 @@ class TrendsScreenTest {
         val days = (0L..6).map { DayEntity(today.minusDays(it), restingHr = 48, hrvLastNight = 58.0, sleepSeconds = 26_400, sleepNeedMinutes = 480) }
         rule.setContent { BaselineTheme { TrendsContent(buildTrendsState(TrendRange.D7, today, days, emptyList()), {}) } }
         // The axis is hidden from TalkBack (the chart descriptions give the span), so look in the unmerged tree.
-        rule.onAllNodesWithText("Oct 18", useUnmergedTree = true).assertCountEquals(4)
-        rule.onAllNodesWithText("Today", useUnmergedTree = true).assertCountEquals(4)
+        rule.onAllNodesWithText("Oct 18", useUnmergedTree = true).assertCountEquals(5)
+        rule.onAllNodesWithText("Today", useUnmergedTree = true).assertCountEquals(5)
         rule.onAllNodesWithText("Oct 18").assertCountEquals(0)
     }
 
@@ -74,5 +79,38 @@ class TrendsScreenTest {
         listOf("TRENDS", "RECOVERY", "HRV · OVERNIGHT", "RESTING HEART RATE", "SLEEP vs NEED").forEach {
             rule.onNode(isHeading() and hasText(it)).assertExists()
         }
+    }
+
+    @Test fun trainingLoadCardShowsHeaderLegendAndDescription() {
+        val first = today.minusDays(200)
+        val scores = (0L..200).map { ScoreEntity(first.plusDays(it), null, false, null, if (it > 190) 180.0 else 100.0, 0.0, null, null, 1) }
+        val state = buildTrendsState(TrendRange.D30, today, emptyList(), scores, first, 100.0)
+        rule.setContent { BaselineTheme { TrendsContent(state, {}) } }
+        rule.onNodeWithText("TRAINING LOAD").assertExists()
+        rule.onNodeWithText(state.trainingLoadHeader()).assertExists()
+        rule.onNodeWithText("Fitness").assertExists()
+        rule.onNodeWithText("Fatigue").assertExists()
+        rule.onNodeWithContentDescription(state.trainingLoadDescription()).assertExists()
+    }
+
+    @Test fun trainingLoadCardWithoutDataShowsThePlaceholder() {
+        val state = buildTrendsState(TrendRange.D30, today, emptyList(), emptyList())
+        rule.setContent { BaselineTheme { TrendsContent(state, {}) } }
+        rule.onNode(hasContentDescription(state.trainingLoadDescription()), useUnmergedTree = true)
+            .assert(hasAnyDescendant(hasText("No data in this range")))
+    }
+
+    @Test fun openingFromTodayScrollsToTheTrainingLoadCard() {
+        var focused = 0
+        val state = buildTrendsState(TrendRange.D30, today, emptyList(), emptyList())
+        rule.setContent { BaselineTheme { TrendsContent(state, {}, focusTrainingLoad = true, onFocused = { focused++ }) } }
+        rule.onNodeWithText("TRAINING LOAD").assertIsDisplayed()
+        assertEquals(1, focused)
+    }
+
+    @Test fun openedFromTheTabTheTrainingLoadCardIsBelowTheFold() {
+        val state = buildTrendsState(TrendRange.D30, today, emptyList(), emptyList())
+        rule.setContent { BaselineTheme { TrendsContent(state, {}) } }
+        rule.onNodeWithText("TRAINING LOAD").assertIsNotDisplayed()
     }
 }

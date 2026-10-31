@@ -11,6 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -21,6 +23,9 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -33,8 +38,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.width
 import dev.baseline.data.SportFamily
 import dev.baseline.scores.Contributor
+import dev.baseline.scores.FormState
 import dev.baseline.scores.RecoveryResult
 import dev.baseline.scores.RecoveryZone
+import dev.baseline.scores.TrainingLoadDay
+import dev.baseline.scores.WeekBudget
 import dev.baseline.ui.components.ActivityCardUi
 import dev.baseline.ui.components.BODY_BATTERY_FILL_TAG
 import dev.baseline.ui.components.BodyBatteryFillColor
@@ -256,12 +264,11 @@ class TodayScreenTest {
         state = state.copy(bodyBattery = BodyBatteryUi(80, curve, 62, null, false))
         rule.waitForIdle()
         chart().assertDoesNotExist()
-        rule.onNodeWithText("Body Battery").performClick()
+        rule.onNodeWithText("+62 charged").assertExists() // the overnight charge is on the strip itself
+        rule.onNodeWithText("BODY BATTERY").performClick()
         chart().assertExists()
-        rule.onNodeWithText("Charged +62").assertExists()
-        rule.onNodeWithText("Body Battery").performClick()
+        rule.onNodeWithText("BODY BATTERY").performClick()
         chart().assertDoesNotExist()
-        rule.onNodeWithText("Charged +62").assertDoesNotExist()
     }
 
     @Test
@@ -283,7 +290,9 @@ class TodayScreenTest {
     @Test
     fun bodyBatteryWithoutReadingShowsDashAndEmptyTrack() {
         show(full.copy(bodyBattery = BodyBatteryUi(null, emptyList(), null, null, false)))
-        rule.onNodeWithText("Body Battery").assertExists()
+        rule.onNodeWithText("BODY BATTERY").assertExists()
+        rule.onNodeWithText("charged", substring = true).assertDoesNotExist()
+        rule.onNode(hasContentDescription("Body Battery, no reading yet")).assertExists()
         rule.onNodeWithTag(BODY_BATTERY_FILL_TAG, useUnmergedTree = true).assertDoesNotExist()
         rule.onNodeWithText("—").assertExists()
     }
@@ -305,20 +314,29 @@ class TodayScreenTest {
         }
 
         fun label() = rule
-            .onNodeWithText("Body Battery")
+            .onNodeWithText("BODY BATTERY")
             .fetchSemanticsNode()
             .config
             .getOrNull(androidx.compose.ui.semantics.SemanticsActions.OnClick)
             ?.label
         assertEquals("Show Body Battery curve", label())
-        rule.onNodeWithText("Body Battery").performClick()
+        rule.onNodeWithText("BODY BATTERY").performClick()
         assertEquals("Hide Body Battery curve", label())
     }
 
     @Test
     fun expandedTotalsShowDrainedWhenKnown() {
         show(full.copy(bodyBattery = BodyBatteryUi(80, curve, 62, 48, true)))
-        rule.onNodeWithText("Charged +62 · Drained −48").assertExists()
+        rule.onNodeWithText("Drained −48 today").assertExists()
+    }
+
+    @Test
+    fun bodyBatteryIsASlimStripUnderTheDials() {
+        show(full)
+        val strip = rule.onNode(hasClickAction() and hasContentDescription("Body Battery 80, charged 62 overnight"))
+        strip.assertExists()
+        assertTrue(strip.getUnclippedBoundsInRoot().let { it.bottom - it.top } >= 48.dp)
+        rule.onNodeWithText("Body Battery").assertDoesNotExist() // the old card's title
     }
 
     @Test
@@ -662,5 +680,69 @@ class TodayScreenTest {
         listOf("VS. 30-DAY BASELINE", "TODAY'S ACTIVITIES", "TODAY").forEach {
             rule.onNodeWithText(it, useUnmergedTree = true).assert(isHeading())
         }
+    }
+
+    private val weekStart = date.minusDays(2)
+
+    private fun load(state: FormState, budget: WeekBudget? = WeekBudget(weekStart, 62, false, 2, 4), formPct: Int? = -18) =
+        TrainingLoadUi(TrainingLoadDay(date, 64.0, 76.0, formPct, state, if (state == FormState.CALIBRATING) 12 else null), budget)
+
+    @Test
+    fun aNormalWeekIsAQuietTagAndAFooterLine() {
+        show(full.copy(trainingLoad = load(FormState.PRODUCTIVE)))
+        rule.onNodeWithText("Productive week").assertExists()
+        rule.onNodeWithText("This week: 62% of normal · ~2 hard days left").assertExists()
+        rule.onNodeWithText("Strain target today: 14 – 18").assertExists()
+        rule.onNodeWithText("Keep today easy", substring = true).assertDoesNotExist()
+        rule.onNodeWithText("Training load").assertDoesNotExist() // no separate card any more
+    }
+
+    @Test
+    fun anOverreachingWeekCallsItOutAndEasesTheTarget() {
+        show(full.copy(trainingLoad = load(FormState.OVERREACHING, formPct = -60), strainTarget = 10.0..14.0, strainTargetEased = true))
+        rule.onNodeWithText("Overreaching week").assertExists()
+        rule.onNodeWithText("Fatigue is well above your fitness. Keep today easy.").assertExists()
+        rule.onNodeWithText("Strain target today: 10 – 14 (eased for this week)").assertExists()
+    }
+
+    @Test
+    fun aFreshWeekCallsOutTheOpportunity() {
+        show(full.copy(trainingLoad = load(FormState.FRESH, formPct = 12)))
+        rule.onNodeWithText("You're rested. A good day for a hard session.").assertExists()
+    }
+
+    @Test
+    fun pastTheSafeRangeCallsItOut() {
+        show(full.copy(trainingLoad = load(FormState.PRODUCTIVE, WeekBudget(weekStart, 141, true, 0, 4))))
+        rule.onNodeWithText("You're past your safe range for the week. Keep the rest easy.").assertExists()
+        rule.onNodeWithText("This week: 141% of normal").assertExists()
+    }
+
+    @Test
+    fun calibratingIsAMutedTagWithoutAWeekLine() {
+        show(full.copy(trainingLoad = load(FormState.CALIBRATING, budget = null, formPct = null)))
+        rule.onNodeWithText("Calibrating").assertExists()
+        rule.onNodeWithText("This week", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun tappingTheRecoveryCardOpensTrends() {
+        var opened = 0
+        rule.setContent {
+            BaselineTheme { TodayContent(full.copy(trainingLoad = load(FormState.PRODUCTIVE)), null, {}, {}, {}, {}, {}, {}, onOpenTrends = { opened++ }) }
+        }
+        val card = rule.onNode(hasClickAction() and hasText("Productive week", substring = true))
+        card.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        assertEquals("Open training load in Trends", card.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+        assertTrue(card.getUnclippedBoundsInRoot().let { it.bottom - it.top } >= 48.dp)
+        card.performScrollTo().performClick()
+        assertEquals(1, opened)
+    }
+
+    @Test
+    fun withoutTrainingLoadTheRecoveryCardIsNotClickable() {
+        show(full.copy(trainingLoad = null))
+        rule.onNodeWithText("RECOVERED").assertExists()
+        rule.onNode(hasClickAction() and hasText("RECOVERED", substring = true)).assertDoesNotExist()
     }
 }

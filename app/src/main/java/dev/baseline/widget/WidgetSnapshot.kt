@@ -8,9 +8,11 @@ import dev.baseline.data.db.DayEntity
 import dev.baseline.data.db.ScoreEntity
 import dev.baseline.garmin.KeyStatus
 import dev.baseline.scores.Baselines
+import dev.baseline.scores.FormState
 import dev.baseline.scores.Recovery
 import dev.baseline.scores.RecoveryZone
 import dev.baseline.scores.SleepPerformance
+import dev.baseline.scores.TrainingLoad
 import dev.baseline.ui.format.Formatters
 import dev.baseline.ui.today.prettyType
 import dev.baseline.ui.today.statRows
@@ -130,6 +132,8 @@ fun buildWidgetSnapshot(
     activityStrains: Map<Long, Double>,
     activeSets: Map<Long, Int>,
     weekScores: Map<LocalDate, ScoreEntity>,
+    /** Today's training-load state, so an Overreaching week eases the strain target exactly as Today does. */
+    weekState: FormState? = null,
 ): WidgetSnapshot {
     val syncPill =
         when {
@@ -168,7 +172,8 @@ fun buildWidgetSnapshot(
     val targetHi = score?.strainTargetHigh?.takeIf { it.isFinite() && it >= 0.0 }
     val strainTargetText =
         if (targetLo != null && targetHi != null) {
-            "${targetLo.roundToInt()}–${targetHi.roundToInt()}"
+            val target = TrainingLoad.easedTarget(targetLo..targetHi, weekState) ?: (targetLo..targetHi)
+            "${target.start.roundToInt()}–${target.endInclusive.roundToInt()}"
         } else {
             null
         }
@@ -360,6 +365,8 @@ suspend fun loadWidgetSnapshot(container: AppContainer, is24h: Boolean, syncing:
     val ids = recent.map { it.id }
     val strains = repo.activityScoresFor(ids).first().associate { it.activityId to it.strain }
     val sets = repo.activeSetCountsFor(ids).first()
+    val loads = repo.scores(today.minusDays(TrainingLoad.WARM_UP_DAYS), today).first().associate { it.date to it.dayLoad }
+    val weekState = TrainingLoad.series(loads, today, today, repo.historyStart.first().first, prefs.strainCalibration.first()?.tau).single().state
     return buildWidgetSnapshot(
         today = today,
         zone = zone,
@@ -380,5 +387,6 @@ suspend fun loadWidgetSnapshot(container: AppContainer, is24h: Boolean, syncing:
         activityStrains = strains,
         activeSets = sets,
         weekScores = weekScores,
+        weekState = weekState,
     )
 }

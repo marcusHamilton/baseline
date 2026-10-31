@@ -5,17 +5,21 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -42,12 +46,15 @@ import dev.baseline.ui.theme.RecoveryAmber
 import dev.baseline.ui.theme.RecoveryGreen
 import dev.baseline.ui.theme.RecoveryRed
 import dev.baseline.ui.theme.SleepPurple
+import dev.baseline.ui.theme.StrainBlue
+import dev.baseline.ui.theme.StrainBlueLight
 import dev.baseline.ui.theme.TextBody
 import dev.baseline.ui.theme.TextMuted
 import dev.baseline.ui.theme.TextPrimary
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private val Ranges = listOf(TrendRange.D7 to "7 days", TrendRange.D30 to "30 days", TrendRange.D90 to "90 days")
 private val SleepCap = Color(0xFF2E2A45)
@@ -56,13 +63,21 @@ private const val MISSING = "—"
 private val AXIS_DATE = DateTimeFormatter.ofPattern("MMM d", Locale.US)
 
 @Composable
-fun TrendsScreen(vm: TrendsViewModel) {
+fun TrendsScreen(vm: TrendsViewModel, focusTrainingLoad: Boolean = false, onFocused: () -> Unit = {}) {
     val state by vm.state.collectAsStateWithLifecycle()
-    TrendsContent(state, vm::setRange)
+    TrendsContent(state, vm::setRange, focusTrainingLoad, onFocused)
 }
 
+/** [focusTrainingLoad]: opened from Today's Recovery card, so scroll the Training load card into view, then [onFocused]. */
 @Composable
-fun TrendsContent(state: TrendsUiState, onRange: (TrendRange) -> Unit) {
+fun TrendsContent(state: TrendsUiState, onRange: (TrendRange) -> Unit, focusTrainingLoad: Boolean = false, onFocused: () -> Unit = {}) {
+    val trainingLoad = remember { BringIntoViewRequester() }
+    LaunchedEffect(focusTrainingLoad) {
+        if (focusTrainingLoad) {
+            trainingLoad.bringIntoView()
+            onFocused()
+        }
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("screen-trends").padding(bottom = 24.dp)) {
         Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 8.dp), Arrangement.spacedBy(14.dp)) {
             Text(
@@ -132,6 +147,22 @@ fun TrendsContent(state: TrendsUiState, onRange: (TrendRange) -> Unit) {
                 )
                 TimeAxis(start)
             }
+            TrendCard("TRAINING LOAD", state.trainingLoadHeader(), Modifier.bringIntoViewRequester(trainingLoad)) {
+                TrendLine(
+                    state.trainingLoad.map { it?.fitness?.roundToInt() },
+                    StrainBlue,
+                    state.trainingLoadDescription(),
+                    height = 110.dp,
+                    secondary = state.trainingLoad.map { it?.fatigue?.roundToInt() },
+                    secondaryColor = StrainBlueLight,
+                )
+                StateStrip(state.trainingLoad.map { it?.state })
+                TimeAxis(start)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Legend(StrainBlue, "Fitness")
+                    Legend(StrainBlueLight, "Fatigue")
+                }
+            }
         }
     }
 }
@@ -151,8 +182,8 @@ private fun RangeChips(selected: TrendRange, onRange: (TrendRange) -> Unit) {
 }
 
 @Composable
-private fun TrendCard(title: String, average: String, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).padding(16.dp), Arrangement.spacedBy(10.dp)) {
+private fun TrendCard(title: String, average: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).padding(16.dp), Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.Bottom) {
             Text(
                 title,

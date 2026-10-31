@@ -21,13 +21,17 @@ import dev.baseline.data.db.ScoreEntity
 import dev.baseline.data.db.TaskCounts
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.garmin.KeyStatus
+import dev.baseline.prefs.DEFAULT_BASELINE_ORDER
 import dev.baseline.prefs.UserPrefs
 import dev.baseline.scores.Contributor
+import dev.baseline.scores.FormState
 import dev.baseline.scores.HrPoint
+import dev.baseline.scores.TrainingLoadDay
 import dev.baseline.sync.SyncScheduler
 import dev.baseline.sync.closeWorkManagerDb
 import dev.baseline.testutil.ScopeCleanup
 import dev.baseline.testutil.inMemoryDatabase
+import dev.baseline.ui.format.Formatters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -38,6 +42,8 @@ import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -46,9 +52,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
 import java.time.Clock
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.temporal.TemporalAdjusters
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -413,5 +421,75 @@ class TodayViewModelTest {
             listOf("Recovered", "Maintaining", "Under-recovered"),
             dev.baseline.scores.RecoveryZone.entries.map(::zoneTitle),
         )
+    }
+
+    private fun scoreRow(d: LocalDate, load: Double) = ScoreEntity(d, null, false, null, load, 0.0, null, null, 1)
+
+    private fun loadScores(first: LocalDate, days: Int, load: (Int) -> Double) = (0 until days).map { scoreRow(first.plusDays(it.toLong()), load(it)) }
+
+    @Test
+    fun trainingLoadForAProductiveDay() {
+        val first = today.minusDays(209)
+        val ui = buildTrainingLoadUi(today, loadScores(first, 210) { if (it < 200) 100.0 else 140.0 }, first, DayOfWeek.MONDAY, 100.0)!!
+        assertEquals(FormState.PRODUCTIVE, ui.day.state)
+        assertNotNull(ui.budget)
+    }
+
+    @Test
+    fun noTrainingLoadBeforeTheFirstScore() {
+        assertNull(buildTrainingLoadUi(today, loadScores(today.plusDays(5), 1) { 100.0 }, today.plusDays(5), DayOfWeek.MONDAY, 100.0))
+    }
+
+    @Test
+    fun calibratingHasNoBudget() {
+        val first = today.minusDays(10)
+        val ui = buildTrainingLoadUi(today, loadScores(first, 11) { 100.0 }, first, DayOfWeek.MONDAY, 100.0)!!
+        assertEquals(FormState.CALIBRATING, ui.day.state)
+        assertEquals(32, ui.day.calibratingDaysLeft)
+        assertNull(ui.budget)
+    }
+
+    @Test
+    fun pastDayUsesThatDatesWeek() {
+        val wed = today.with(TemporalAdjusters.previous(DayOfWeek.WEDNESDAY))
+        val first = wed.minusDays(200)
+        val ui = buildTrainingLoadUi(wed, loadScores(first, 201) { 100.0 }, first, DayOfWeek.MONDAY, 100.0)!!
+        assertEquals(wed.minusDays(2), ui.budget!!.weekStart)
+        assertEquals(4, ui.budget!!.daysLeft)
+    }
+
+    @Test
+    fun trainingLoadFollowsTheDate() = runBlocking {
+        for (i in 0..60) {
+            val d = today.minusDays(i.toLong())
+            db.dayDao().upsert(day(d))
+            db.scoreDao().upsert(scoreRow(d, 100.0))
+        }
+        assertEquals(today, awaitState { it.trainingLoad != null }.trainingLoad!!.day.date)
+        vm.prevDay()
+        assertEquals(today.minusDays(1), awaitState { it.trainingLoad?.day?.date == today.minusDays(1) }.trainingLoad!!.day.date)
+    }
+
+    private fun load(state: FormState) = TrainingLoadUi(TrainingLoadDay(today, 60.0, 90.0, -50, state, null), null)
+
+    private fun stateWith(trainingLoad: TrainingLoadUi?) = buildTodayState(
+        today, today, day(today), ScoreEntity(today, 70, false, 0.9, 100.0, 11.0, 14.0, 18.0, 1), emptyList(), emptyList(), emptyMap(),
+        emptyList(), DEFAULT_BASELINE_ORDER, emptySet(), Formatters(false), null, false, trainingLoad = trainingLoad,
+    )
+
+    @Test
+    fun anOverreachingWeekEasesTodaysStrainTarget() {
+        val s = stateWith(load(FormState.OVERREACHING))
+        assertEquals(10.0..14.0, s.strainTarget)
+        assertTrue(s.strainTargetEased)
+    }
+
+    @Test
+    fun otherWeeksKeepTheStoredTarget() {
+        listOf(load(FormState.PRODUCTIVE), load(FormState.FRESH), null).forEach {
+            val s = stateWith(it)
+            assertEquals(14.0..18.0, s.strainTarget)
+            assertFalse(s.strainTargetEased)
+        }
     }
 }

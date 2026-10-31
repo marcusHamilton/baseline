@@ -11,6 +11,9 @@ import dev.baseline.data.db.DayEntity
 import dev.baseline.data.db.ScoreEntity
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.prefs.UserPrefs
+import dev.baseline.scores.FormState
+import dev.baseline.scores.TrainingLoad
+import dev.baseline.scores.TrainingLoadDay
 import dev.baseline.testutil.ScopeCleanup
 import dev.baseline.testutil.inMemoryDatabase
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +26,7 @@ import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -191,5 +195,63 @@ class TrendsViewModelTest {
             )
         assertEquals(Triple(today, Duration.ofSeconds(26_400), Duration.ofMinutes(480)), s.sleepVsNeed.last())
         assertEquals(Triple(today.minusDays(1), Duration.ofSeconds(25_000), null), s.sleepVsNeed[5])
+    }
+
+    private fun loadScore(d: LocalDate, load: Double, recovery: Int? = null) = ScoreEntity(d, recovery, false, null, load, 0.0, null, null, 1)
+
+    @Test fun warmUpDoesNotLeakIntoExistingSeries() {
+        val from = today.minusDays(29)
+        val inRange = (0L..29).map { loadScore(from.plusDays(it), 100.0, 60 + (it % 5).toInt()) }
+        val warmUp = (1L..TrainingLoad.WARM_UP_DAYS).map { loadScore(from.minusDays(it), 100.0, 10) }
+        val s = buildTrendsState(TrendRange.D30, today, emptyList(), warmUp + inRange, from.minusDays(TrainingLoad.WARM_UP_DAYS), 100.0)
+        assertEquals(30, s.recovery.size)
+        assertEquals(from, s.recovery.first().first)
+        assertEquals(buildTrendsState(TrendRange.D30, today, emptyList(), inRange).averages, s.averages)
+    }
+
+    @Test fun trainingLoadCoversTheRange() {
+        val first = today.minusDays(200)
+        val s = buildTrendsState(TrendRange.D30, today, emptyList(), (0L..200).map { loadScore(first.plusDays(it), 100.0) }, first, 100.0)
+        assertEquals(30, s.trainingLoad.size)
+        assertEquals(today, s.trainingLoad.last()!!.date)
+        assertEquals(FormState.MAINTAINING, s.trainingLoad.last()!!.state)
+    }
+
+    @Test fun daysBeforeTheFirstScoreAreGaps() {
+        val first = today.minusDays(10)
+        val s = buildTrendsState(TrendRange.D30, today, emptyList(), (0L..10).map { loadScore(first.plusDays(it), 100.0) }, first, 100.0)
+        assertTrue(s.trainingLoad.take(19).all { it == null })
+        assertEquals(first, s.trainingLoad[19]!!.date)
+    }
+
+    @Test fun trainingLoadHeaderAndDescription() {
+        val dates = (0L..29).map { today.minusDays(29 - it) }
+        val series = dates.mapIndexed { i, d ->
+            val last = i == 29
+            TrainingLoadDay(
+                d,
+                if (last) 64.0 else 52.0,
+                if (last) 76.0 else 40.0,
+                if (last) -18 else 23,
+                if (last) FormState.PRODUCTIVE else FormState.DETRAINING,
+                null,
+            )
+        }
+        val s = buildTrendsState(TrendRange.D30, today, emptyList(), emptyList()).copy(trainingLoad = series)
+        assertEquals("Productive · form \u221218%", s.trainingLoadHeader())
+        assertEquals(
+            "Training load over the last 30 days. Fitness rose from 52 to 64, fatigue from 40 to 76. Now Productive, form minus 18 percent.",
+            s.trainingLoadDescription(),
+        )
+        val flat = s.copy(trainingLoad = series.map { it.copy(fitness = 64.2, fatigue = 30.0) })
+        assertTrue(flat.trainingLoadDescription(), flat.trainingLoadDescription().contains("Fitness held at 64, fatigue held at 30."))
+        val cal = s.copy(trainingLoad = series.map { it.copy(formPct = null, state = FormState.CALIBRATING, calibratingDaysLeft = 3) })
+        assertEquals("Calibrating", cal.trainingLoadHeader())
+        assertEquals("\u2014", s.copy(trainingLoad = List(30) { null }).trainingLoadHeader())
+    }
+
+    @Test fun lineScaleIgnoresAnEmptySecondary() {
+        assertEquals(40f..80f, lineScale(listOf(50, null, 80), emptyList(), listOf(null, 40..60, null), null))
+        assertEquals(10f..80f, lineScale(listOf(50, null, 80), listOf(10, 20, null), emptyList(), null))
     }
 }

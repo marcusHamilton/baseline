@@ -104,6 +104,11 @@ android {
         unitTests.all {
             // Robolectric reaches into JDK internals; the toolchain here is JDK 25 (Android Studio JBR).
             it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED", "--enable-native-access=ALL-UNNAMED")
+            // -Pscreenshots=<dir> turns on ScreenshotCapture (docs/cloud-sessions.md); without it those tests are skipped.
+            providers.gradleProperty("screenshots").orNull?.let { dir ->
+                it.systemProperty("baseline.screenshots", rootProject.file(dir).absolutePath)
+                it.outputs.upToDateWhen { false }
+            }
         }
     }
 }

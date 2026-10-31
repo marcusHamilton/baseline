@@ -89,6 +89,9 @@ object Routes {
 
 internal const val SELECTED_DATE = "selectedDate"
 
+/** Set on the Trends entry when Today's Recovery card opens it, so Trends scrolls to its Training load card. */
+internal const val FOCUS_TRAINING_LOAD = "focusTrainingLoad"
+
 /** Tells the screen below (Today) which day to show, then goes back to it. */
 internal fun NavController.returnSelectedDate(date: LocalDate) {
     previousBackStackEntry?.savedStateHandle?.set(SELECTED_DATE, date.toString())
@@ -241,6 +244,13 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                         onOpenActivity = { id -> nav.navigate("activity/$id") },
                         zone = container.dateTicker.zone,
                         updater = container.updater,
+                        onOpenTrends = {
+                            nav.navigate(Routes.TRENDS) {
+                                popUpTo(Routes.TODAY)
+                                launchSingleTop = true
+                            }
+                            runCatching { nav.getBackStackEntry(Routes.TRENDS) }.getOrNull()?.savedStateHandle?.set(FOCUS_TRAINING_LOAD, true)
+                        },
                     )
                 }
                 composable(Routes.CALENDAR) {
@@ -295,8 +305,13 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                         onOpenActivity = { id -> nav.navigate("activity/$id") },
                     )
                 }
-                composable(Routes.TRENDS) {
-                    TrendsScreen(viewModel { TrendsViewModel(container.repository, container.today) })
+                composable(Routes.TRENDS) { entry ->
+                    val focus by entry.savedStateHandle.getStateFlow(FOCUS_TRAINING_LOAD, false).collectAsStateWithLifecycle()
+                    TrendsScreen(
+                        viewModel { TrendsViewModel(container.repository, container.today) },
+                        focusTrainingLoad = focus,
+                        onFocused = { entry.savedStateHandle[FOCUS_TRAINING_LOAD] = false },
+                    )
                 }
                 composable(Routes.SETTINGS) {
                     SettingsScreen(
