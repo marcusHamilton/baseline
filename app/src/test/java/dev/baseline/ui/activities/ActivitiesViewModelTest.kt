@@ -4,20 +4,19 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
-import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import dev.baseline.data.Repository
 import dev.baseline.data.SportFamily
 import dev.baseline.data.db.ActivityEntity
 import dev.baseline.data.db.ActivityScoreEntity
 import dev.baseline.data.db.AppDatabase
-import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.db.LoadSource
 import dev.baseline.data.db.RawResponse
 import dev.baseline.data.db.StrengthSetEntity
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.prefs.UserPrefs
 import dev.baseline.testutil.ScopeCleanup
+import dev.baseline.testutil.inMemoryDatabase
 import dev.baseline.ui.format.Formatters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -104,7 +103,7 @@ class ActivitiesViewModelTest {
     fun setUp() {
         Dispatchers.setMain(Dispatchers.Unconfined)
         val context = ApplicationProvider.getApplicationContext<Context>()
-        db = Room.inMemoryDatabaseBuilder<AppDatabase>(context) { AppDatabase_Impl() }.allowMainThreadQueries().build()
+        db = inMemoryDatabase(context)
         file = File.createTempFile("actvm", ".preferences_pb").also { it.delete() }
         val store: DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = scopes.storeScope) { file }
         vm = scopes.track(ActivitiesViewModel(Repository(db, UserPrefs(store), ApiKeyVault(store, { it }, { it }, Clock.systemUTC())), TODAY))

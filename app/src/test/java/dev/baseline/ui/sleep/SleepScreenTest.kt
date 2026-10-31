@@ -1,6 +1,8 @@
 package dev.baseline.ui.sleep
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -77,5 +79,14 @@ class SleepScreenTest {
         rule.onNodeWithText("+ 1h 18m").performScrollTo().assertExists()
         rule.onNodeWithText("8h 58m · bed 11:40 PM").performScrollTo().assertExists()
         assertEquals("Oct 22 – 23", nightLabel(date))
+    }
+
+    @Test
+    fun screenAndCardTitlesAreHeadings() {
+        val ready = empty.copy(overnightLoading = false, needCard = SleepNeedUi(Duration.ofMinutes(460), Duration.ZERO, emptyList(), null))
+        rule.setContent { BaselineTheme { SleepContent(ready, false) {} } }
+        listOf("SLEEP", "OVERNIGHT", "STAGES", "NEXT NIGHT'S SLEEP NEED").forEach {
+            rule.onNode(isHeading() and hasText(it)).performScrollTo().assertExists()
+        }
     }
 }

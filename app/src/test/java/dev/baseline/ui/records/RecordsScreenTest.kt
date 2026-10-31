@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -58,5 +59,13 @@ class RecordsScreenTest {
         rule.onNode(hasScrollAction()).performScrollToNode(hasText("BEST POWER · INDOOR")) // below the fold in a lazy list
         rule.onNodeWithContentDescription("5 min: 318 watts").assertExists()
         rule.onNodeWithContentDescription("5 s: no record").assertExists()
+    }
+
+    @Test fun titleAndSectionTitlesAreHeadings() {
+        rule.setContent { BaselineTheme { RecordsContent(state(SportFamily.RIDE), {}, {}, {}) } }
+        rule.onNode(isHeading() and hasText("ALL-TIME RECORDS")).assertExists()
+        rule.onNode(isHeading() and hasText("FASTEST TIMES")).assertExists()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasText("BEST POWER · INDOOR"))
+        rule.onNode(isHeading() and hasText("BEST POWER · INDOOR")).assertExists()
     }
 }

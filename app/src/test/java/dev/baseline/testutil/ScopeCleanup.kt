@@ -10,9 +10,9 @@ import kotlinx.coroutines.job
 
 /**
  * Owns the coroutine scopes a test would otherwise leak: the DataStore scope and the scope of every ViewModel the test
- * builds directly (nothing clears those, so their `stateIn` collectors would keep reading Room after `db.close()`, and
- * Room's invalidation tracker then reopens an empty in-memory database and throws "no such table" on a background thread).
- * Call [close] first in tearDown, before `db.close()`.
+ * builds directly (nothing clears those, so their `stateIn` collectors would keep reading Room after `db.close()` and
+ * throw on a background thread, failing a later test). Call [close] first in tearDown, before `db.close()`. A "no such
+ * table" mid-test is a different trap: see [inMemoryDatabase].
  */
 class ScopeCleanup {
     /** Pass as `PreferenceDataStoreFactory.create(scope = ...)`. */

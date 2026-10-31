@@ -13,6 +13,7 @@ import dev.baseline.scores.HrPoint
 import dev.baseline.scores.SleepPerformance
 import dev.baseline.sync.SyncScheduler
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -65,8 +66,17 @@ class SleepViewModel(
     private val scheduler: SyncScheduler,
     val date: LocalDate,
     today: LocalDate,
-    private val zone: ZoneId,
+    private val zoneFlow: StateFlow<ZoneId>,
 ) : ViewModel() {
+    constructor(
+        repo: Repository,
+        taskDao: TaskDao,
+        scheduler: SyncScheduler,
+        date: LocalDate,
+        today: LocalDate,
+        zone: ZoneId,
+    ) : this(repo, taskDao, scheduler, date, today, MutableStateFlow(zone))
+
     private class Inputs(val day: DayEntity?, val score: ScoreEntity?, val hr: List<HrPoint>)
 
     private class Overnight(val hrv: List<Pair<Instant, Int>>?, val task: TaskStatus?, val unreadable: Boolean)
@@ -80,12 +90,14 @@ class SleepViewModel(
                 repo.heartRate(date),
             ) { day, score, hr0, hr1 -> Inputs(day, score, hr0 + hr1) },
             combine(repo.hrvReadings(date), repo.taskStatus(GarminEndpoint.HRV_DAY, date.toString()), repo.dayUnreadable(date, sleepOnly = true), ::Overnight),
-        ) { a, b -> buildSleepState(date, today, a.day, a.score, a.hr, b.hrv, b.task, zone, b.unreadable) }
+            // Bed and wake are clock times, so a time-zone change has to re-render them.
+            zoneFlow,
+        ) { a, b, zone -> buildSleepState(date, today, a.day, a.score, a.hr, b.hrv, b.task, zone, b.unreadable) }
             .flowOn(Dispatchers.Default)
             .stateIn(
                 viewModelScope,
                 SharingStarted.WhileSubscribed(5_000),
-                buildSleepState(date, today, null, null, emptyList(), null, null, zone).copy(loading = true),
+                buildSleepState(date, today, null, null, emptyList(), null, null, zoneFlow.value).copy(loading = true),
             )
 
     init {

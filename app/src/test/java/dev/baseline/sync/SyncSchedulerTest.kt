@@ -1,6 +1,5 @@
 package dev.baseline.sync
 
-import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
 import androidx.work.NetworkType
@@ -11,10 +10,10 @@ import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
 import androidx.work.testing.WorkManagerTestInitHelper
 import dev.baseline.data.db.AppDatabase
-import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.db.SyncTaskEntity
 import dev.baseline.data.db.TaskStatus
 import dev.baseline.prefs.SyncInterval
+import dev.baseline.testutil.inMemoryDatabase
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -56,11 +55,7 @@ class SyncSchedulerTest {
     fun setUp() {
         WorkManagerTestInitHelper.initializeTestWorkManager(ApplicationProvider.getApplicationContext())
         wm = WorkManager.getInstance(ApplicationProvider.getApplicationContext())
-        db =
-            Room
-                .inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()) { AppDatabase_Impl() }
-                .allowMainThreadQueries()
-                .build()
+        db = inMemoryDatabase()
     }
 
     private fun scheduler() = SyncScheduler(wm) { db.taskDao().backfillPending() }

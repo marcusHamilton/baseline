@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
-import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.WorkManager
 import androidx.work.testing.WorkManagerTestInitHelper
@@ -20,7 +19,6 @@ import dev.baseline.data.db.ActivityEntity
 import dev.baseline.data.db.ActivityScoreEntity
 import dev.baseline.data.db.ActivityStreamEntity
 import dev.baseline.data.db.AppDatabase
-import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.db.LoadSource
 import dev.baseline.data.db.StrengthSetEntity
 import dev.baseline.data.db.SwimLengthEntity
@@ -34,6 +32,7 @@ import dev.baseline.prefs.UserPrefs
 import dev.baseline.sync.SyncScheduler
 import dev.baseline.sync.closeWorkManagerDb
 import dev.baseline.testutil.ScopeCleanup
+import dev.baseline.testutil.inMemoryDatabase
 import dev.baseline.ui.activities.act
 import dev.baseline.ui.format.Formatters
 import kotlinx.coroutines.Dispatchers
@@ -106,7 +105,7 @@ class ActivityViewModelTest {
         context = ApplicationProvider.getApplicationContext()
         WorkManagerTestInitHelper.initializeTestWorkManager(context)
         scheduler = CountingScheduler(WorkManager.getInstance(context))
-        db = Room.inMemoryDatabaseBuilder<AppDatabase>(context) { AppDatabase_Impl() }.allowMainThreadQueries().build()
+        db = inMemoryDatabase(context)
         file = File.createTempFile("activityvm", ".preferences_pb").also { it.delete() }
         val store: DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = scopes.storeScope) { file }
         repo = Repository(db, UserPrefs(store), ApiKeyVault(store, { it }, { it }, Clock.systemUTC()))

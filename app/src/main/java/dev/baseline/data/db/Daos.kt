@@ -220,6 +220,10 @@ interface ActivityDao {
     @Query("SELECT * FROM activity WHERE day BETWEEN :from AND :to ORDER BY startGmt")
     fun between(from: LocalDate, to: LocalDate): Flow<List<ActivityEntity>>
 
+    /** Newest by local start time (what the widgets call the latest workout); null while there are none. */
+    @Query("SELECT * FROM activity ORDER BY startTimeLocal DESC LIMIT 1")
+    fun latest(): Flow<ActivityEntity?>
+
     @Query("UPDATE activity SET hrCoverage = :coverage WHERE id = :id")
     suspend fun setHrCoverage(id: Long, coverage: Double)
 
@@ -284,6 +288,9 @@ interface StrengthSetDao {
 
     @Query("SELECT activityId, COUNT(*) AS sets FROM strength_set WHERE setType = 'ACTIVE' GROUP BY activityId")
     fun activeCounts(): Flow<List<ActiveSetCount>>
+
+    @Query("SELECT activityId, COUNT(*) AS sets FROM strength_set WHERE setType = 'ACTIVE' AND activityId IN (:ids) GROUP BY activityId")
+    fun activeCounts(ids: List<Long>): Flow<List<ActiveSetCount>>
 }
 
 @Dao
@@ -315,6 +322,9 @@ interface ActivityScoreDao {
 
     @Query("SELECT * FROM activity_score")
     fun all(): Flow<List<ActivityScoreEntity>>
+
+    @Query("SELECT * FROM activity_score WHERE activityId IN (:ids)")
+    fun forIds(ids: List<Long>): Flow<List<ActivityScoreEntity>>
 
     @Query("SELECT s.* FROM activity_score s JOIN activity a ON a.id = s.activityId WHERE a.day = :date")
     fun forDay(date: LocalDate): Flow<List<ActivityScoreEntity>>

@@ -6,6 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -146,5 +148,13 @@ class SettingsScreenTest {
         show(base.copy(recalculating = true, imperial = true))
         rule.onNodeWithText("Recalculating…").performScrollTo().assertIsNotEnabled()
         rule.onNodeWithText("Imperial (from your Garmin profile)").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun screenAndCardTitlesAreHeadings() {
+        show(base)
+        listOf("SETTINGS", "GARMIN PERSONAL API", "SYNC", "SCORES & UNITS").forEach {
+            rule.onNode(isHeading() and hasText(it)).performScrollTo().assertExists()
+        }
     }
 }

@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
-import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.WorkManager
 import androidx.work.testing.WorkManagerTestInitHelper
@@ -13,7 +12,6 @@ import dev.baseline.data.SportFamily
 import dev.baseline.data.db.ActivityEntity
 import dev.baseline.data.db.ActivityScoreEntity
 import dev.baseline.data.db.AppDatabase
-import dev.baseline.data.db.AppDatabase_Impl
 import dev.baseline.data.db.BodyBatteryDayEntity
 import dev.baseline.data.db.DayEntity
 import dev.baseline.data.db.HrPacking
@@ -29,6 +27,7 @@ import dev.baseline.scores.HrPoint
 import dev.baseline.sync.SyncScheduler
 import dev.baseline.sync.closeWorkManagerDb
 import dev.baseline.testutil.ScopeCleanup
+import dev.baseline.testutil.inMemoryDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -70,7 +69,7 @@ class TodayViewModelTest {
         Dispatchers.setMain(Dispatchers.Unconfined)
         context = ApplicationProvider.getApplicationContext()
         WorkManagerTestInitHelper.initializeTestWorkManager(context)
-        db = Room.inMemoryDatabaseBuilder<AppDatabase>(context) { AppDatabase_Impl() }.allowMainThreadQueries().build()
+        db = inMemoryDatabase(context)
         file = File.createTempFile("todayvm", ".preferences_pb").also { it.delete() }
         val store: DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = scopes.storeScope) { file }
         prefs = UserPrefs(store)
@@ -174,6 +173,8 @@ class TodayViewModelTest {
         flow.value = today.plusDays(1)
         val stayed = withTimeout(10_000) { live.state.first { it.date == today.minusDays(2) && !it.isToday } }
         assertEquals(today.minusDays(2), stayed.date)
+        val rolled = withTimeout(10_000) { live.state.first { it.date == today.minusDays(2) && it.today == today.plusDays(1) } }
+        assertTrue(!rolled.isToday) // the screen words "Synced ..." from this today, not from the clock
         repeat(3) { live.nextDay() }
         val s = withTimeout(10_000) { live.state.first { it.date == today.plusDays(1) } }
         assertTrue(s.isToday)

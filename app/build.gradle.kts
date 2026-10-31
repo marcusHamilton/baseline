@@ -77,7 +77,9 @@ android {
         warningsAsErrors = true
         // No Timber dependency: android.util.Log is the logger, and none of the messages carry the key.
         // No core-ktx dependency, so the KTX extension suggestions have nothing to point at.
-        disable += setOf("LogNotTimber", "UseKtx")
+        // Version-currency checks fail the build whenever Google ships a release, not because of a change here; versions
+        // are bumped deliberately in gradle/libs.versions.toml.
+        disable += setOf("LogNotTimber", "UseKtx", "AndroidGradlePluginVersion", "GradleDependency", "NewerVersionAvailable")
     }
 
     testOptions {
