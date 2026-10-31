@@ -21,6 +21,8 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -33,14 +35,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.width
 import dev.baseline.data.SportFamily
 import dev.baseline.scores.Contributor
+import dev.baseline.scores.FormState
 import dev.baseline.scores.RecoveryResult
 import dev.baseline.scores.RecoveryZone
+import dev.baseline.scores.TrainingLoadDay
+import dev.baseline.scores.WeekBudget
 import dev.baseline.ui.components.ActivityCardUi
 import dev.baseline.ui.components.BODY_BATTERY_FILL_TAG
 import dev.baseline.ui.components.BodyBatteryFillColor
 import dev.baseline.ui.components.bodyBatteryChartDescription
 import dev.baseline.ui.components.bodyBatteryColor
 import dev.baseline.ui.components.statRowDescription
+import dev.baseline.ui.components.trainingLoadDescription
 import dev.baseline.ui.theme.BaselineTheme
 import dev.baseline.update.Release
 import dev.baseline.update.UpdateState
@@ -107,6 +113,7 @@ class TodayScreenTest {
                     onSleep,
                     onActivity,
                     onToggleBodyBattery = { state = state.copy(bodyBattery = state.bodyBattery.copy(expanded = !state.bodyBattery.expanded)) },
+                    onToggleTrainingLoad = { state = state.copy(trainingLoad = state.trainingLoad?.let { it.copy(expanded = !it.expanded) }) },
                 )
             }
         }
@@ -662,5 +669,53 @@ class TodayScreenTest {
         listOf("VS. 30-DAY BASELINE", "TODAY'S ACTIVITIES", "TODAY").forEach {
             rule.onNodeWithText(it, useUnmergedTree = true).assert(isHeading())
         }
+    }
+
+    private val weekStart = date.minusDays(2)
+    private val trainingLoad = TrainingLoadUi(
+        TrainingLoadDay(date, 64.0, 76.0, -18, FormState.PRODUCTIVE, null),
+        WeekBudget(weekStart, 62, false, 2, 4),
+        false,
+    )
+    private val budgetText = "62% of a normal week · room for ~2 hard days"
+
+    @Test
+    fun trainingLoadCollapsedShowsStateAndBudget() {
+        show(full.copy(trainingLoad = trainingLoad))
+        rule.onNodeWithText("Training load").assertExists()
+        rule.onNodeWithText("Productive").assertExists()
+        rule.onNodeWithText(budgetText).assertExists()
+        rule.onNodeWithText("Fitness 64 load · your 6-week average").assertDoesNotExist()
+    }
+
+    @Test
+    fun trainingLoadExpandsOnTap() {
+        show(full.copy(trainingLoad = trainingLoad))
+        rule.onNode(hasContentDescription(trainingLoadDescription(trainingLoad))).performScrollTo().performClick()
+        rule.onNodeWithText("Form \u221218%: You're building fitness at a pace you can absorb.").assertExists()
+        rule.onNodeWithText("Fitness 64 load · your 6-week average").assertExists()
+        rule.onNodeWithText("Fatigue 76 load · your last-week average").assertExists()
+    }
+
+    @Test
+    fun trainingLoadCalibrating() {
+        val cal = TrainingLoadUi(TrainingLoadDay(date, 0.0, 0.0, null, FormState.CALIBRATING, 12), null, false)
+        show(full.copy(trainingLoad = cal))
+        rule.onNodeWithText("Calibrating · 12 days to go").assertExists()
+        rule.onNodeWithText("of a normal week", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun trainingLoadHiddenWhenNull() {
+        show(full.copy(trainingLoad = null))
+        rule.onNodeWithText("Training load").assertDoesNotExist()
+    }
+
+    @Test
+    fun trainingLoadTouchTargetAndDescription() {
+        show(full.copy(trainingLoad = trainingLoad))
+        val node = rule.onNode(hasContentDescription(trainingLoadDescription(trainingLoad)) and hasClickAction())
+        node.assertExists()
+        assertTrue(node.getUnclippedBoundsInRoot().let { it.bottom - it.top } >= 48.dp)
     }
 }

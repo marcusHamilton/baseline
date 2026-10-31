@@ -88,6 +88,7 @@ import dev.baseline.ui.components.CircleButton
 import dev.baseline.ui.components.Dial
 import dev.baseline.ui.components.KeyBanner
 import dev.baseline.ui.components.StatRow
+import dev.baseline.ui.components.TrainingLoadCard
 import dev.baseline.ui.components.UpdateBanner
 import dev.baseline.ui.components.zoneColor
 import dev.baseline.ui.format.Formatters
@@ -148,6 +149,7 @@ fun TodayScreen(
             state, sync, vm::prevDay, vm::nextDay, onOpenCalendar, { onOpenSleep(state.date) }, onOpenActivity, vm::toggleBodyBattery,
             keyStatus, vm::toggleEdit, vm::moveRow, vm::toggleHidden, zoneNow,
             update, { updater?.primary() }, { tag -> updater?.dismiss(tag) },
+            onToggleTrainingLoad = vm::toggleTrainingLoad,
         )
     }
 }
@@ -170,6 +172,7 @@ fun TodayContent(
     update: UpdateUi? = null,
     onUpdate: () -> Unit = {},
     onDismissUpdate: (String) -> Unit = {},
+    onToggleTrainingLoad: () -> Unit = {},
 ) {
     val scroll = rememberScrollState()
     var viewport by remember { mutableStateOf(Rect.Zero) }
@@ -195,6 +198,7 @@ fun TodayContent(
         syncLine?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 20.dp), fontSize = 12.sp, color = TextMuted, textAlign = TextAlign.Center) }
         Dials(state, onOpenSleep)
         BodyBatteryCard(state.bodyBattery, onToggleBodyBattery, Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp), state.isToday)
+        state.trainingLoad?.let { TrainingLoadCard(it, onToggleTrainingLoad, Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp)) }
         InsightCard(state, Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp))
         if (state.activities.isNotEmpty()) {
             Section(if (state.isToday) "TODAY'S ACTIVITIES" else "ACTIVITIES") {
