@@ -13,8 +13,9 @@ fitness, fatigue and form.
 
 This feature is a **guardrail**, not a training planner:
 
-- Today answers in words: *Overreaching*, *Productive*, *Maintaining*, *Fresh* or *Detraining*, plus how much of a
-  normal week you have done and how many hard days are left before you overreach.
+- Today answers in words, on the Recovery card: *Overreaching*, *Productive*, *Maintaining*, *Fresh* or *Detraining*,
+  plus how much of a normal week you have done and how many hard days are left before you overreach. It stays quiet
+  while the week is normal and speaks up only when it needs attention.
 - Numbers (fitness, fatigue, form %) are there, but secondary.
 - Trends shows how the state has moved over 7 / 30 / 90 days.
 
@@ -24,13 +25,17 @@ roughly how much more training this week fits.
 ### Decisions made with the owner
 
 - Purpose: guardrail (plain-language state first, numbers second).
-- Weekly budget reads as "% of a normal week · room for ~N hard days", with a safe band up to 130 %.
+- Weekly budget reads as "This week: 67% of normal · ~3 hard days left", with a safe band up to 130 %.
+- Today has no separate Training load card (revised after the first build, from mockups): the week folds into the
+  Recovery card, quiet unless it matters, and Body Battery becomes a slim strip under the dials.
+- An Overreaching week eases a green strain target to the amber band (10–14) on Today and the Readiness widget.
 
 ### Non-goals
 
 - Notifications or alerts about the state.
 - Per-sport load, race planning, future-load projection, or a "target form on race day".
-- Any change to Recovery, Strain, the strain target or calibration (§7.2–7.4 are unchanged).
+- Any change to Recovery, Strain or calibration (§7.2–7.4 are unchanged), apart from easing the displayed strain
+  target in an Overreaching week (§4). The stored target in `ScoreEntity` is unchanged.
 - A home-screen widget for it (can come later on top of `TrainingLoad`).
 
 ## 2. Inputs
@@ -144,45 +149,54 @@ to D.
 
 ## 4. Today
 
-A **Training load** bar under the Body Battery bar, built like it (full width, collapsed by default, tap to expand;
-the expanded state is held in `TodayViewModel` like `toggleBodyBattery`).
+Training load has no card of its own on Today. It lives on the **Recovery card**, which answers "what should I do
+today?" for both time scales: Recovery for today, form for the weeks.
 
-**Collapsed** (one row plus a bar):
+**Tag.** Top right of the card, on the Recovery title's row: "Productive week" (state label + " week"), or just
+"Calibrating" / "No recent training". It is `TextMuted` while the week is normal, and takes the callout's colour when
+there is one.
 
-- Left: the title "Training load". Right: the state label in its colour, e.g. "Productive".
-- Under it, the budget line: "62% of a normal week · room for ~2 hard days". Variants:
-  - `hardDaysLeft == 0` and not over the band: "62% of a normal week · easy days from here".
-  - Over the band: "141% of a normal week · past your safe range", in `RecoveryAmber`.
-  - Past weeks (`daysLeft == 0`): just "104% of a normal week".
-  - No calibration: just the percentage.
-- The bar: a `Surface2` track from 0 to 130 %, filled in `StrainBlue` to `min(pct, 130)`, with a 1 dp tick at 100 %.
-  Over the band the fill is `RecoveryAmber`.
-- Calibrating: "Calibrating · 12 days to go" instead of the state, and no budget line or bar.
-- No recent training: the state text only.
+**Callout, only when the week needs attention.** A tinted note under the insight sentence (the colour at 12 % alpha
+behind it, a 6 dp dot, text in the colour). The text carries the meaning; colour only backs it up.
 
-**Expanded** adds three lines:
+| Condition (first match) | Text | Colour |
+|---|---|---|
+| Overreaching | Fatigue is well above your fitness. Keep today easy. | `RecoveryRed` |
+| Past the safe range (`overBand`) | You're past your safe range for the week. Keep the rest easy. | `RecoveryAmber` |
+| Fresh | You're rested. A good day for a hard session. | `StrainBlue` |
+| Detraining | You've trained well under your norm for a while; fitness is slipping. | `RecoveryAmber` |
 
-- "Form −18%: You're building fitness at a pace you can absorb." (the §3.3 one-liner)
-- "Fitness 64 load · your 6-week average"
-- "Fatigue 76 load · your last-week average"
+Productive, Maintaining, Calibrating and No recent training have no callout.
+
+**Footer.** Two muted 12 sp lines under the insight (and callout):
+
+- "Strain target today: 14 – 18" (as before; "Strain target: …" on past days).
+- "This week: 67% of normal · ~3 hard days left". Variants: "~1 hard day left"; "· easy days from here" when no hard
+  day fits; just "This week: 141% of normal" past the safe range (the callout says the rest), on the week's last day,
+  or without a strain calibration. No week line while Calibrating or with No recent training.
+
+**Overreaching eases the strain target.** When the week is Overreaching and the stored target is above the amber band,
+Today shows 10 – 14 instead and says so: "Strain target today: 10 – 14 (eased for this week)". A target already at or
+below the amber band is unchanged. `TrainingLoad.easedTarget` does this, and the Readiness widget uses it too, so the
+two never disagree. The stored `ScoreEntity` target is not changed.
+
+**Tap.** When there is a training load, the whole card is one button ("Open training load in Trends", at least
+48 dp) that opens the Trends tab scrolled to its Training load card (§5). Before the first score the card isn't
+clickable. TalkBack reads the merged card: title, tag, insight, callout, footer.
 
 **Past days.** Today's ‹ › navigation shows the state as of that date and that date's week budget (with `daysLeft`
-from that date, so a past Wednesday still says how many hard days were left then). Future days aren't reachable.
+from that date). Before the first score there is no tag, callout or week line.
 
-**Accessibility.**
-
-- The bar is one TalkBack node: "Training load: Productive, form minus 18 percent. 62 percent of a normal week, room
-  for about 2 hard days." The expand action and state come from its click label ("Show training load details") and
-  Expanded/Collapsed state description, as on the Body Battery bar.
-- The whole bar is the click target and is at least 48 dp tall.
-- The state is always written out, so colour is never the only signal.
-
-**Placement and edit mode.** The bar is fixed under Body Battery and is not one of the reorderable baseline rows (it
-has no 30-day-baseline delta, which is what those rows show). `DEFAULT_BASELINE_ORDER` is unchanged.
+**Body Battery strip.** The full-width Body Battery card becomes a slim strip under the dials, styled like the dial
+labels: "BODY BATTERY" in small caps on the left, "+62 charged" and the level (Barlow, in its band colour) on the
+right, and a 4 dp track filled to level/100 in the band colour beneath. No card background. The whole strip is the
+tap target (at least 48 dp): it shows the day's curve under it and, when known, "Drained −48 today". TalkBack: "Body
+Battery 81, charged 62 overnight" (or "Body Battery, no reading yet"), with the click label "Show / Hide Body
+Battery curve".
 
 **ViewModel.** `TodayViewModel` reads `repo.scores(date − 7 − WARM_UP_DAYS, date)` alongside the existing flows and
-builds a `TrainingLoadUi` (state, formPct, fitness, fatigue, budget) in `buildTodayState` through `TrainingLoad`. The
-extra rows are a few hundred `ScoreEntity`s; no new DAO query is needed.
+builds a `TrainingLoadUi(day, budget)` through `TrainingLoad`, then `buildTodayState` applies `easedTarget` and sets
+`strainTargetEased`. The extra rows are a few hundred `ScoreEntity`s; no new DAO query is needed.
 
 ## 5. Trends
 
@@ -198,6 +212,10 @@ A **Training load** card after the existing charts, following the current card s
 - **Legend:** "Fitness" and "Fatigue" with their colours, in a `FlowRow` like the Calendar legend.
 - **TalkBack:** "Training load over the last 30 days. Fitness rose from 52 to 64, fatigue from 40 to 76. Now
   Productive, form minus 18 percent."
+
+**Opened from Today.** The Recovery card navigates to the Trends tab and sets `FOCUS_TRAINING_LOAD` on its back-stack
+entry; `TrendsContent` brings the Training load card into view once and clears the flag. Opening Trends from its tab
+doesn't scroll.
 
 `TrendsViewModel` reads `repo.scores(from − WARM_UP_DAYS, today)` instead of `repo.scores(from, today)`, and
 `buildTrendsState` filters the existing score-based series back to the range. `TrendsUiState` gains
@@ -232,11 +250,18 @@ on the host time zone. Databases come from `testutil.inMemoryDatabase()`.
 - Week budget: Monday- and Sunday-start weeks; `normal` taken from the day before the week; today's partial load
   included; `hardDaysLeft` clamped to the days left and to 0; over the band; past week has `daysLeft == 0`.
 
-`TodayViewModelTest` / `TodayScreenTest`:
+`TodayViewModelTest` / `TodayScreenTest` / `RecoveryCardLayoutTest`:
 
-- Collapsed and expanded text for each variant in §4, including Calibrating and over the band.
+- The tag, callout and footer for each variant in §4, including Calibrating and past the safe range.
+- An Overreaching week eases a green target and says so; other weeks keep the stored target.
+- The card is a ≥ 48 dp button with its click label only when there is a training load; tapping it opens Trends.
+- The week line wraps at font scale 2 on a 320 dp width (native graphics).
 - Past-day navigation shows that date's state and week.
-- The TalkBack description, and the bar's touch target ≥ 48 dp.
+- The Body Battery strip's description, click label, band colour, expanded curve and 48 dp target.
+
+`WidgetSnapshotTest`: the Readiness widget's target is eased in an Overreaching week, as on Today.
+
+`NavShellTest`: tapping the Recovery card lands on Trends with the Training load card on screen.
 
 `TrendsViewModelTest` / `TrendsScreenTest`:
 

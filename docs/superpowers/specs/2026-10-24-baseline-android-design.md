@@ -290,6 +290,9 @@ Strain measures cardiovascular load from heart rate.
 | 34–66 | 10–14 |
 | < 34 | 0–10 |
 
+In an Overreaching week (`2026-10-31-fitness-fatigue-form-design.md` §4), Today and the Readiness widget show a target
+above 10–14 as 10–14, marked "(eased for this week)" on Today. The stored target is unchanged.
+
 **Accuracy:**
 - Consistent day to day and personal to the user, but not equal to Whoop's numbers.
 - Strongest for runs and rides, decent for strength, weakest for swims (the fallback path covers those).
@@ -348,7 +351,7 @@ All screens follow the mockups.
 
 | Screen | Notes |
 |---|---|
-| Today | Date header (tap → Calendar; ‹ › change day). Sleep / Recovery / Strain dials, recovery card with strain target. **Today's activities** section above the baseline list, shown only if there are activities. A full-width **Body Battery bar** sits under the dials, showing the title, the latest level and a bar filled to that level out of 100. It uses Garmin's band colours: 76–100 `#34D399`, 51–75 `#A3D94C`, 26–50 `#FBBF24`, 0–25 `#F87171`. With no reading it shows an empty track and "—". Tapping the bar expands it to the day's 3-min curve with charged and drained totals. A **Training load** bar sits under it: the form state (Overreaching … Detraining) and this week's load as a percentage of a normal week; tapping shows form, fitness and fatigue (`2026-10-31-fitness-fatigue-form-design.md`). **Vs. 30-day baseline** rows: HRV, RHR, sleep, respiration, Body Battery at wake, stress, steps. An **Edit** mode adds drag handles (reorder) and an eye toggle (hide). Order and hidden set are saved in DataStore. |
+| Today | Date header (tap → Calendar; ‹ › change day). Sleep / Recovery / Strain dials. A slim **Body Battery strip** sits under the dials (no card): "BODY BATTERY" styled like the dial labels, the overnight charge, the latest level and a thin track filled to that level out of 100, both in Garmin's band colours: 76–100 `#34D399`, 51–75 `#A3D94C`, 26–50 `#FBBF24`, 0–25 `#F87171`. With no reading it shows an empty track and "—". Tapping it shows the day's 3-min curve and the drained total. The **Recovery card** follows, with the strain target and the week's training load: a tag ("Productive week"), a callout only when the week needs attention, and "This week: 67% of normal · ~3 hard days left"; tapping it opens Trends at the Training load card (`2026-10-31-fitness-fatigue-form-design.md` §4). **Today's activities** section above the baseline list, shown only if there are activities. **Vs. 30-day baseline** rows: HRV, RHR, sleep, respiration, Body Battery at wake, stress, steps. An **Edit** mode adds drag handles (reorder) and an eye toggle (hide). Order and hidden set are saved in DataStore. |
 | Calendar | Month grid, Monday or Sunday start following the Garmin profile. Each day has a ring coloured by Recovery and up to 3 activity dots. Tap a day → summary card; "Open day" → Today for that date. Swipe or arrows change the month. |
 | Sleep detail | Sleep % and hours vs need, Garmin score, bed and wake times. Overnight HRV (5 min) and HR (2 min) chart *instead of a hypnogram*. Stage totals with bars. Sleep-need card. HRV, lowest HR, Body Battery charged, SpO₂ tiles. |
 | Activities | Sport filter chips, week summary, list grouped by day. A **Records** button opens Records. |
