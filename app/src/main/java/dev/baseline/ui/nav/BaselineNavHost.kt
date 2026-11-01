@@ -82,11 +82,12 @@ import dev.baseline.ui.onboarding.OnboardingState
 import dev.baseline.ui.onboarding.OnboardingViewModel
 import dev.baseline.ui.records.RecordsScreen
 import dev.baseline.ui.records.RecordsViewModel
-import dev.baseline.ui.settings.AiCard
 import dev.baseline.ui.settings.AiKeyScreen
 import dev.baseline.ui.settings.AiKeyViewModel
 import dev.baseline.ui.settings.AiSettingsViewModel
 import dev.baseline.ui.settings.HistoryCoverage
+import dev.baseline.ui.settings.SettingsPage
+import dev.baseline.ui.settings.SettingsPageScreen
 import dev.baseline.ui.settings.SettingsScreen
 import dev.baseline.ui.settings.SettingsViewModel
 import dev.baseline.ui.sleep.SleepScreen
@@ -383,46 +384,32 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                             onFocused = { entry.savedStateHandle[FOCUS_TRAINING_LOAD] = false },
                         )
                     }
-                    composable(Routes.SETTINGS) {
+                    composable(Routes.SETTINGS) { entry ->
                         SettingsScreen(
-                            viewModel {
-                                SettingsViewModel(
-                                    container.apiKeyVault, container.userPrefs, container.scheduler,
-                                    testKey = container.testKey,
-                                    clearToken = container.tokenProvider::clear,
-                                    recalculator = container.historyRecalculator,
-                                    coverage = container.repository.historyStart.map { (health, activities) -> HistoryCoverage(health, activities) },
-                                    imperial = container.repository.imperial,
-                                    failedCount = container.db.taskDao().failedCount(),
-                                    requeueFailed = container.db.taskDao()::requeueAllFailed,
-                                )
-                            },
+                            settingsViewModel(container, entry),
+                            aiSettingsViewModel(container, entry),
                             container.dateTicker.zone,
                             container.updater,
                             container.clock,
-                            aiCard = {
-                                val ai = viewModel {
-                                    AiSettingsViewModel(
-                                        container.aiPrefs,
-                                        container.aiKeyVault,
-                                        container.nanoEngine,
-                                        container.aiKeyEntry,
-                                        container.insightService,
-                                    )
-                                }
-                                val aiState by ai.state.collectAsStateWithLifecycle()
-                                AiCard(
-                                    aiState,
-                                    onMode = ai::setMode,
-                                    onDownload = ai::downloadNano,
-                                    onAddKey = { nav.navigate(aiKeyRoute(AI_STEP_CONNECTION)) },
-                                    onChangeModel = { nav.navigate(aiKeyRoute(AI_STEP_MODEL)) },
-                                    onReplaceKey = { nav.navigate(aiKeyRoute(AI_STEP_CONNECTION)) },
-                                    onRemove = ai::removeKey,
-                                    onClearInsights = ai::clearInsights,
-                                )
-                            },
+                            onOpen = { page -> nav.navigate(page.route) },
                         )
+                    }
+                    SettingsPage.entries.forEach { page ->
+                        composable(page.route) { entry ->
+                            // The home entry owns the ViewModels, so a change made on a page is already on the list when Back returns to it.
+                            val owner = remember(entry) { nav.getBackStackEntry(Routes.SETTINGS) }
+                            SettingsPageScreen(
+                                page,
+                                settingsViewModel(container, owner),
+                                aiSettingsViewModel(container, owner),
+                                container.dateTicker.zone,
+                                container.updater,
+                                container.clock,
+                                onBack = { nav.popBackStack() },
+                                onAddKey = { nav.navigate(aiKeyRoute(AI_STEP_CONNECTION)) },
+                                onChangeModel = { nav.navigate(aiKeyRoute(AI_STEP_MODEL)) },
+                            )
+                        }
                     }
                     composable(
                         Routes.AI_KEY,
@@ -535,6 +522,25 @@ private fun AskSheetHost(container: AppContainer, scope: AskScope, store: ViewMo
         AskViewModel(scope, session, container.contextPacks, container.aiPrefs.mode, container.online, container.today, container.nanoEngine::warmup)
     }
     AskSheet(vm, onDismiss)
+}
+
+@Composable
+private fun settingsViewModel(container: AppContainer, owner: ViewModelStoreOwner): SettingsViewModel = viewModel(owner) {
+    SettingsViewModel(
+        container.apiKeyVault, container.userPrefs, container.scheduler,
+        testKey = container.testKey,
+        clearToken = container.tokenProvider::clear,
+        recalculator = container.historyRecalculator,
+        coverage = container.repository.historyStart.map { (health, activities) -> HistoryCoverage(health, activities) },
+        imperial = container.repository.imperial,
+        failedCount = container.db.taskDao().failedCount(),
+        requeueFailed = container.db.taskDao()::requeueAllFailed,
+    )
+}
+
+@Composable
+private fun aiSettingsViewModel(container: AppContainer, owner: ViewModelStoreOwner): AiSettingsViewModel = viewModel(owner) {
+    AiSettingsViewModel(container.aiPrefs, container.aiKeyVault, container.nanoEngine, container.aiKeyEntry, container.insightService)
 }
 
 /** One field of this state as Compose state, so a block that only needs it doesn't recompose on every other change. */

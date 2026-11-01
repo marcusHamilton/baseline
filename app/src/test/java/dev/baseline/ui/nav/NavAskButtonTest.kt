@@ -62,7 +62,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 
 /** Nano that is always there and answers "Hello"; nothing here reaches ML Kit or the network. */
-private class FakeNano : NanoBackend {
+internal class FakeNano : NanoBackend {
     override suspend fun availability() = NanoAvailability.AVAILABLE
 
     override fun download(): Flow<Float?> = flow { }
@@ -86,7 +86,7 @@ private class FakeNano : NanoBackend {
 private val TODAY: LocalDate = LocalDate.of(2026, 11, 1)
 
 /** Identity-cipher vault, in-memory db, the test DataStore for the AI prefs too, a fixed clock and a fake Nano. */
-private class AskTestContainer(context: Context, private val store: DataStore<Preferences>) :
+internal class AskTestContainer(context: Context, private val store: DataStore<Preferences>) :
     AppContainer(context, Clock.fixed(Instant.parse("2026-11-01T12:00:00Z"), ZoneOffset.UTC)) {
     override val dataStore get() = store
     override val scheduler = SyncScheduler(WorkManager.getInstance(context), { true })

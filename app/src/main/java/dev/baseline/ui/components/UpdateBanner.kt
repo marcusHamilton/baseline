@@ -51,7 +51,7 @@ import dev.baseline.update.UpdateState
 import dev.baseline.update.megabytes
 import dev.baseline.update.percentOf
 
-/** The one line that says where an offered update is; shared by Today's banner and Settings' App card. */
+/** The one line that says where an offered update is; shared by Today's banner and Settings' Updates page. */
 fun updateHeadline(state: UpdateState.Offer): String {
     val v = state.release.version
     return when (state) {

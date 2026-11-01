@@ -52,7 +52,7 @@ private const val HINT = "Add an API key for better answers to training and long
 private const val CLEARED_MS = 2_000L
 private const val CONFIRM_MS = 4_000L
 
-private fun modeLabel(mode: AiMode) = when (mode) {
+internal fun modeLabel(mode: AiMode) = when (mode) {
     AiMode.OFF -> "Off"
     AiMode.ON_DEVICE -> "On-device only"
     AiMode.CLOUD -> "Cloud only"
@@ -60,7 +60,10 @@ private fun modeLabel(mode: AiMode) = when (mode) {
 }
 
 /** The stored model id without its vendor prefix: "deepseek/deepseek-v4.1-flash" shows as "deepseek-v4.1-flash" (spec §3.2). */
-private fun shortModel(id: String) = id.substringAfterLast('/')
+internal fun shortModel(id: String) = id.substringAfterLast('/')
+
+internal fun cloudPrivacyLine(host: String) =
+    "Cloud requests send this page's numbers, and any history the model looks up, to $host. Never GPS, routes or names. Not medical advice."
 
 /** The AI assistant card (spec: AI assistant §3.2): mode, Nano, the cloud key, a hint, the privacy line and "Clear AI insights". */
 @Composable
@@ -83,7 +86,7 @@ fun AiCard(
         }
     }
     val disarm: () -> Unit = { confirming = false }
-    SettingsCard("AI ASSISTANT") {
+    SettingsCard {
         Text("Mode", fontSize = 14.sp, color = TextBody)
         Column {
             state.options.forEach { option ->
@@ -132,7 +135,7 @@ fun AiCard(
         if (state.showHint) Text(HINT, fontSize = 13.sp, lineHeight = 19.sp, color = TextBody)
         (state.key as? AiKeyStatus.Set)?.let { key ->
             Text(
-                "Cloud requests send this page's numbers, and any history the model looks up, to ${key.host}. Never GPS, routes or names. Not medical advice.",
+                cloudPrivacyLine(key.host),
                 fontSize = 12.sp,
                 lineHeight = 18.sp,
                 color = TextMuted,
