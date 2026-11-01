@@ -42,6 +42,7 @@ private class FakePlatform(override val updatesDir: File) : UpdatePlatform {
     val scheduled = mutableListOf<Boolean>()
     val downloads = mutableListOf<String>()
     var cancels = 0
+    var checkNows = 0
 
     @Volatile var allowed = true
     var permissionOpened = 0
@@ -56,7 +57,9 @@ private class FakePlatform(override val updatesDir: File) : UpdatePlatform {
         synchronized(this) { scheduled += on }
     }
 
-    override fun checkNow() {}
+    override fun checkNow() {
+        synchronized(this) { checkNows++ }
+    }
 
     override fun startDownload(tag: String) {
         synchronized(this) { downloads += tag }
@@ -178,6 +181,20 @@ class UpdaterTest {
         primary()
         awaitState { it.state is UpdateState.Downloading }
         download(tag, "attempt-1") { _, _ -> }
+    }
+
+    @Test
+    fun pullToRefreshChecksForAReleaseUnlessChecksAreOffOrDisabled() = runBlocking {
+        updater().checkOnRefresh()
+        eventually { platform.checkNows == 1 }
+
+        val off = updater()
+        off.setAutoCheck(false)
+        off.awaitState { !it.autoCheck }
+        off.checkOnRefresh()
+        updater(enabled = false).checkOnRefresh()
+        delay(200)
+        assertEquals(1, platform.checkNows)
     }
 
     @Test
