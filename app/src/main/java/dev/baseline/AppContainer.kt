@@ -8,7 +8,9 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import dev.baseline.ai.AiKeyEntry
+import dev.baseline.ai.AiKeyStatus
 import dev.baseline.ai.AiKeyVault
+import dev.baseline.ai.AiMode
 import dev.baseline.ai.AiPrefs
 import dev.baseline.ai.applyAiDefaults
 import dev.baseline.ai.context.ContextPacks
@@ -181,6 +183,12 @@ open class AppContainer(context: Context, val clock: Clock = SystemZoneClock) {
 
     /** A synchronous "online" for callers that can't collect [online]; true until the first reading. */
     val aiOnline: StateFlow<Boolean> by lazy { online.stateIn(appScope, SharingStarted.Eagerly, true) }
+
+    /** The AI mode as a value the Ask sheet's chat can read at send time; null until the first reading and while undecided. */
+    val aiMode: StateFlow<AiMode?> by lazy { aiPrefs.mode.stateIn(appScope, SharingStarted.Eagerly, null) }
+
+    /** True when an AI key is stored. */
+    val aiKeySet: StateFlow<Boolean> by lazy { aiKeyVault.status.map { it is AiKeyStatus.Set }.stateIn(appScope, SharingStarted.Eagerly, false) }
 
     // open: tests swap in an updater with a fake platform.
     open val updater by lazy {

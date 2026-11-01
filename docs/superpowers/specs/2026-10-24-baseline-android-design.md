@@ -362,6 +362,7 @@ All screens follow the mockups.
 
 **Navigation:**
 - Four tabs: Today, Activities, Trends, Settings. Tapping a tab always opens that tab's own page, never a page left open under it (Activities → Records, then Activities, shows Activities). Tapping Today also returns it to the current day. A page opened from a tab keeps that tab highlighted. Back from any tab lands on Today.
+- The centre Ask button opens the Ask sheet over the current page. It isn't a tab.
 - Transitions are quick: tabs swap with a ~120 ms fade; pages opened from a tab slide in over ~220 ms. The activity map is created once its page has finished sliding in.
 
 **Look:**
