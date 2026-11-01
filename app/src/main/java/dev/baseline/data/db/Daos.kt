@@ -345,3 +345,14 @@ interface BestEffortDao {
 
     @Insert suspend fun insertAll(rows: List<BestEffortEntity>)
 }
+
+@Dao
+interface AiInsightDao {
+    @Query("SELECT * FROM ai_insight WHERE scope = :scope AND scopeKey = :key")
+    suspend fun get(scope: String, key: String): AiInsightEntity?
+
+    @Upsert suspend fun put(row: AiInsightEntity)
+
+    @Query("DELETE FROM ai_insight")
+    suspend fun clear()
+}

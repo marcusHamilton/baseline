@@ -63,12 +63,20 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
   - `SyncEngine` runs a task table: first-run backfill planned by `BackfillPlanner`, then incremental windows.
   - `RawIngest` stores raw responses before parsing, so data can be re-parsed.
   - `SyncScheduler` wraps WorkManager.
-- `data/`: `Repository` plus Room `data/db/AppDatabase`, at schema version 2. Schemas are exported to `app/schemas/`; any schema change needs a migration and a new exported schema.
+- `data/`: `Repository` plus Room `data/db/AppDatabase`, at schema version 3. Schemas are exported to `app/schemas/`; any schema change needs a migration and a new exported schema. `MIGRATION_2_3` (`data/db/Migrations.kt`) creates `ai_insight` and is registered with `addMigrations`. The destructive fallback stays for tables that can be re-downloaded; a table that can't be (`ai_insight`) needs an explicit migration, or an upgrade wipes it and triggers a full backfill.
 - `scores/ScorePipeline` holds recovery, sleep performance and strain (0–21). The strain scale is calibrated so your 90th-percentile day is about 17 (spec §7). `scores/TrainingLoad` derives fitness, fatigue, form and the weekly budget from stored day loads at read time (nothing persisted). `records/RecordsRefresher` maintains all-time records.
 - `fit/` parses FIT files with the Garmin FIT SDK and builds activity streams.
 - `update/`: one-tap in-app updates from GitHub releases (`docs/superpowers/specs/2026-10-29-in-app-updates-design.md`).
   - `Updater` is the state machine behind Settings' App card and Today's banner: `UpdateCheckWorker` offers a newer release once a day, `UpdateDownloadWorker` downloads it as a foreground job, `verifyApk` checks size, SHA-256, versionCode, the `-fake` suffix and the signing key, and `AndroidUpdatePlatform` hands it to `PackageInstaller`. `InstallResultReceiver` takes the answer.
   - State is in `UpdatePrefs` (DataStore). After an update, `Updater.start()` in `BaselineApp.onCreate` clears the offer.
+- `ai/`: the optional AI assistant (Ask sheet and insights; spec `docs/superpowers/specs/2026-11-01-ai-assistant-design.md`).
+  - `AiMode`/`AiModes` (Off, On-device only, Cloud only, Hybrid, plus the default and transitions) and `AiPrefs` (DataStore). `AiKeyVault` keeps the cloud API key AES-encrypted via `KeystoreAead`, with base URL, model and a tools flag. `AiKeyEntry` lists `/models` and tests a candidate key (a `ping` tool call) before saving, like `KeyEntry`.
+  - `engine/`: `AiEngine`, `AiEvent`, `AiFailure`. `NanoEngine` runs Gemini Nano through `NanoBackend`; `MlKitNanoBackend` is the only file that touches ML Kit's Prompt API (`genai-prompt`, beta). `CloudEngine` streams an OpenAI-compatible endpoint over `aiHttp` with a tool loop (at most 6 rounds). `OpenAiWire` builds and parses the JSON by hand: there are no `@Serializable` types.
+  - `context/`: `AskScope` (Today, Sleep, Activity, Trends, General; `Sleep` holds the wake date), `ContextPacks` (plain text of a scope's numbers, compact for Nano and full for the cloud), `HealthTools` (read-only tools over `Repository`, cloud only), `Prompts`, `Suggestions`.
+  - `AiRouter` picks the engine per question and `ChatSession` drives a chat (in memory only). `insight/InsightService` generates insights and caches them in `ai_insight`, keyed by a fingerprint of the pack's stable lines (`Pack.basis`: Today's running totals such as steps and strain so far are left out). While a card is on screen `ContextPacks.basisChanges` re-checks the basis as Room changes and the insight regenerates in place.
+  - UI: `ui/ai/` (`AskSheet`, `AskViewModel`, `AskHostViewModel` keeps the sheet across rotation, `InsightCard`, `AskButton`) and `ui/settings/` (`AiCard`, `AiKeyScreen`). The centre Ask button is an action, not a tab.
+  - `AppContainer` fields: `aiHttp` (a bare `OkHttpClient.Builder()`: no interceptors, no authenticator; `Authorization` is added per request, only for the base URL's host), `aiKeyVault`, `aiPrefs`, `aiKeyEntry`, `nanoBackend` (open, so tests swap it), `nanoEngine`, `cloudEngine`, `contextPacks`, `healthTools`, `insightService`, `aiOnline`, `aiMode`, `aiKeySet`, and `startAi()`.
+  - `BuildConfig.ALLOW_LOOPBACK_HTTP` is true only for `-PgarminBaseUrl`/`-PupdatesUrl` test builds; only those accept `http://127.0.0.1` as an AI base URL.
 - `prefs/UserPrefs` is DataStore: baseline row order and hidden rows, sync interval, coefficient set, cached JWT and last sync.
 - `ui/<screen>/`: one Compose screen and one ViewModel per feature. `ui/components` holds shared pieces (KeyBanner, OfflineBar, StatRow), `ui/theme` holds the colours (`Bg` is `#0E1013` and `ChipActive` is `#2A2F37`), and `ui/format/Formatters` does display formatting.
 - `widget/`: five native `RemoteViews` home-screen widgets (`ReadinessWidgetProvider`, `VitalsWidgetProvider`, `BodyBatteryWidgetProvider`, `SleepWidgetProvider`, `WeeklyActivityWidgetProvider`), `WidgetSnapshot` state builder, `WidgetGraphics` `Canvas` bitmap renderers, `WidgetUpdater` (serialised with a `Mutex` and short-circuited when zero widgets are placed), `WidgetActionReceiver` (`ACTION_WIDGET_SYNC` plus clock/timezone/package-replace refresh), static `@layout/widget_preview_*` picker previews, and `WidgetRoutes` deep-linking.
@@ -82,6 +90,12 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 - **Sync is not paused on an Invalid or Expired key.** It keeps trying, so a one-off 401 heals on the next 200. The scheduler only stops when the key is Missing. The red banner text in `ui/components/KeyBanner.kt` says "…so new data can't sync. Paste a new key in Settings."
 - **GitHub never sees a Garmin credential.** The updater uses its own `updateHttp` client with no authenticator or interceptor (`UpdatesUrlTest` guards this); don't route update traffic through `GarminClient` or `httpBuilder`.
 - **Room schema changes** need a version bump, a migration and an exported schema.
+- **The AI key is a secret.** Never log it or put it in a message, exception or test output; provider error bodies aren't shown, logged or put in exceptions either. It's stored only through `KeystoreAead`, and nothing under `dev.baseline.ai` calls `android.util.Log`.
+- **The AI key goes only to the configured base URL's host,** over `aiHttp`. Garmin, GitHub and any other traffic never carry it, and `aiHttp` never carries a Garmin credential.
+- **An AI key under test never touches the vault** (as with Garmin): `AiKeyEntry` saves it only after the test passes.
+- **On-device only mode makes no AI network requests.**
+- **Nothing sent to an AI engine contains GPS, routes, names, device names or IDs, or Garmin user or profile IDs.** No latitude, longitude, polyline, `ActivityEntity.name`, serial. Activities go by sport and start time; tools address one by its Garmin activity id.
+- **AI tools are read-only.** `HealthTools` only reads Room: it never writes, syncs or reaches the network, so the one-Garmin-request rule is untouched.
 - **Touch targets are at least 48dp** (spec §9, accessibility). TalkBack descriptions exist for dials, charts, calendar cells and the drag handles ("Move up" / "Move down").
 - **Today edit mode** uses the custom drag-reorder in `ui/today/RowReorder.kt` and `TodayScreen.kt`, with edge auto-scroll, not a library. Drop indices are in the all-rows space, hidden rows included, which is what `TodayViewModel.moveRow` expects.
 
@@ -165,8 +179,27 @@ uv run --python 3.12 --no-project python -I tools/fake_garmin.py --release-apk /
 - Also try an APK signed with another key, and a tag whose APK has a lower versionCode. Each must stop with its own message and leave the app as it was.
 - Use `Medium_Phone_API_35`, never the review AVD: these builds are signed with a throwaway key.
 
+### Fake AI server (no real AI key or credit needed)
+
+`tools/fake_llm.py` is a stdlib-only fake OpenAI-compatible endpoint (spec `2026-11-01-ai-assistant-design.md` §11.2). It covers Cloud only mode, Settings → AI, the Ask sheet, insights and the error rows end to end. Gemini Nano can't be faked: the emulator has none, so the mode lands on Cloud only once a key is saved.
+
+```bash
+uv run --python 3.12 --no-project python -I tools/fake_llm.py              # :8090; key fake-ai-key; --port, --key, --fail 402|429|500
+adb reverse tcp:8090 tcp:8090
+```
+
+- Run it next to `fake_garmin.py` with a `-PgarminBaseUrl` build: only those builds accept `http://127.0.0.1` as an AI base URL (`BuildConfig.ALLOW_LOOPBACK_HTTP`). In Settings → AI, add the key `fake-ai-key` with base URL `http://127.0.0.1:8090/v1`. Any other key gets a 401 ("Key rejected.").
+- `GET /v1/models` lists three models (one without tools, one with, `deepseek/deepseek-v4.1-flash`). A chat request streams "Your first number here is N." where N is the first number in the system message. When tools are offered it first calls `daily_metrics` for the last 30 days, so the sheet shows a "Looked up" line. The key test's `ping` request gets a `tool_calls` reply, and the no-tools model answers 400 to any request with tools.
+- `--fail 402` shows "No credit left at 127.0.0.1", `--fail 429` sends `Retry-After: 1` (the app retries once), `--fail 500` shows "Couldn't reach". The server logs method, path, status and an approximate token count to stderr, never the body.
+- Tests: `uv run --python 3.12 --no-project python -I tools/test_fake_llm.py`.
+
 ## Known follow-ups
 
+- AI assistant (spec `2026-11-01-ai-assistant-design.md` §14):
+  - Nano's window and output limits are unpublished. The design adapts to `getTokenLimit()`, but the compact pack (1,200 tokens) may need tuning per phone once the real values show in Settings.
+  - `NEEDS_HISTORY` depends on Nano following an instruction. If it proves unreliable, Hybrid still has "More detail ☁"; a fallback is to route typed questions with time words ("week", "month", "lately") to the cloud.
+  - ML Kit's Prompt API is beta and may change incompatibly; `NanoBackend` contains the impact.
+  - `MlKitNanoBackend` has never run on a device. It assumes the chunks of `generateContentStream` are deltas; if they're cumulative, answers will duplicate text. Nothing on the Nano path, the download flow or the ask sheet has been tried on a phone (handoff `2026-11-01-ai-assistant.md` has the checklist).
 - A long re-score after a sync can exceed WorkManager's ~10-minute limit. The work reruns. `ScorePipeline` computes each day's load once per run and caches per-stream TRIMP in memory (keyed by blob fingerprint, HR zones, Banister set and duration), which shortens it but does not remove the limit.
 - `stat-label`, `day-highlight` and `day-card` test tags in production composables are deliberate: they mark layout-only nodes with no semantics, and the tests need their bounds.
 - Not yet verified on a device: replacing the key with a valid key in Settings, API 36, and the in-app update test above (the second update skipping Android's dialog is the part to watch).

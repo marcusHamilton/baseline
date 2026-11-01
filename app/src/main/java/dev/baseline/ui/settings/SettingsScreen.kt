@@ -142,14 +142,14 @@ private fun banisterLabel(b: BanisterSet) = when (b) {
 }
 
 @Composable
-fun SettingsScreen(vm: SettingsViewModel, zone: StateFlow<ZoneId>, updater: Updater, clock: Clock = SystemZoneClock) {
+fun SettingsScreen(vm: SettingsViewModel, zone: StateFlow<ZoneId>, updater: Updater, clock: Clock = SystemZoneClock, aiCard: @Composable () -> Unit = {}) {
     val state by vm.state.collectAsStateWithLifecycle()
     val entry by vm.entry.collectAsStateWithLifecycle()
     val zoneNow by zone.collectAsStateWithLifecycle()
     val update by updater.ui.collectAsStateWithLifecycle()
     SettingsContent(
         state, entry, clock, zoneNow, vm::replaceKey, vm::clearEntry, vm::setInterval, vm::syncNow, vm::setBanister, vm::recalculateHistory, vm::retryFailed,
-        update, updater::primary, updater::checkNow, updater::setAutoCheck,
+        update, updater::primary, updater::checkNow, updater::setAutoCheck, aiCard,
     )
 }
 
@@ -170,6 +170,7 @@ fun SettingsContent(
     onUpdatePrimary: () -> Unit = {},
     onCheckUpdates: () -> Unit = {},
     onAutoCheck: (Boolean) -> Unit = {},
+    aiCard: @Composable () -> Unit = {},
 ) {
     Column(
         // imePadding sits above the scroll so the viewport shrinks and the key field and Save button scroll clear of the keyboard.
@@ -188,6 +189,7 @@ fun SettingsContent(
         KeyCard(state.keyStatus, entry, onReplaceKey, onEditKey)
         SyncCard(state, clock, zone, onInterval, onSyncNow, onRetryFailed)
         ScoresCard(state, onBanister, onRecalculate)
+        aiCard()
         update?.let { AppCard(it, clock, onUpdatePrimary, onCheckUpdates, onAutoCheck) }
         Text(
             "Data from Garmin Connect Personal API. Not affiliated with Garmin.",
@@ -200,7 +202,7 @@ fun SettingsContent(
 }
 
 @Composable
-private fun SettingsCard(title: String, content: @Composable () -> Unit) {
+internal fun SettingsCard(title: String, content: @Composable () -> Unit) {
     Column(
         Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).padding(16.dp),
         Arrangement.spacedBy(12.dp),
@@ -221,7 +223,7 @@ private fun SettingsCard(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun InfoRow(label: String, value: String, modifier: Modifier = Modifier) {
+internal fun InfoRow(label: String, value: String, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.Top) {
         Text(label, Modifier.padding(end = 12.dp), fontSize = 14.sp, color = TextBody)
         Text(value, fontSize = 14.sp, textAlign = TextAlign.End)

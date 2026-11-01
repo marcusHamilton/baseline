@@ -47,13 +47,19 @@ fun ActivityScreen(
     vm: ActivityViewModel,
     onBack: () -> Unit,
     mapContent: @Composable (List<Pair<Double, Double>>) -> Unit = { RouteMap(it, Modifier.fillMaxSize()) },
+    insight: @Composable () -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    ActivityContent(state, onBack, mapContent)
+    ActivityContent(state, onBack, mapContent, insight)
 }
 
 @Composable
-fun ActivityContent(state: ActivityUiState, onBack: () -> Unit, mapContent: @Composable (List<Pair<Double, Double>>) -> Unit) {
+fun ActivityContent(
+    state: ActivityUiState,
+    onBack: () -> Unit,
+    mapContent: @Composable (List<Pair<Double, Double>>) -> Unit,
+    insight: @Composable () -> Unit = {},
+) {
     Column(
         Modifier.fillMaxSize().testTag("screen-activity").verticalScroll(rememberScrollState())
             .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 32.dp),
@@ -84,6 +90,7 @@ fun ActivityContent(state: ActivityUiState, onBack: () -> Unit, mapContent: @Com
             Box(Modifier.fillMaxWidth().height(220.dp).testTag("section-map").clip(RoundedCornerShape(16.dp)).background(Card)) { mapContent(map.latLon) }
         }
         SummaryGrid(state.summary)
+        insight()
         state.note?.let {
             Text(
                 it,

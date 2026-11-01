@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertWidthIsAtLeast
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
@@ -20,8 +21,13 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
 import dev.baseline.data.SportFamily
+import dev.baseline.scores.FormState
+import dev.baseline.scores.TrainingLoadDay
+import dev.baseline.scores.WeekBudget
 import dev.baseline.ui.theme.BaselineTheme
+import dev.baseline.ui.today.TrainingLoadUi
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -99,5 +105,29 @@ class ActivitiesScreenTest {
         rule.setContent { BaselineTheme { ActivitiesContent(state(null), {}, {}, {}) } }
         rule.onNode(isHeading() and hasText("ACTIVITIES")).assertExists()
         rule.onNode(isHeading() and hasText("Today · Sat, Oct 24")).assertExists()
+    }
+
+    private val load = TrainingLoadUi(
+        TrainingLoadDay(TODAY, 64.0, 76.0, -18, FormState.PRODUCTIVE, null),
+        WeekBudget(TODAY.minusDays(5), 67, false, 3, 1),
+    )
+
+    @Test
+    fun theWeekCardShowsTheWeekLoadBarUnderItsStats() {
+        rule.setContent { BaselineTheme { ActivitiesContent(state(null).copy(trainingLoad = load), {}, {}, {}) } }
+        rule.onNodeWithText("WEEK LOAD", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("67% of normal", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("Productive week · about 3 hard days left before you overreach.", useUnmergedTree = true).assertExists()
+        val stats = rule.onNodeWithText("avg strain", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val bar = rule.onNodeWithText("WEEK LOAD", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue("bar (${bar.top}) under the stats (${stats.bottom})", bar.top >= stats.bottom)
+        rule.onNodeWithContentDescription("Week load 67% of normal.", substring = true).assertExists()
+    }
+
+    @Test
+    fun withoutTrainingLoadTheBarSaysItHasNothingYet() {
+        rule.setContent { BaselineTheme { ActivitiesContent(state(null), {}, {}, {}) } }
+        rule.onNodeWithText("WEEK LOAD", useUnmergedTree = true).assertExists()
+        rule.onNodeWithContentDescription("Week load unavailable.").assertExists()
     }
 }

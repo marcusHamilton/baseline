@@ -8,14 +8,16 @@ import androidx.room3.RoomDatabase
 
 /**
  * Cache of re-downloadable Garmin data: bump the version on every schema change; the destructive fallback rebuilds it and the backfill replans.
+ * Tables that aren't re-downloadable (`ai_insight`) need a real migration; a destructive rebuild would also re-run the ~1,200-request backfill.
  */
 @Database(
     entities = [
         RawResponse::class, SyncTaskEntity::class, DayEntity::class, HrDayEntity::class, BodyBatteryDayEntity::class,
         ActivityEntity::class, ActivityStreamEntity::class, LapEntity::class, SwimLengthEntity::class,
         StrengthSetEntity::class, ScoreEntity::class, ActivityScoreEntity::class, BestEffortEntity::class,
+        AiInsightEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @ColumnTypeConverters(Converters::class)
@@ -46,11 +48,14 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun bestEffortDao(): BestEffortDao
 
+    abstract fun aiInsightDao(): AiInsightDao
+
     companion object {
         fun create(context: Context, name: String = "baseline.db"): AppDatabase =
             // Room 3 has no reflection: the KSP-generated AppDatabase_Impl is passed as the factory.
             Room
                 .databaseBuilder<AppDatabase>(context.applicationContext, name) { AppDatabase_Impl() }
+                .addMigrations(MIGRATION_2_3)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
     }

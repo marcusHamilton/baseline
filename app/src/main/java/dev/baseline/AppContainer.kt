@@ -7,6 +7,21 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import dev.baseline.ai.AiFirstRun
+import dev.baseline.ai.AiKeyEntry
+import dev.baseline.ai.AiKeyStatus
+import dev.baseline.ai.AiKeyVault
+import dev.baseline.ai.AiMode
+import dev.baseline.ai.AiPrefs
+import dev.baseline.ai.applyAiDefaults
+import dev.baseline.ai.context.ContextPacks
+import dev.baseline.ai.context.HealthTools
+import dev.baseline.ai.engine.CloudEngine
+import dev.baseline.ai.engine.MlKitNanoBackend
+import dev.baseline.ai.engine.NanoBackend
+import dev.baseline.ai.engine.NanoEngine
+import dev.baseline.ai.engine.NanoStatus
+import dev.baseline.ai.insight.InsightService
 import dev.baseline.data.Repository
 import dev.baseline.data.db.AppDatabase
 import dev.baseline.fit.FitIngest
@@ -35,14 +50,19 @@ import dev.baseline.update.updatesEnabled
 import dev.baseline.widget.WidgetUpdater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import java.time.Clock
@@ -126,6 +146,52 @@ open class AppContainer(context: Context, val clock: Clock = SystemZoneClock) {
             .build()
     }
     val updatePrefs by lazy { UpdatePrefs(dataStore) }
+
+    // The AI provider, not Garmin or GitHub: no Authenticator, no interceptors (spec: AI assistant §4.2).
+    internal val aiHttp by lazy {
+        OkHttpClient
+            .Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .build()
+    }
+
+    // open: tests swap in a keyed vault and in-memory prefs.
+    open val aiKeyVault by lazy { AiKeyVault(dataStore, aead::encrypt, aead::decrypt) }
+    open val aiPrefs by lazy { AiPrefs(dataStore) }
+
+    // open: tests swap in a fake; ML Kit can't load on the JVM.
+    open val nanoBackend: NanoBackend by lazy { MlKitNanoBackend() }
+    val nanoEngine by lazy { NanoEngine(nanoBackend, clock, dateTicker.zone) }
+
+    val contextPacks by lazy { ContextPacks(db, repository, userPrefs, today, dateTicker.zone) }
+
+    val aiKeyEntry by lazy {
+        AiKeyEntry(aiHttp, aiKeyVault, aiPrefs, nanoSupported = {
+            nanoEngine.status.value !is NanoStatus.Unavailable
+        }, allowLoopbackHttp = BuildConfig.ALLOW_LOOPBACK_HTTP)
+    }
+
+    /** Checks Nano and settles the AI mode defaults (spec: AI assistant §3.1). Call once on app start; join the [Job] to wait for it. */
+    fun startAi(): Job = appScope.launch { applyAiDefaults(nanoEngine, aiPrefs) }
+
+    val aiFirstRun by lazy { AiFirstRun(nanoEngine, aiPrefs, appScope) }
+
+    val healthTools by lazy { HealthTools(db, contextPacks, userPrefs, today) }
+
+    // open: tests swap in a fake.
+    open val cloudEngine by lazy { CloudEngine(aiHttp, aiKeyVault, healthTools, aiOnline::value) }
+
+    val insightService by lazy { InsightService(contextPacks, nanoEngine, cloudEngine, db.aiInsightDao(), aiPrefs.mode, aiKeyVault.status, online, clock) }
+
+    /** A synchronous "online" for callers that can't collect [online]; true until the first reading. */
+    val aiOnline: StateFlow<Boolean> by lazy { online.stateIn(appScope, SharingStarted.Eagerly, true) }
+
+    /** The AI mode as a value the Ask sheet's chat can read at send time; null until the first reading and while undecided. */
+    val aiMode: StateFlow<AiMode?> by lazy { aiPrefs.mode.stateIn(appScope, SharingStarted.Eagerly, null) }
+
+    /** True when an AI key is stored. */
+    val aiKeySet: StateFlow<Boolean> by lazy { aiKeyVault.status.map { it is AiKeyStatus.Set }.stateIn(appScope, SharingStarted.Eagerly, false) }
 
     // open: tests swap in an updater with a fake platform.
     open val updater by lazy {

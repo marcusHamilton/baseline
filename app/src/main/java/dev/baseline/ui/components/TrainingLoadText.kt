@@ -42,13 +42,15 @@ fun weekTag(d: TrainingLoadDay): String = when (d.state) {
     else -> "${formStateLabel(d.state)} week"
 }
 
+/**
+ * The hard days a week still has room for, or null when none should be mentioned: past the safe range, on the week's last day,
+ * or without a strain calibration. 0 means "easy days from here". Both [weekLine] and the week load bar word this.
+ */
+fun weekHardDays(b: WeekBudget): Int? = b.hardDaysLeft?.takeUnless { b.overBand || b.daysLeft == 0 }
+
 /** "This week: 67% of normal · ~3 hard days left", and the variants for a full week, a past week or no calibration. */
 fun weekLine(b: WeekBudget): String {
-    val tail = when {
-        b.overBand || b.daysLeft == 0 || b.hardDaysLeft == null -> null
-        b.hardDaysLeft == 0 -> "easy days from here"
-        else -> "~${b.hardDaysLeft} hard day${if (b.hardDaysLeft == 1) "" else "s"} left"
-    }
+    val tail = weekHardDays(b)?.let { if (it == 0) "easy days from here" else "~$it hard day${if (it == 1) "" else "s"} left" }
     return listOfNotNull("This week: ${b.pct}% of normal", tail).joinToString(" · ")
 }
 

@@ -42,6 +42,8 @@ Don't export the Android Studio `JAVA_HOME` from CLAUDE.md, because that path do
 |---|---|---|
 | `:app:testDebugUnitTest`, `:app:lintDebug`, `assembleDebug`/`assembleRelease` | Yes | First build ~4 min (downloads); tests ~1–2 min. |
 | `tools/fake_garmin.py` | Yes | Check it with curl; see CLAUDE.md for the fake key and endpoints. |
+| `tools/fake_llm.py` | Yes | The fake OpenAI-compatible server for the AI assistant. Check it with curl, or run `tools/test_fake_llm.py`; see CLAUDE.md ("Fake AI server") for the key and flags. |
+| Gemini Nano (on-device AI) | **No** | ML Kit's Prompt API needs a supported phone (Pixel 10/11 class) with the AICore service; neither the container nor an emulator has it. `MlKitNanoBackend` can only be checked on a phone, and the unit tests use a fake `NanoBackend`. |
 | Signed release | No | The keystore is only on the owner's Mac. `assembleRelease` gives an unsigned APK. |
 | Android emulator | **No** | No `/dev/kvm`. A software-emulated API 35 image takes ~35 min to boot, then system apps and the app itself ANR ("failed to complete startup"). Don't try it; hand on-device checks to a local session. |
 | Screenshots of Compose screens | Yes | Rendered by Robolectric, not a device; see "Screenshots without an emulator". |

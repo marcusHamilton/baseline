@@ -156,7 +156,7 @@ today?" for both time scales: Recovery for today, form for the weeks.
 "Calibrating" / "No recent training". It is `TextMuted` while the week is normal, and takes the callout's colour when
 there is one.
 
-**Callout, only when the week needs attention.** A tinted note under the insight sentence (the colour at 12 % alpha
+**Callout, only when the week needs attention.** A tinted note under the insight sentence (the rule-based one, or the AI insight when it is Ready: `2026-11-01-ai-assistant-design.md` §3.8) (the colour at 12 % alpha
 behind it, a 6 dp dot, text in the colour). The text carries the meaning; colour only backs it up.
 
 | Condition (first match) | Text | Colour |
@@ -182,7 +182,8 @@ two never disagree. The stored `ScoreEntity` target is not changed.
 
 **Tap.** When there is a training load, the whole card is one button ("Open training load in Trends", at least
 48 dp) that opens the Trends tab scrolled to its Training load card (§5). Before the first score the card isn't
-clickable. TalkBack reads the merged card: title, tag, insight, callout, footer.
+clickable, and neither is it while the AI is on (any insight state but Hidden): the card then has its own "Ask about …" link, and a tap
+anywhere else must not navigate. TalkBack reads the merged card: title, tag, insight, callout, footer. When the AI insight is Ready, a tail row adds its engine label and an "Ask about today ›" link; that link is a separate click and does not open Trends.
 
 **Past days.** Today's ‹ › navigation shows the state as of that date and that date's week budget (with `daysLeft`
 from that date). Before the first score there is no tag, callout or week line.
@@ -198,10 +199,35 @@ Battery curve".
 builds a `TrainingLoadUi(day, budget)` through `TrainingLoad`, then `buildTodayState` applies `easedTarget` and sets
 `strainTargetEased`. The extra rows are a few hundred `ScoreEntity`s; no new DAO query is needed.
 
+### 4.1 The week load bar and the Activities week card
+
+`ui/components/WeekLoadBar.kt` draws this week's budget (§3.4) as a bar. Activities and Trends share it.
+
+- **Row:** the label in the dial-label style on the left ("WEEK LOAD" on Activities, "THIS WEEK" on Trends), and
+  "**67%** of normal" on the right (the number in Barlow SemiBold).
+- **Track:** 8 dp, `Surface2`, on a 0 – 200 % scale. The fill is `min(pct, 200) / 200` of the width in `StrainBlue`, or
+  `RecoveryAmber` when `overBand`. A 1.5 dp muted tick at 100 % is labelled "normal"; a green tick at the safe limit
+  (`TrainingLoad.SAFE_BAND`, 130 %) is labelled "safe limit"; a translucent green band joins them.
+- **Line:** one muted line under the track: "Productive week · about 3 hard days left before you overreach.". The hard
+  days follow `weekLine`'s rules (`weekHardDays`): "about 1 hard day left …", "easy days from here", and nothing
+  extra past the safe range, on the week's last day or without a strain calibration.
+- **No budget** (Calibrating, No recent training): the label and the state on the right, no track or line. Before the
+  first score: the label and "—".
+- **TalkBack:** one node: "Week load 67% of normal. Productive range up to 130%. About 3 hard days left." Past the
+  safe range it adds "Past it."; "Easy days from here." when no hard day fits.
+
+**Activities.** The week card (count, hours, distance, average strain) gets the bar under its stats. `ActivitiesViewModel`
+builds the `TrainingLoadUi` for today as `TodayViewModel` does (scores from `today − 7 − WARM_UP_DAYS`, the earliest
+score, the strain calibration's tau), and with the same profile first day of the week the week summary uses, so the
+bar and the totals always cover the same days.
+
 ## 5. Trends
 
 A **Training load** card after the existing charts, following the current card style.
 
+- **Week bar:** at the top of the card, under its header and above the chart, the shared week load bar (§4.1) labelled
+  "THIS WEEK". It is always the current week, whatever the 7 / 30 / 90-day range, and reads the same window as Today so
+  the number never differs from the Recovery card's "This week" line.
 - **Header:** the latest state and form, e.g. "Productive · form −18%"; "Calibrating" when that applies.
 - **Chart:** fitness as a 2 dp `StrainBlue` line and fatigue as a thinner `StrainBlueLight` line on one scale,
   covering the range (7 / 30 / 90 days). `TrendLine` gains an optional second series
@@ -219,7 +245,8 @@ doesn't scroll.
 
 `TrendsViewModel` reads `repo.scores(from − WARM_UP_DAYS, today)` instead of `repo.scores(from, today)`, and
 `buildTrendsState` filters the existing score-based series back to the range. `TrendsUiState` gains
-`trainingLoad: List<TrainingLoadDay>`.
+`trainingLoad: List<TrainingLoadDay>`. It also reads `repo.scores(today − 7 − WARM_UP_DAYS, today)` and the profile's
+first day of the week for the week bar, which it builds with `buildTrainingLoadUi` into `weekLoad: TrainingLoadUi?`.
 
 ## 6. Error handling and edge cases
 

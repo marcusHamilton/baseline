@@ -2,25 +2,44 @@ package dev.baseline.ui
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.dp
+import dev.baseline.ai.ChatMessage
+import dev.baseline.ai.QuestionTag
+import dev.baseline.ai.context.Suggestion
+import dev.baseline.ai.engine.EngineKind
+import dev.baseline.ai.engine.EngineLabel
+import dev.baseline.ai.engine.Role
+import dev.baseline.ai.insight.InsightState
 import dev.baseline.data.SportFamily
 import dev.baseline.data.db.DayEntity
 import dev.baseline.data.db.ScoreEntity
 import dev.baseline.scores.Contributor
 import dev.baseline.scores.RecoveryResult
 import dev.baseline.scores.RecoveryZone
+import dev.baseline.ui.activities.ActivitiesContent
+import dev.baseline.ui.activities.act
+import dev.baseline.ui.activities.buildActivitiesState
+import dev.baseline.ui.ai.AskContent
+import dev.baseline.ui.ai.AskUiState
 import dev.baseline.ui.components.ActivityCardUi
+import dev.baseline.ui.format.Formatters
 import dev.baseline.ui.theme.BaselineTheme
 import dev.baseline.ui.theme.Bg
+import dev.baseline.ui.theme.Card
 import dev.baseline.ui.today.BodyBatteryUi
 import dev.baseline.ui.today.StatRowUi
 import dev.baseline.ui.today.TodayContent
+import dev.baseline.ui.today.TodayInsightUi
 import dev.baseline.ui.today.TodayUiState
 import dev.baseline.ui.today.buildTrainingLoadUi
 import dev.baseline.ui.trends.TrendRange
@@ -146,7 +165,95 @@ class ScreenshotCapture {
 
     @Test fun todayBodyBatteryExpanded() = today("today-body-battery-expanded", todayBuilt(todayState(scores(), bodyBatteryExpanded = true)))
 
-    @Test fun trends90Days() = capture("trends-90d", heightDp = 1380) {
-        TrendsContent(buildTrendsState(TrendRange.D90, today, days(), scores(), first, 100.0), {})
+    private fun todayInsight(name: String, insight: InsightState) = todayBuilt(todayState(scores())).let { state ->
+        capture(name, heightDp = 1040) {
+            TodayContent(state, null, {}, {}, {}, {}, {}, {}, insight = TodayInsightUi(insight, "today", {}, {}))
+        }
     }
+
+    @Test fun todayInsightReady() = todayInsight(
+        "today-insight-ready",
+        InsightState.Ready(
+            "Your recovery is in the green at 72%, helped by an HRV 6% above your baseline. Last night's sleep covered most of what you needed, " +
+                "so a moderate day of training fits well.",
+            EngineLabel(EngineKind.NANO, null),
+        ),
+    )
+
+    @Test fun todayInsightGenerating() = todayInsight("today-insight-generating", InsightState.Generating(""))
+
+    @Test fun todayInsightFailed() = todayInsight("today-insight-failed", InsightState.Failed("Couldn't reach the cloud. Check your connection."))
+
+    private fun trendsState(range: TrendRange, scores: List<ScoreEntity>) =
+        buildTrendsState(range, today, days(), scores, first, 100.0).copy(weekLoad = buildTrainingLoadUi(today, scores, first, DayOfWeek.MONDAY, 100.0))
+
+    @Test fun trends90Days() = capture("trends-90d", heightDp = 1380) { TrendsContent(trendsState(TrendRange.D90, scores()), {}) }
+
+    @Test fun trendsTrainingLoadOverTheLimit() = capture("trends-30d-over", heightDp = 1500) {
+        TrendsContent(trendsState(TrendRange.D30, scores(build = 4.5, window = 4)), {})
+    }
+
+    private fun activities(name: String, scores: List<ScoreEntity>) = capture(name, heightDp = 560) {
+        val list = listOf(
+            act(1, day = today, name = "Morning Run"),
+            act(2, "road_biking", day = today.minusDays(2), durationSec = 5660.0, distanceM = 42_600.0, name = "Lunch Ride"),
+            act(3, "strength_training", day = today.minusDays(3), durationSec = 2760.0, distanceM = null, name = "Evening Lift"),
+        )
+        val load = buildTrainingLoadUi(today, scores, first, DayOfWeek.MONDAY, 100.0)
+        ActivitiesContent(
+            buildActivitiesState(null, list, mapOf(1L to 9.8, 2L to 11.2, 3L to 6.4), mapOf(3L to 18), DayOfWeek.MONDAY, today, Formatters(false), load),
+            {},
+            {},
+            {},
+        )
+    }
+
+    @Test fun activitiesWeekLoad() = activities("activities-week-load", scores())
+
+    @Test fun activitiesWeekLoadOverTheLimit() = activities("activities-week-load-over", scores(build = 4.5, window = 4))
+
+    @Test fun activitiesWeekLoadCalibrating() = activities("activities-week-load-calibrating", scores().filter { it.date >= today.minusDays(30) })
+
+    private fun ask(name: String, state: AskUiState) = capture(name, heightDp = 560) {
+        Surface(Modifier.height(560.dp), color = Card) { AskContent(state, {}, {}, {}, {}, {}) }
+    }
+
+    private val askBase = AskUiState(
+        title = "Ask about last night",
+        hint = "Ask anything about last night, or how it fits your training and longer trends.",
+        placeholder = "Ask about last night…",
+        suggestions = listOf(
+            Suggestion("How did I sleep compared to usual?", QuestionTag.PAGE),
+            Suggestion("Why was deep sleep down?", QuestionTag.PAGE),
+            Suggestion("Is my sleep keeping up with my training?", QuestionTag.TRAINING),
+            Suggestion("Do late workouts affect my sleep?", QuestionTag.PATTERN),
+        ),
+        messages = emptyList(),
+        busy = false,
+    )
+
+    @Test fun askOpened() = ask("ask-opened", askBase)
+
+    @Test fun askAfterCloudFollowUp() = ask(
+        "ask-follow-up",
+        askBase.copy(
+            placeholder = "Ask a follow-up…",
+            messages = listOf(
+                ChatMessage(Role.USER, "How did I sleep compared to usual?"),
+                ChatMessage(
+                    Role.ASSISTANT,
+                    "You slept 7h 12m, about 20 minutes under your 30-day average, with deep sleep a little down.",
+                    label = EngineLabel(EngineKind.NANO, null),
+                    canMoreDetail = true,
+                ),
+                ChatMessage(Role.USER, "Has my HRV been trending down?"),
+                ChatMessage(
+                    Role.ASSISTANT,
+                    "Slightly. Your overnight HRV averaged 58 ms over the last week, against 63 ms for the month before.",
+                    label = EngineLabel(EngineKind.CLOUD, "deepseek/deepseek-v4.1-flash"),
+                    lookedUp = listOf("Looking up HRV, 1 Oct – 31 Oct"),
+                ),
+            ),
+        ),
+    )
 }

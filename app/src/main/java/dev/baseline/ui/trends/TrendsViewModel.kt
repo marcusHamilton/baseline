@@ -9,6 +9,8 @@ import dev.baseline.scores.TrainingLoad
 import dev.baseline.scores.TrainingLoadDay
 import dev.baseline.ui.components.formPctText
 import dev.baseline.ui.components.formStateLabel
+import dev.baseline.ui.today.TrainingLoadUi
+import dev.baseline.ui.today.buildTrainingLoadUi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,6 +61,8 @@ data class TrendsUiState(
     val latest: TrendLatest,
     /** One per range day, oldest first; null before the first score (fitness-fatigue-form spec §5). */
     val trainingLoad: List<TrainingLoadDay?> = emptyList(),
+    /** This week's load for the bar at the top of the Training load card; always today's week, whatever the range. Null before the first score. */
+    val weekLoad: TrainingLoadUi? = null,
 )
 
 class TrendsViewModel(private val repo: Repository, private val todayFlow: StateFlow<LocalDate>) : ViewModel() {
@@ -77,12 +81,19 @@ class TrendsViewModel(private val repo: Repository, private val todayFlow: State
         combine(range, todayFlow, ::Pair)
             .flatMapLatest { (r, today) ->
                 val from = today.minusDays(r.days - 1L)
+                val earliest = repo.historyStart.map { it.first }.distinctUntilChanged()
+                val tau = repo.prefs.strainCalibration.map { it?.tau }.distinctUntilChanged()
+                // The week bar reads the same window Today does, so its number doesn't change with the range.
+                val weekLoad =
+                    combine(repo.scores(today.minusDays(7 + TrainingLoad.WARM_UP_DAYS), today), earliest, repo.firstDayOfWeek, tau) { s, first, firstDay, t ->
+                        buildTrainingLoadUi(today, s, first, firstDay, t)
+                    }
                 combine(
-                    repo.days(from, today),
-                    repo.scores(from.minusDays(TrainingLoad.WARM_UP_DAYS), today),
-                    repo.historyStart.map { it.first }.distinctUntilChanged(),
-                    repo.prefs.strainCalibration.map { it?.tau }.distinctUntilChanged(),
-                ) { d, s, first, tau -> buildTrendsState(r, today, d, s, first, tau) }
+                    combine(repo.days(from, today), repo.scores(from.minusDays(TrainingLoad.WARM_UP_DAYS), today), earliest, tau) { d, s, first, t ->
+                        buildTrendsState(r, today, d, s, first, t)
+                    },
+                    weekLoad,
+                ) { state, week -> state.copy(weekLoad = week) }
             }.flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), buildTrendsState(range.value, todayFlow.value, emptyList(), emptyList()))
 }

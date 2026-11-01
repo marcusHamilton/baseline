@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -21,6 +22,7 @@ import dev.baseline.data.db.DayEntity
 import dev.baseline.data.db.ScoreEntity
 import dev.baseline.ui.theme.BaselineTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -112,5 +114,23 @@ class TrendsScreenTest {
         val state = buildTrendsState(TrendRange.D30, today, emptyList(), emptyList())
         rule.setContent { BaselineTheme { TrendsContent(state, {}) } }
         rule.onNodeWithText("TRAINING LOAD").assertIsNotDisplayed()
+    }
+
+    private val load = dev.baseline.ui.today.TrainingLoadUi(
+        dev.baseline.scores.TrainingLoadDay(today, 64.0, 76.0, -18, dev.baseline.scores.FormState.PRODUCTIVE, null),
+        dev.baseline.scores.WeekBudget(today.minusDays(5), 67, false, 3, 1),
+    )
+
+    @Test fun trainingLoadCardOpensWithThisWeeksLoadBar() {
+        val state = buildTrendsState(TrendRange.D30, today, emptyList(), emptyList()).copy(weekLoad = load)
+        rule.setContent { BaselineTheme { TrendsContent(state, {}) } }
+        rule.onNodeWithText("THIS WEEK", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("67% of normal", useUnmergedTree = true).assertExists()
+        val title = rule.onNodeWithText("TRAINING LOAD", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val bar = rule.onNodeWithText("THIS WEEK", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val legend = rule.onNodeWithText("Fitness", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue("bar (${bar.top}) under the card header (${title.bottom})", bar.top >= title.bottom)
+        assertTrue("bar (${bar.bottom}) above the chart and legend (${legend.top})", bar.bottom <= legend.top)
+        rule.onAllNodesWithText("THIS WEEK", useUnmergedTree = true).assertCountEquals(1)
     }
 }

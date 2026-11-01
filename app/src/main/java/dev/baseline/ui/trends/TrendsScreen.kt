@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.baseline.scores.RecoveryZone
+import dev.baseline.ui.components.WeekLoadBar
 import dev.baseline.ui.components.zoneColor
 import dev.baseline.ui.format.Formatters
 import dev.baseline.ui.theme.BarlowCondensed
@@ -148,6 +149,7 @@ fun TrendsContent(state: TrendsUiState, onRange: (TrendRange) -> Unit, focusTrai
                 TimeAxis(start)
             }
             TrendCard("TRAINING LOAD", state.trainingLoadHeader(), Modifier.bringIntoViewRequester(trainingLoad)) {
+                WeekLoadBar(state.weekLoad, "THIS WEEK")
                 TrendLine(
                     state.trainingLoad.map { it?.fitness?.roundToInt() },
                     StrainBlue,

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -66,8 +67,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.invisibleToUser
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
@@ -80,7 +83,11 @@ import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.baseline.R
+import dev.baseline.ai.engine.EngineKind
+import dev.baseline.ai.engine.EngineLabel
+import dev.baseline.ai.insight.InsightState
 import dev.baseline.garmin.KeyStatus
+import dev.baseline.scores.FormState
 import dev.baseline.ui.activity.NOTE_UNREADABLE
 import dev.baseline.ui.components.ActivityCard
 import dev.baseline.ui.components.BodyBatteryStrip
@@ -120,6 +127,12 @@ import java.util.Locale
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
+/**
+ * The AI insight for the shown day, as the Recovery card takes it (ai-assistant spec §3.8). [subject] is `AskScope.subject`, the words after
+ * "Ask about".
+ */
+data class TodayInsightUi(val state: InsightState, val subject: String, val onAsk: () -> Unit, val onRetry: () -> Unit)
+
 /** Today: the permission prompt, pull-to-refresh and the sync line around the stateless [TodayContent]. */
 @Composable
 fun TodayScreen(
@@ -130,6 +143,7 @@ fun TodayScreen(
     zone: StateFlow<ZoneId>,
     updater: Updater? = null,
     onOpenTrends: () -> Unit = {},
+    insight: TodayInsightUi? = null,
 ) {
     val context = LocalContext.current
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
@@ -161,6 +175,7 @@ fun TodayScreen(
             keyStatus, vm::toggleEdit, vm::moveRow, vm::toggleHidden, zoneNow,
             update, { updater?.primary() }, { tag -> updater?.dismiss(tag) },
             onOpenTrends = onOpenTrends,
+            insight = insight,
         )
     }
 }
@@ -184,6 +199,7 @@ fun TodayContent(
     onUpdate: () -> Unit = {},
     onDismissUpdate: (String) -> Unit = {},
     onOpenTrends: () -> Unit = {},
+    insight: TodayInsightUi? = null,
 ) {
     val scroll = rememberScrollState()
     var viewport by remember { mutableStateOf(Rect.Zero) }
@@ -209,7 +225,7 @@ fun TodayContent(
         syncLine?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 20.dp), fontSize = 12.sp, color = TextMuted, textAlign = TextAlign.Center) }
         Dials(state, onOpenSleep)
         BodyBatteryStrip(state.bodyBattery, onToggleBodyBattery, Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp), state.isToday)
-        InsightCard(state, onOpenTrends, Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp))
+        RecoveryCard(state, onOpenTrends, insight, Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp))
         if (state.activities.isNotEmpty()) {
             Section(if (state.isToday) "TODAY'S ACTIVITIES" else "ACTIVITIES") {
                 state.activities.forEach { a -> ActivityCard(a, { onOpenActivity(a.id) }) }
@@ -559,21 +575,44 @@ private fun targetText(r: ClosedFloatingPointRange<Double>) = "${r.start.roundTo
 
 /**
  * Recovery's verdict plus the week's training load (fitness-fatigue-form spec §4): a tag, a callout only when the week
- * needs attention, and the strain-target and week lines. Tapping it opens the Training load card on Trends.
+ * needs attention, and the strain-target and week lines. Tapping it opens the Training load card on Trends, except with the AI on.
+ * Once the AI [insight] is ready it replaces the rule-based sentence and a tail row names the engine and offers "Ask about …";
+ * a failed one adds a Retry to that row. Generating and Hidden change nothing (ai-assistant spec §3.8).
  */
 @Composable
-private fun InsightCard(state: TodayUiState, onOpenTrends: () -> Unit, modifier: Modifier = Modifier) {
+private fun RecoveryCard(state: TodayUiState, onOpenTrends: () -> Unit, insight: TodayInsightUi?, modifier: Modifier = Modifier) {
     val recovery = state.recovery
     val color = recovery?.let { zoneColor(it.zone) } ?: Surface2
     val load = state.trainingLoad
-    val callout = load?.let(::weekCallout)
-    val tappable = if (load != null && !state.loading) {
+    val ready = (insight?.state as? InsightState.Ready)?.takeIf { !state.loading }
+    // The "rested, good day for a hard session" pill says what the strain target line already does, so it steps aside for an
+    // AI insight; a week that needs attention (overreaching, past the safe range, detraining) always keeps its callout.
+    val callout = load?.let(::weekCallout)?.takeUnless { ready != null && load.day.state == FormState.FRESH }
+    // With the AI on, the card has its own "Ask about …" link, so a stray tap anywhere else must not navigate; the Trends shortcut is for AI off.
+    val aiOn = insight != null && insight.state !is InsightState.Hidden
+    val tappable = if (load != null && !state.loading && !aiOn) {
         Modifier.clickable(onClickLabel = "Open training load in Trends", role = Role.Button, onClick = onOpenTrends)
     } else {
         Modifier
     }
+    // With an insight to read out, the card is one TalkBack node even when it isn't tappable, and carries the Ask action.
+    val spoken = if (ready != null) {
+        Modifier.semantics(mergeDescendants = true) {
+            // TalkBack hears who made the insight; the label that shows it is skipped so it isn't read twice.
+            contentDescription = made(ready.label)
+            customActions = listOf(
+                CustomAccessibilityAction("Ask about ${insight.subject}") {
+                    insight.onAsk()
+                    true
+                },
+            )
+        }
+    } else {
+        Modifier
+    }
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).then(tappable).heightIn(min = 48.dp).padding(16.dp),
+        modifier.fillMaxWidth().testTag("recovery-card").clip(RoundedCornerShape(16.dp)).background(Card).then(tappable).then(spoken)
+            .heightIn(min = 48.dp).padding(16.dp),
         Arrangement.spacedBy(8.dp),
     ) {
         if (state.loading) {
@@ -605,8 +644,16 @@ private fun InsightCard(state: TodayUiState, onOpenTrends: () -> Unit, modifier:
                 )
             }
         }
-        val body = recovery?.let { insightSentence(it.top) } ?: state.recoveryReason?.replaceFirstChar(Char::uppercase)
-        if (!body.isNullOrEmpty()) Text(body, fontSize = 14.sp, lineHeight = 21.sp, color = TextBody)
+        if (ready != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // 21sp lines: the 12dp sparkle sits on the first line's middle.
+                Icon(painterResource(R.drawable.ic_sparkle), contentDescription = null, Modifier.padding(top = 4.5.dp).size(12.dp), tint = SleepPurple)
+                Text(ready.text, Modifier.weight(1f), fontSize = 14.sp, lineHeight = 21.sp, color = TextBody)
+            }
+        } else {
+            val body = recovery?.let { insightSentence(it.top) } ?: state.recoveryReason?.replaceFirstChar(Char::uppercase)
+            if (!body.isNullOrEmpty()) Text(body, fontSize = 14.sp, lineHeight = 21.sp, color = TextBody)
+        }
         if (load != null && callout != null) WeekCallout(callout, weekCalloutColor(load))
         val target = state.strainTarget?.let {
             "Strain target${if (state.isToday) " today" else ""}: ${targetText(it)}${if (state.strainTargetEased) " (eased for this week)" else ""}"
@@ -615,6 +662,42 @@ private fun InsightCard(state: TodayUiState, onOpenTrends: () -> Unit, modifier:
         if (footer.isNotEmpty()) {
             Column(Modifier.padding(top = 2.dp), Arrangement.spacedBy(2.dp)) { footer.forEach { Text(it, fontSize = 12.sp, color = TextMuted) } }
         }
+        when (val s = insight?.state) {
+            is InsightState.Ready -> InsightTail(
+                Modifier.testTag("recovery-tail"),
+                { Text(s.label.text, Modifier.weight(1f).semantics { invisibleToUser() }, color = TextMuted, fontSize = 11.sp) },
+                "Ask about ${insight.subject} ›",
+                SleepPurple,
+                insight.onAsk,
+            )
+
+            is InsightState.Failed -> InsightTail(
+                Modifier.testTag("recovery-tail"),
+                { Text(s.message, Modifier.weight(1f), color = TextMuted, fontSize = 11.sp) },
+                "Retry",
+                StrainBlue,
+                insight.onRetry,
+            )
+
+            else -> Unit
+        }
+    }
+}
+
+private fun made(label: EngineLabel) = if (label.kind == EngineKind.NANO) "Made on-device." else "Made in the cloud."
+
+/** The card's last row: a muted note on the left and a 48 dp link on the right. The link is its own click, so it never opens Trends. */
+@Composable
+private fun InsightTail(modifier: Modifier, note: @Composable RowScope.() -> Unit, link: String, linkColor: Color, onLink: () -> Unit) {
+    Row(modifier.fillMaxWidth(), Arrangement.spacedBy(12.dp), Alignment.CenterVertically) {
+        note()
+        Text(
+            link,
+            Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clickable(role = Role.Button, onClick = onLink).wrapContentHeight(Alignment.CenterVertically),
+            color = linkColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 

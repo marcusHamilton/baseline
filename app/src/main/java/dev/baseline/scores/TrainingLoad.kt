@@ -38,7 +38,7 @@ object TrainingLoad {
     private const val CALIBRATION_DAYS = 42L
 
     /** The top of the safe range, as a multiple of a normal week. */
-    private const val SAFE_BAND = 1.3
+    const val SAFE_BAND = 1.3
 
     /** No recent training below this fraction of the strain calibration's tau, so form % can't blow up after a break. */
     private const val MIN_FITNESS_OF_TAU = 0.01
