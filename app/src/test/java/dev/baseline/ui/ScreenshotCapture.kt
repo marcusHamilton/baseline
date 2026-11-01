@@ -26,9 +26,13 @@ import dev.baseline.data.db.ScoreEntity
 import dev.baseline.scores.Contributor
 import dev.baseline.scores.RecoveryResult
 import dev.baseline.scores.RecoveryZone
+import dev.baseline.ui.activities.ActivitiesContent
+import dev.baseline.ui.activities.act
+import dev.baseline.ui.activities.buildActivitiesState
 import dev.baseline.ui.ai.AskContent
 import dev.baseline.ui.ai.AskUiState
 import dev.baseline.ui.components.ActivityCardUi
+import dev.baseline.ui.format.Formatters
 import dev.baseline.ui.theme.BaselineTheme
 import dev.baseline.ui.theme.Bg
 import dev.baseline.ui.theme.Card
@@ -180,9 +184,35 @@ class ScreenshotCapture {
 
     @Test fun todayInsightFailed() = todayInsight("today-insight-failed", InsightState.Failed("Couldn't reach the cloud. Check your connection."))
 
-    @Test fun trends90Days() = capture("trends-90d", heightDp = 1380) {
-        TrendsContent(buildTrendsState(TrendRange.D90, today, days(), scores(), first, 100.0), {})
+    private fun trendsState(range: TrendRange, scores: List<ScoreEntity>) =
+        buildTrendsState(range, today, days(), scores, first, 100.0).copy(weekLoad = buildTrainingLoadUi(today, scores, first, DayOfWeek.MONDAY, 100.0))
+
+    @Test fun trends90Days() = capture("trends-90d", heightDp = 1380) { TrendsContent(trendsState(TrendRange.D90, scores()), {}) }
+
+    @Test fun trendsTrainingLoadOverTheLimit() = capture("trends-30d-over", heightDp = 1500) {
+        TrendsContent(trendsState(TrendRange.D30, scores(build = 4.5, window = 4)), {})
     }
+
+    private fun activities(name: String, scores: List<ScoreEntity>) = capture(name, heightDp = 560) {
+        val list = listOf(
+            act(1, day = today, name = "Morning Run"),
+            act(2, "road_biking", day = today.minusDays(2), durationSec = 5660.0, distanceM = 42_600.0, name = "Lunch Ride"),
+            act(3, "strength_training", day = today.minusDays(3), durationSec = 2760.0, distanceM = null, name = "Evening Lift"),
+        )
+        val load = buildTrainingLoadUi(today, scores, first, DayOfWeek.MONDAY, 100.0)
+        ActivitiesContent(
+            buildActivitiesState(null, list, mapOf(1L to 9.8, 2L to 11.2, 3L to 6.4), mapOf(3L to 18), DayOfWeek.MONDAY, today, Formatters(false), load),
+            {},
+            {},
+            {},
+        )
+    }
+
+    @Test fun activitiesWeekLoad() = activities("activities-week-load", scores())
+
+    @Test fun activitiesWeekLoadOverTheLimit() = activities("activities-week-load-over", scores(build = 4.5, window = 4))
+
+    @Test fun activitiesWeekLoadCalibrating() = activities("activities-week-load-calibrating", scores().filter { it.date >= today.minusDays(30) })
 
     private fun ask(name: String, state: AskUiState) = capture(name, heightDp = 560) {
         Surface(Modifier.height(560.dp), color = Card) { AskContent(state, {}, {}, {}, {}, {}) }

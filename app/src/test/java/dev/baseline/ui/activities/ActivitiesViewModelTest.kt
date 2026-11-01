@@ -10,8 +10,10 @@ import dev.baseline.data.SportFamily
 import dev.baseline.data.db.ActivityEntity
 import dev.baseline.data.db.ActivityScoreEntity
 import dev.baseline.data.db.AppDatabase
+import dev.baseline.data.db.DayEntity
 import dev.baseline.data.db.LoadSource
 import dev.baseline.data.db.RawResponse
+import dev.baseline.data.db.ScoreEntity
 import dev.baseline.data.db.StrengthSetEntity
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.prefs.UserPrefs
@@ -248,6 +250,34 @@ class ActivitiesViewModelTest {
         assertNull(build(listOf(act(9)), strains = emptyMap()).week.avgStrain)
         // The summary is for the week, whatever chip is selected.
         assertEquals(2, build(list, filter = SportFamily.SWIM, firstDay = DayOfWeek.SUNDAY).week.count)
+    }
+
+    private suspend fun seedLoadHistory() {
+        val first = TODAY.minusDays(100)
+        for (i in 0..100L) {
+            val d = first.plusDays(i)
+            db.dayDao().upsert(DayEntity(d))
+            db.scoreDao().upsert(ScoreEntity(d, null, false, null, if (d.dayOfWeek == DayOfWeek.SATURDAY) 150.0 else 100.0, 0.0, null, null, 1))
+        }
+    }
+
+    @Test
+    fun weekLoadBudgetIsForTodaysWeek() = runBlocking {
+        seedLoadHistory()
+        val load = awaitState { it.trainingLoad != null }.trainingLoad!!
+        assertEquals(TODAY, load.day.date)
+        assertEquals(LocalDate.of(2026, 10, 19), load.budget!!.weekStart) // the profile says nothing, so Monday
+        assertEquals(1, load.budget!!.daysLeft) // today is the Saturday
+    }
+
+    @Test
+    fun weekLoadUsesTheProfilesFirstDayOfWeekLikeTheSummary() = runBlocking {
+        seedLoadHistory()
+        db.activityDao().upsert(act(1, day = LocalDate.of(2026, 10, 18))) // a Sunday
+        assertEquals(0, awaitState { it.trainingLoad != null }.week.count) // Monday start: last Sunday is last week
+        db.rawDao().upsert(RawResponse("PROFILE", "-", """{"firstDayOfWeek":"sunday"}""".toByteArray(), Instant.EPOCH))
+        val s = awaitState { it.week.count == 1 && it.trainingLoad?.budget?.weekStart == LocalDate.of(2026, 10, 18) }
+        assertEquals(0, s.trainingLoad!!.budget!!.daysLeft) // the Saturday is now the week's last day
     }
 
     @Test

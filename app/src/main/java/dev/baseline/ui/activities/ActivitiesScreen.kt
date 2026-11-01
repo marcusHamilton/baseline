@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.baseline.R
 import dev.baseline.data.SportFamily
 import dev.baseline.ui.components.ActivityCard
+import dev.baseline.ui.components.WeekLoadBar
 import dev.baseline.ui.format.Formatters
 import dev.baseline.ui.theme.BarlowCondensed
 import dev.baseline.ui.theme.Bg
@@ -47,6 +48,7 @@ import dev.baseline.ui.theme.StrainBlueLight
 import dev.baseline.ui.theme.TextBody
 import dev.baseline.ui.theme.TextMuted
 import dev.baseline.ui.theme.TextPrimary
+import dev.baseline.ui.today.TrainingLoadUi
 import java.util.Locale
 
 private val Chips: List<Pair<String, SportFamily?>> = listOf(
@@ -76,7 +78,7 @@ fun ActivitiesContent(state: ActivitiesUiState, onFilter: (SportFamily?) -> Unit
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp),
     ) {
         item(key = "header") { Header(state.filter, onFilter, onOpenRecords) }
-        item(key = "week") { WeekCard(state.week, state.imperial) }
+        item(key = "week") { WeekCard(state.week, state.imperial, state.trainingLoad) }
         state.days.forEach { group ->
             item(key = "day-${group.date}") {
                 Text(
@@ -148,25 +150,29 @@ private fun Header(selected: SportFamily?, onFilter: (SportFamily?) -> Unit, onO
 }
 
 @Composable
-private fun WeekCard(week: WeekSummary, imperial: Boolean) {
+private fun WeekCard(week: WeekSummary, imperial: Boolean, trainingLoad: TrainingLoadUi?) {
     val count = week.count.toString()
     val hours = Formatters.hoursColonMinutes(week.duration)
     val distance = (if (imperial) week.distanceKm / KM_PER_MILE else week.distanceKm).takeIf { it > 0 }
         ?.let { "%.1f".format(Locale.US, it) } ?: "—"
     val strain = week.avgStrain?.let { "%.1f".format(Locale.US, it) } ?: "—"
     val unit = if (imperial) "mi" else "km"
-    Row(
-        Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card)
-            .semantics(mergeDescendants = true) {
-                contentDescription = "This week: $count activities, $hours hours, $distance $unit, average strain $strain"
-            }
-            .padding(16.dp),
-        Arrangement.spacedBy(8.dp),
+    Column(
+        Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).padding(16.dp),
+        Arrangement.spacedBy(14.dp),
     ) {
-        Stat(count, "this week", Modifier.weight(1f))
-        Stat(hours, "hours", Modifier.weight(1f))
-        Stat(distance, unit, Modifier.weight(1f))
-        Stat(strain, "avg strain", Modifier.weight(1f), StrainBlueLight)
+        Row(
+            Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
+                contentDescription = "This week: $count activities, $hours hours, $distance $unit, average strain $strain"
+            },
+            Arrangement.spacedBy(8.dp),
+        ) {
+            Stat(count, "this week", Modifier.weight(1f))
+            Stat(hours, "hours", Modifier.weight(1f))
+            Stat(distance, unit, Modifier.weight(1f))
+            Stat(strain, "avg strain", Modifier.weight(1f), StrainBlueLight)
+        }
+        WeekLoadBar(trainingLoad, "WEEK LOAD")
     }
 }
 

@@ -8,6 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import dev.baseline.data.Repository
 import dev.baseline.data.db.AppDatabase
 import dev.baseline.data.db.DayEntity
+import dev.baseline.data.db.RawResponse
 import dev.baseline.data.db.ScoreEntity
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.prefs.UserPrefs
@@ -34,6 +35,7 @@ import org.robolectric.RobolectricTestRunner
 import java.io.File
 import java.time.Clock
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -215,6 +217,34 @@ class TrendsViewModelTest {
         assertEquals(30, s.trainingLoad.size)
         assertEquals(today, s.trainingLoad.last()!!.date)
         assertEquals(FormState.MAINTAINING, s.trainingLoad.last()!!.state)
+    }
+
+    private suspend fun seedLoadHistory() {
+        val first = today.minusDays(200)
+        for (i in 0..200L) {
+            val d = first.plusDays(i)
+            db.dayDao().upsert(DayEntity(d))
+            db.scoreDao().upsert(loadScore(d, if (d.dayOfWeek == java.time.DayOfWeek.FRIDAY) 150.0 else 100.0))
+        }
+    }
+
+    @Test fun thisWeeksBudgetIsTheSameWhateverTheRange() = runBlocking {
+        seedLoadHistory()
+        val d30 = awaitState { it.weekLoad != null }
+        assertEquals(today.minusDays(5), d30.weekLoad!!.budget!!.weekStart) // today is a Saturday; Monday start
+        vm.setRange(TrendRange.D7)
+        val d7 = awaitState { it.range == TrendRange.D7 && it.weekLoad != null }
+        vm.setRange(TrendRange.D90)
+        val d90 = awaitState { it.range == TrendRange.D90 && it.weekLoad != null }
+        assertEquals(d30.weekLoad, d7.weekLoad)
+        assertEquals(d30.weekLoad, d90.weekLoad)
+    }
+
+    @Test fun thisWeeksBudgetFollowsTheProfilesFirstDay() = runBlocking {
+        seedLoadHistory()
+        db.rawDao().upsert(RawResponse("PROFILE", "-", """{"firstDayOfWeek":"sunday"}""".toByteArray(), Instant.EPOCH))
+        val s = awaitState { it.weekLoad?.budget?.weekStart == today.minusDays(6) }
+        assertEquals(0, s.weekLoad!!.budget!!.daysLeft)
     }
 
     @Test fun daysBeforeTheFirstScoreAreGaps() {

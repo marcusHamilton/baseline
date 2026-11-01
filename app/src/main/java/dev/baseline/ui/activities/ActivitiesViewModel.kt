@@ -5,14 +5,21 @@ import androidx.lifecycle.viewModelScope
 import dev.baseline.data.Repository
 import dev.baseline.data.SportFamily
 import dev.baseline.data.db.ActivityEntity
+import dev.baseline.scores.TrainingLoad
 import dev.baseline.ui.components.ActivityCardUi
 import dev.baseline.ui.format.Formatters
+import dev.baseline.ui.today.TrainingLoadUi
+import dev.baseline.ui.today.buildTrainingLoadUi
 import dev.baseline.ui.today.prettyType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -26,10 +33,20 @@ data class WeekSummary(val count: Int, val duration: Duration, val distanceKm: D
 
 data class DayGroup(val date: LocalDate, val items: List<ActivityCardUi>)
 
-/** [filter] null means All. The week summary ignores the filter. */
-data class ActivitiesUiState(val filter: SportFamily?, val week: WeekSummary, val days: List<DayGroup>, val today: LocalDate, val imperial: Boolean)
+/**
+ * [filter] null means All. The week summary ignores the filter. [trainingLoad] is today's week load for the bar under the summary
+ * (fitness-fatigue-form spec §4.1); null before the first score.
+ */
+data class ActivitiesUiState(
+    val filter: SportFamily?,
+    val week: WeekSummary,
+    val days: List<DayGroup>,
+    val today: LocalDate,
+    val imperial: Boolean,
+    val trainingLoad: TrainingLoadUi? = null,
+)
 
-class ActivitiesViewModel(repo: Repository, private val todayFlow: StateFlow<LocalDate>) : ViewModel() {
+class ActivitiesViewModel(private val repo: Repository, private val todayFlow: StateFlow<LocalDate>) : ViewModel() {
     constructor(repo: Repository, today: LocalDate) : this(repo, MutableStateFlow(today))
 
     val today: LocalDate get() = todayFlow.value
@@ -58,9 +75,20 @@ class ActivitiesViewModel(repo: Repository, private val todayFlow: StateFlow<Loc
             ::Data,
         )
 
+    /** Today's week load, built the way Today builds it: the scores back to the week's warm-up, the profile's first day, the strain tau. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val trainingLoad: Flow<TrainingLoadUi?> = todayFlow.flatMapLatest { today ->
+        combine(
+            repo.scores(today.minusDays(7 + TrainingLoad.WARM_UP_DAYS), today),
+            repo.historyStart.map { it.first }.distinctUntilChanged(),
+            repo.firstDayOfWeek,
+            repo.prefs.strainCalibration.map { it?.tau }.distinctUntilChanged(),
+        ) { scores, earliest, firstDay, tau -> buildTrainingLoadUi(today, scores, earliest, firstDay, tau) }
+    }
+
     val state: StateFlow<ActivitiesUiState> =
-        combine(filter, data, todayFlow) { f, d, today ->
-            buildActivitiesState(f, d.activities, d.strains, d.sets, d.firstDay, today, Formatters(d.imperial))
+        combine(filter, data, todayFlow, trainingLoad) { f, d, today, load ->
+            buildActivitiesState(f, d.activities, d.strains, d.sets, d.firstDay, today, Formatters(d.imperial), load)
         }.flowOn(Dispatchers.Default) // 175+ rows, rebuilt on every sync write
             .stateIn(
                 viewModelScope,
@@ -77,6 +105,7 @@ internal fun buildActivitiesState(
     firstDay: DayOfWeek,
     today: LocalDate,
     fmt: Formatters,
+    trainingLoad: TrainingLoadUi? = null,
 ): ActivitiesUiState {
     val weekStart = today.with(TemporalAdjusters.previousOrSame(firstDay))
     val thisWeek = activities.filter { it.day in weekStart..weekStart.plusDays(6) }
@@ -107,5 +136,5 @@ internal fun buildActivitiesState(
                     },
                 )
             }
-    return ActivitiesUiState(filter, week, days, today, fmt.imperial)
+    return ActivitiesUiState(filter, week, days, today, fmt.imperial, trainingLoad)
 }
