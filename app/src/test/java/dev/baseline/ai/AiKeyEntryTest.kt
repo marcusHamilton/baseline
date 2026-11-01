@@ -153,6 +153,16 @@ class AiKeyEntryTest {
     }
 
     @Test
+    fun listModelsCleansTheKey() = runBlocking {
+        server.enqueue(json("""{"data":[{"id":"m"}]}"""))
+        assertTrue(entry().listModels(base(), "  sk-test\n") is ModelsResult.Listed)
+        assertEquals("Bearer sk-test", server.takeRequest().getHeader("Authorization"))
+
+        assertEquals(ModelsResult.KeyRejected, entry().listModels(base(), "sk test"))
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
     fun toolCallSavesWithTools() = runBlocking {
         prefs.setMode(AiMode.ON_DEVICE)
         server.enqueue(json(toolCall))

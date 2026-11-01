@@ -112,7 +112,9 @@ class AiKeyEntry(
     fun cleanKey(input: String): String? = input.trim().takeIf { it.isNotEmpty() && it.none(Char::isWhitespace) }
 
     suspend fun listModels(baseUrl: HttpUrl, key: String): ModelsResult = withContext(Dispatchers.IO) {
-        val request = authorized(baseUrl, key, baseUrl.newBuilder().addPathSegment("models").build()).get().build()
+        // A raw paste (trailing newline) would make the header builder throw.
+        val clean = cleanKey(key) ?: return@withContext ModelsResult.KeyRejected
+        val request = authorized(baseUrl, clean, baseUrl.newBuilder().addPathSegment("models").build()).get().build()
         try {
             http.newCall(request).await().use { r ->
                 when (r.code) {
