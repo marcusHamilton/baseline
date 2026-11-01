@@ -188,7 +188,8 @@ class AiKeyEntryTest {
         assertEquals(model, body["model"]!!.jsonPrimitive.content)
         assertEquals("required", body["tool_choice"]!!.jsonPrimitive.content)
         assertEquals(false, body["stream"]!!.jsonPrimitive.content.toBoolean())
-        assertEquals(16, body["max_tokens"]!!.jsonPrimitive.int)
+        // Room for a reasoning model to think before the tool call (16 read DeepSeek v4.1 as "no tools").
+        assertEquals(1024, body["max_tokens"]!!.jsonPrimitive.int)
         assertEquals("ping", body["tools"]!!.jsonArray.single().jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content)
         val messages = body["messages"]!!.jsonArray
         assertEquals("Call the ping tool.", messages[0].jsonObject["content"]!!.jsonPrimitive.content)

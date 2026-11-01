@@ -117,7 +117,7 @@ class CloudEngineTest {
         engine().run(request).toList()
         val chat = sentJson()
         assertEquals(model, chat["model"]!!.jsonPrimitive.content)
-        assertEquals(1024, chat["max_tokens"]!!.jsonPrimitive.int)
+        assertEquals(8192, chat["max_tokens"]!!.jsonPrimitive.int)
         assertEquals("true", chat["stream"]!!.jsonPrimitive.content)
         assertEquals("0.3", chat["temperature"]!!.jsonPrimitive.content)
         val messages = chat["messages"]!!.jsonArray
@@ -127,7 +127,7 @@ class CloudEngineTest {
         server.enqueue(ok(hello))
         engine().run(request.copy(kind = RequestKind.INSIGHT)).toList()
         val insight = sentJson()
-        assertEquals(200, insight["max_tokens"]!!.jsonPrimitive.int)
+        assertEquals(8192, insight["max_tokens"]!!.jsonPrimitive.int)
         assertNull(insight["tools"])
     }
 

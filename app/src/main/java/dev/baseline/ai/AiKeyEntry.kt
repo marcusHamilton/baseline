@@ -34,6 +34,9 @@ const val SUGGESTED_MODEL = "deepseek/deepseek-v4.1-flash"
 private const val TYPICAL_INPUT_TOKENS = 10_000
 private const val TYPICAL_OUTPUT_TOKENS = 500
 private const val ERROR_PEEK_BYTES = 8L * 1024
+
+/** Room for a reasoning model to think before it calls ping: at 16 tokens DeepSeek v4.1 ran out first and read as "no tools". */
+private const val TEST_MAX_TOKENS = 1024
 private val JSON_TYPE = "application/json".toMediaType()
 private val LOOPBACK_HOSTS = setOf("127.0.0.1", "localhost")
 
@@ -241,7 +244,7 @@ class AiKeyEntry(
             put("tool_choice", shape.toolChoice)
         }
         put("stream", false)
-        put("max_tokens", 16)
+        put("max_tokens", TEST_MAX_TOKENS)
     }.toString()
 
     /** True when `choices[0].message.tool_calls` is a non-empty array. A body we can't read counts as no tool call: the 200 still proves the key. */

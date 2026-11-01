@@ -97,10 +97,12 @@ fun InsightCard(state: InsightState, subject: String, onAsk: () -> Unit, onRetry
 
         is InsightState.Ready -> {
             val made = if (state.label.kind == EngineKind.NANO) "Made on-device." else "Made in the cloud."
+            // Insights end in a full stop already; adding one read "it.. Made in the cloud".
+            val text = state.text.trimEnd().let { if (it.endsWith('.') || it.endsWith('!') || it.endsWith('?')) it else "$it." }
             Shell(
                 modifier
                     .semantics(mergeDescendants = true) {
-                        contentDescription = "Insight: ${state.text}. $made"
+                        contentDescription = "Insight: $text $made"
                         customActions = listOf(
                             CustomAccessibilityAction("Ask about $subject") {
                                 onAsk()

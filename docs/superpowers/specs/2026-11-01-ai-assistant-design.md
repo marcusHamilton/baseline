@@ -329,7 +329,9 @@ interface AiEngine { fun run(req: AiRequest): Flow<AiEvent> }  // errors are thr
   `GarminClient`. The timeouts are 15 s to connect and 60 s to read (per streamed chunk). An `Authorization: Bearer
   <key>` header is added per request, **only for requests whose host equals the configured base URL's host**.
 - **The request.** `POST {baseUrl}/chat/completions` with `model`, `messages`, `stream: true`, `temperature: 0.3` and
-  `max_tokens` (1,024 for chat, 200 for insights). `tools` and `tool_choice: "auto"` are added only when
+  `max_tokens` (8,192 for chat and insights: reasoning models such as DeepSeek v4.x spend them on thinking before the
+  answer, so a tight cap returns nothing; at 2,048 the activity insight came back empty every time. The prompts keep
+  answers short, and only the tokens used are billed). `tools` and `tool_choice: "auto"` are added only when
   `toolsSupported` is true and the request is a chat.
 - **Streaming.** The SSE `data:` lines are parsed by hand on OkHttp's source, stopping at `[DONE]`; this needs no
   `okhttp-sse` dependency. Text deltas are emitted as they arrive. `tool_calls` deltas are accumulated by index into
@@ -346,12 +348,13 @@ interface AiEngine { fun run(req: AiRequest): Flow<AiEvent> }  // errors are thr
 
 ### 4.3 `AiKeyEntry` (the test)
 
-`AiKeyEntry.saveAndTest(baseUrl, key, model)` sends one request, with `max_tokens: 16`:
+`AiKeyEntry.saveAndTest(baseUrl, key, model)` sends one request, with `max_tokens: 1024` (at 16, DeepSeek v4.1 spent
+them reasoning and never called the tool, so it read as "no tools"):
 
 ```json
 { "model": "<model>", "messages": [{"role": "system", "content": "Call the ping tool."}, {"role": "user", "content": "ping"}],
   "tools": [{"type": "function", "function": {"name": "ping", "description": "Health check", "parameters": {"type": "object", "properties": {}}}}],
-  "tool_choice": "required", "stream": false, "max_tokens": 16 }
+  "tool_choice": "required", "stream": false, "max_tokens": 1024 }
 ```
 
 | Response | Outcome |
@@ -487,11 +490,11 @@ No tool writes, triggers a sync, or reaches the network.
     seeing a doctor.
 - **Chat, Nano:** a trimmed version of the cloud prompt, plus: "If answering needs data that isn't shown above, reply
   with exactly NEEDS_HISTORY."
-- **Insight** (`PROMPT_VERSION` 7), one prompt per page, each "in 2 or 3 short sentences":
+- **Insight** (`PROMPT_VERSION` 8), one prompt per page, each "in 2 or 3 short sentences":
   - Today: explain the day's recovery, what drove it and, from the Links, what is behind that. Don't restate the score.
   - Sleep: what was different about the night and, if a Links line accounts for it, tie the two together. Don't restate
     the sleep time, performance or Garmin score.
-  - Activity: any all-time record ("personal best" only for those), how hard it was against the usual session, then the
+  - Activity: an all-time record first if it set one, else no mention of records ("personal best" only for those), how hard it was against the usual session, then the
     Links (what they came in with, how the night after and the next morning responded). Don't repeat the stat tiles.
   - All: a hard day, a late workout, a late bedtime and short nights usually lower HRV, sleep and recovery, so a result
     that went the other way held up "despite" them, not "because of" them; a change under 10% from baseline is normal and
@@ -502,6 +505,7 @@ No tool writes, triggers a sync, or reaches the network.
     version 5 added the Links. On the phone, Nano then credited a harder day before for a good night ("may be linked to the
     preceding day being much harder") and led with a +6% HRV, so version 6 added the direction and the 10% rule (and the
     verdict line in §5.1). Version 7 stops it saying "as indicated by the link" and repeating itself.
+    Version 8 stops DeepSeek opening with "No all-time record was set".
   - Insights never use tools.
 
 ### 5.4 Disclaimer

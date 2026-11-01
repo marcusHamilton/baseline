@@ -12,8 +12,10 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
 
 /** The OpenAI-compatible chat-completions wire format (spec: AI assistant §4.2), built and read by hand: no compiler plugin, no vendor SDK. */
-internal const val CHAT_MAX_TOKENS = 1024
-internal const val INSIGHT_MAX_TOKENS = 200
+// Reasoning models (DeepSeek v4.x) spend these on thinking before the answer; a cap, not a cost. The prompts keep answers short.
+// At 2,048 DeepSeek v4.1 thought through the whole activity insight and returned no text.
+internal const val CHAT_MAX_TOKENS = 8192
+internal const val INSIGHT_MAX_TOKENS = 8192
 internal const val CLOUD_TEMPERATURE = 0.3
 
 sealed interface SseLine {

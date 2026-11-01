@@ -4,7 +4,7 @@ import dev.baseline.ai.engine.EngineKind
 
 /** The system prompts (spec §5.3). Bump [PROMPT_VERSION] on any wording change: it is part of the insight cache fingerprint. */
 object Prompts {
-    const val PROMPT_VERSION = 7
+    const val PROMPT_VERSION = 8
 
     /** What Nano replies, and nothing else, when the question needs data beyond the page it was shown. */
     const val NEEDS_HISTORY = "NEEDS_HISTORY"
@@ -43,7 +43,8 @@ object Prompts {
     /** An activity has no baseline: it is read against the user's records, their usual session and the days around it. */
     private const val ACTIVITY_INSIGHT =
         "In 2 or 3 short sentences, say what stands out about this activity and how it fits the days around it. " +
-            "Lead with any all-time record it set; say \"personal best\" only for a line under \"All-time records\". " +
+            "If it set an all-time record, lead with it, otherwise don't mention records; " +
+            "say \"personal best\" only for a line under \"All-time records\". " +
             "Then say how hard it was against their usual session, from the \"Against your usual\" line. " +
             "Then use the Links: what they came in with, and how the night after and the next morning responded. " +
             "Don't repeat the distance, time, pace or heart rate already shown. If nothing stands out, say it was a typical session. " +

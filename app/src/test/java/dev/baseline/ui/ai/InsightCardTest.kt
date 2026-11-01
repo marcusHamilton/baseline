@@ -165,9 +165,9 @@ class InsightCardTest {
     @Test
     fun talkBackMergedDescription() {
         show(InsightState.Ready(threeLines, nano))
-        rule.onNodeWithContentDescription("Insight: $threeLines. Made on-device.").assertExists()
+        rule.onNodeWithContentDescription("Insight: $threeLines Made on-device.").assertExists()
         val node = rule.onNodeWithTag("card").fetchSemanticsNode()
-        assertEquals(listOf("Insight: $threeLines. Made on-device."), node.config[SemanticsProperties.ContentDescription])
+        assertEquals(listOf("Insight: $threeLines Made on-device."), node.config[SemanticsProperties.ContentDescription])
         val action = node.config[SemanticsActions.CustomActions].single()
         assertEquals("Ask about today", action.label)
         action.action()
@@ -177,7 +177,7 @@ class InsightCardTest {
     @Test
     fun talkBackSaysCloud() {
         show(InsightState.Ready("Short one.", cloud), subject = "this run")
-        rule.onNodeWithContentDescription("Insight: Short one.. Made in the cloud.").assertExists()
+        rule.onNodeWithContentDescription("Insight: Short one. Made in the cloud.").assertExists()
         assertEquals("Ask about this run", rule.onNodeWithTag("card").fetchSemanticsNode().config[SemanticsActions.CustomActions].single().label)
     }
 
