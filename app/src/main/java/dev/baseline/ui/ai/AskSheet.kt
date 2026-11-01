@@ -9,11 +9,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -33,13 +35,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -48,8 +53,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -73,12 +83,13 @@ import dev.baseline.ui.theme.TextBody
 import dev.baseline.ui.theme.TextMuted
 import dev.baseline.ui.theme.TextPrimary
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import dev.baseline.ai.engine.Role as ChatRole
 
 private val DisabledIcon = Color(0xFF5B636D)
 
 /**
- * The Ask sheet (spec §3.6): a modal bottom sheet that opens partly expanded and can be dragged to full height. [onDismiss] is called on
+ * The Ask sheet (spec §3.6): a modal bottom sheet that opens partly expanded and can be dragged to full height. The content is laid out for the part of the sheet on screen ([Modifier.onScreen]), so the input row is visible at the half-height stop. [onDismiss] is called on
  * the close button, a drag down and Back; the caller then drops the ViewModel, which discards the chat.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -88,17 +99,39 @@ fun AskSheet(vm: AskViewModel, onDismiss: () -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     val scope = rememberCoroutineScope()
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Card, contentColor = TextPrimary) {
-        AskContent(
-            state = state,
-            onSend = vm::send,
-            onPick = vm::pick,
-            onMoreDetail = vm::moreDetail,
-            onRetry = vm::retry,
-            onClose = { scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() } },
-            modifier = Modifier.fillMaxHeight().imePadding(),
-            onInputFocused = { scope.launch { sheetState.expand() } },
-        )
+        Box(Modifier.fillMaxHeight().onScreen()) {
+            AskContent(
+                state = state,
+                onSend = vm::send,
+                onPick = vm::pick,
+                onMoreDetail = vm::moreDetail,
+                onRetry = vm::retry,
+                onClose = { scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() } },
+                modifier = Modifier.fillMaxHeight().imePadding(),
+                onInputFocused = { scope.launch { sheetState.expand() } },
+                maxSuggestions = if (sheetState.targetValue == SheetValue.PartiallyExpanded) 2 else Int.MAX_VALUE,
+            )
+        }
     }
+}
+
+/**
+ * Sizes the content to the part of the sheet that is on screen. A modal sheet lays its content out at full height and slides it up from
+ * below, so at the half-height stop the bottom (the suggestions and the input row) would sit past the screen edge. The sheet itself keeps
+ * its full-height size, so its stops don't change; only the content shrinks, and grows again as it is dragged up.
+ */
+@Composable
+private fun Modifier.onScreen(): Modifier {
+    val windowHeight = LocalWindowInfo.current.containerSize.height
+    val navBottom = WindowInsets.navigationBars.getBottom(LocalDensity.current)
+    var top by remember { mutableIntStateOf(0) }
+    return this
+        .onGloballyPositioned { top = it.positionInWindow().y.roundToInt() }
+        .layout { measurable, constraints ->
+            val height = (windowHeight - navBottom - top).coerceIn(0, constraints.maxHeight)
+            val placeable = measurable.measure(constraints.copy(minHeight = height, maxHeight = height))
+            layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(0, 0) }
+        }
 }
 
 /** The sheet's content, stateless apart from the text being typed, so tests can drive it without a [ModalBottomSheet]. */
@@ -112,6 +145,7 @@ fun AskContent(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     onInputFocused: () -> Unit = {},
+    maxSuggestions: Int = Int.MAX_VALUE,
 ) {
     var input by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -147,8 +181,8 @@ fun AskContent(
         }
 
         if (empty && state.suggestions.isNotEmpty()) {
-            Column(Modifier.padding(bottom = 8.dp), horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                state.suggestions.forEach { SuggestionChip(it, enabled = !state.busy, onClick = { onPick(it) }) }
+            Column(Modifier.padding(top = 16.dp, bottom = 8.dp), horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                state.suggestions.take(maxSuggestions).forEach { SuggestionChip(it, enabled = !state.busy, onClick = { onPick(it) }) }
             }
         }
 
