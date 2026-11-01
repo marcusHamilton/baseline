@@ -45,7 +45,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
+import java.time.Clock
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
@@ -61,9 +64,15 @@ private class CountingScheduler(wm: WorkManager) : SyncScheduler(wm, { true }) {
     }
 }
 
-/** Identity-cipher vault, in-memory db and an offline engine: no Keystore, no network. */
+/**
+ * Mid-month, so the days before "today" that the tests open from the Calendar are in the month it opens on,
+ * whatever the host date (on the 1st, yesterday was in the previous month).
+ */
+private val midMonth: Clock = Clock.fixed(Instant.parse("2026-10-15T12:00:00Z"), ZoneOffset.UTC)
+
+/** Identity-cipher vault, in-memory db and an offline engine on a fixed clock: no Keystore, no network. */
 private class TestContainer(context: Context, private val store: DataStore<Preferences>, private val fetch: suspend (GarminEndpoint, String) -> GarminResult) :
-    AppContainer(context) {
+    AppContainer(context, midMonth) {
     override val scheduler = CountingScheduler(WorkManager.getInstance(context))
     override val apiKeyVault by lazy { ApiKeyVault(store, { it }, { it }, clock) }
     override val db: AppDatabase by lazy {
@@ -220,11 +229,10 @@ class NavShellTest {
             ?.startsWith(date.format(DateTimeFormatter.ofPattern("MMMM d", Locale.US)) + ",") == true
     }
 
-    private fun openDayFromCalendar(date: LocalDate, today: LocalDate) {
+    /** [date] must be in the current month, which the Calendar opens on; the fixed clock keeps it there. */
+    private fun openDayFromCalendar(date: LocalDate) {
         rule.onNodeWithText("TODAY").performClick() // the date header opens the calendar
         rule.waitUntil(5_000) { rule.onAllNodesWithTag("screen-calendar").fetchSemanticsNodes().isNotEmpty() }
-        if (date.month != today.month) rule.onNodeWithContentDescription("Previous month").performClick()
-        // After "Previous month" the old month's cells are still on screen for a moment.
         rule.waitUntil(5_000) { rule.onAllNodes(cellFor(date)).fetchSemanticsNodes().isNotEmpty() }
         rule.onNode(cellFor(date)).performScrollTo().performClick()
         rule.onNodeWithText("Open day →").performScrollTo().performClick()
@@ -239,12 +247,12 @@ class NavShellTest {
     fun openDayReturnsSelectedDateToToday() {
         showWithKey()
         val today = LocalDate.now(container.clock)
-        openDayFromCalendar(today.minusDays(1), today)
+        openDayFromCalendar(today.minusDays(1))
         awaitText(weekday(today.minusDays(1)))
         rule.onNodeWithContentDescription("Next day").performClick() // same Today ViewModel: stepping forward works
         awaitText("TODAY")
         // The hand-off was cleared, so a second pick is delivered too.
-        openDayFromCalendar(today.minusDays(2), today)
+        openDayFromCalendar(today.minusDays(2))
         awaitText(weekday(today.minusDays(2)))
     }
 
