@@ -24,11 +24,11 @@ object Prompts {
     private val NANO_CHAT =
         """
         $ROLE
-        Answer only from the data above. If data is missing, say so.
+        Answer only from the data below. If data is missing, say so.
         Quote the numbers you use, in the user's units.
         Be concise, with no tables unless asked. Don't invent data or diagnoses.
-        Not medical advice. For chest pain, fainting, a resting heart rate far above baseline, or similar, suggest seeing a doctor.
-        If answering needs data that isn't shown above, reply with exactly $NEEDS_HISTORY.
+        Not medical advice. For chest pain, fainting, a resting heart rate far higher than baseline, or similar, suggest seeing a doctor.
+        If answering needs data that isn't shown below, reply with exactly $NEEDS_HISTORY.
         """.trimIndent()
 
     fun chat(engine: EngineKind): String = when (engine) {

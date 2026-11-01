@@ -18,6 +18,14 @@ class PromptsTest {
     }
 
     @Test
+    fun nanoPromptPointsAtTheDataBelowIt() {
+        val p = Prompts.chat(EngineKind.NANO)
+        assertTrue("reply with exactly NEEDS_HISTORY" in p)
+        assertFalse("above" in p)
+        assertTrue("below" in p)
+    }
+
+    @Test
     fun bothChatPromptsCarryTheRules() {
         for (kind in EngineKind.entries) {
             val p = Prompts.chat(kind)
