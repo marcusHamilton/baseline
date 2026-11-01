@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -36,10 +37,22 @@ object NoTools : ToolRunner {
     override suspend fun call(name: String, argumentsJson: String) = ToolResult("", """{"error":"unknown tool"}""")
 }
 
+private const val MAX_TOOL_ROUNDS = 6
 private const val DEFAULT_RETRY_SECONDS = 2L
 private const val MAX_RETRY_SECONDS = 10L
 private const val ERROR_PEEK_BYTES = 8L * 1024
 private val JSON_TYPE = "application/json".toMediaType()
+
+/** What one streamed response added up to. */
+private class Round(val text: String, val calls: List<ToolCall>) {
+    val gotText: Boolean get() = text.isNotEmpty()
+}
+
+private sealed interface Exchange {
+    class Answer(val round: Round) : Exchange
+
+    class RetryAfter(val seconds: Long) : Exchange
+}
 
 /**
  * An OpenAI-compatible streaming client (spec: AI assistant §4.2, §8). Errors are mapped from status codes only: no response body text,
@@ -57,15 +70,46 @@ class CloudEngine(
         val config = vault.config() ?: throw AiFailure.KeyRejected
         val label = EngineLabel(EngineKind.CLOUD, config.model)
         val toolDefs = tools.definitions.takeIf { config.toolsSupported && req.kind == RequestKind.CHAT && it.isNotEmpty() }
-        val body = chatBody(config.model, req.kind, initialMessages(req), toolDefs)
-        var retried = false
+        val messages = initialMessages(req).map { it as JsonObject }.toMutableList()
+        var rounds = 0
         while (true) {
-            val waitSeconds = exchange(config, body, label) { emit(it) } ?: break
-            if (retried) throw AiFailure.Busy(config.baseUrl.host)
-            retried = true
-            delay(waitSeconds * 1000)
+            // After the sixth round of tools, one last request forbids them.
+            val forced = toolDefs != null && rounds >= MAX_TOOL_ROUNDS
+            fitBudget(messages)
+            val body = chatBody(config.model, req.kind, JsonArray(messages), toolDefs, if (forced) "none" else "auto")
+            val round = roundTrip(config, body) { emit(it) }
+            // Without offered tools a tool call can't be run, and a forced round's calls are ignored.
+            if (round.calls.isNotEmpty() && toolDefs == null) throw AiFailure.Malformed
+            if (round.calls.isEmpty() || forced) {
+                if (!round.gotText) throw AiFailure.Malformed
+                emit(AiEvent.Done(label))
+                return@flow
+            }
+            rounds++
+            messages += assistantToolMessage(round.text, round.calls)
+            for (call in round.calls) {
+                val result = tools.call(call.name, call.arguments)
+                if (result.statusLabel.isNotBlank()) emit(AiEvent.ToolStatus(result.statusLabel))
+                messages += toolMessage(call.id, result.content)
+            }
         }
     }.flowOn(Dispatchers.IO)
+
+    /** One request, with a single retry after a 429. */
+    private suspend fun roundTrip(config: AiConfig, body: String, emit: suspend (AiEvent) -> Unit): Round {
+        var retried = false
+        while (true) {
+            when (val outcome = exchange(config, body, emit)) {
+                is Exchange.Answer -> return outcome.round
+
+                is Exchange.RetryAfter -> {
+                    if (retried) throw AiFailure.Busy(config.baseUrl.host)
+                    retried = true
+                    delay(outcome.seconds * 1000)
+                }
+            }
+        }
+    }
 
     private fun buildRequest(config: AiConfig, body: String): Request {
         val url = config.baseUrl.newBuilder().addPathSegment("chat").addPathSegment("completions").build()
@@ -75,8 +119,8 @@ class CloudEngine(
         return builder.build()
     }
 
-    /** One request. Returns null when the answer has streamed to its end, or the seconds to wait before retrying a 429. */
-    private suspend fun exchange(config: AiConfig, body: String, label: EngineLabel, emit: suspend (AiEvent) -> Unit): Long? = coroutineScope {
+    /** One request: the streamed round, or the seconds to wait before retrying a 429. */
+    private suspend fun exchange(config: AiConfig, body: String, emit: suspend (AiEvent) -> Unit): Exchange = coroutineScope {
         val host = config.baseUrl.host
         val call = http.newCall(buildRequest(config, body))
         // Blocking reads don't see coroutine cancellation, so cancel the call from here.
@@ -100,8 +144,7 @@ class CloudEngine(
                 when (r.code) {
                     200 -> {
                         vault.markValid()
-                        stream(r, host, label, emit)
-                        null
+                        Exchange.Answer(stream(r, host, emit))
                     }
 
                     401, 403 -> {
@@ -115,7 +158,7 @@ class CloudEngine(
 
                     400 -> throw if (namesModel(r.peekBody(ERROR_PEEK_BYTES).string())) AiFailure.ModelGone else AiFailure.Malformed
 
-                    429 -> retryAfterSeconds(r)
+                    429 -> Exchange.RetryAfter(retryAfterSeconds(r))
 
                     in 500..599 -> throw AiFailure.Unreachable(host)
 
@@ -127,10 +170,11 @@ class CloudEngine(
         }
     }
 
-    private suspend fun stream(r: Response, host: String, label: EngineLabel, emit: suspend (AiEvent) -> Unit) {
+    /** Streams one response: text deltas go out as they arrive, tool-call deltas are gathered into whole calls. */
+    private suspend fun stream(r: Response, host: String, emit: suspend (AiEvent) -> Unit): Round {
         val source = r.body.source()
-        var gotText = false
-        var gotToolCalls = false
+        val text = StringBuilder()
+        val assembler = ToolCallAssembler()
         while (true) {
             val line =
                 try {
@@ -151,17 +195,23 @@ class CloudEngine(
                         } catch (_: WireException) {
                             throw AiFailure.Malformed
                         }
-                    if (chunk.hasToolCalls || chunk.finishReason == "tool_calls") gotToolCalls = true
+                    chunk.toolCalls.forEach(assembler::add)
                     chunk.text?.let {
-                        gotText = true
+                        text.append(it)
                         emit(AiEvent.Text(it))
                     }
+                    // A tool-call finish with nothing to call is as unreadable as a call without a name.
+                    if (chunk.finishReason == "tool_calls" && assembler.isEmpty) throw AiFailure.Malformed
                 }
             }
         }
-        // The tool loop arrives in the next task; until then a tool call counts as an unreadable answer.
-        if (gotToolCalls || !gotText) throw AiFailure.Malformed
-        emit(AiEvent.Done(label))
+        val calls =
+            try {
+                assembler.build()
+            } catch (_: WireException) {
+                throw AiFailure.Malformed
+            }
+        return Round(text.toString(), calls)
     }
 
     private fun retryAfterSeconds(r: Response): Long = (r.header("Retry-After")?.trim()?.toLongOrNull() ?: DEFAULT_RETRY_SECONDS).coerceIn(0, MAX_RETRY_SECONDS)

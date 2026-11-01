@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
 
 /** The OpenAI-compatible chat-completions wire format (spec: AI assistant §4.2), built and read by hand: no compiler plugin, no vendor SDK. */
@@ -35,7 +36,38 @@ fun parseSseLine(line: String): SseLine {
 }
 
 /** What one streamed chunk adds up to. */
-internal data class Chunk(val text: String?, val hasToolCalls: Boolean, val finishReason: String?)
+internal data class Chunk(val text: String?, val toolCalls: List<ToolCallDelta>, val finishReason: String?)
+
+/** A fragment of one tool call. [index] says which call it belongs to; [id] and [name] arrive once, [arguments] in pieces. */
+internal data class ToolCallDelta(val index: Int, val id: String?, val name: String?, val arguments: String?)
+
+/** A complete tool call, assembled from its deltas. */
+internal data class ToolCall(val id: String, val name: String, val arguments: String)
+
+/** Adds up [ToolCallDelta]s by index across chunks. */
+internal class ToolCallAssembler {
+    private class Partial(var id: String? = null, var name: String? = null, val arguments: StringBuilder = StringBuilder())
+
+    private val partials = sortedMapOf<Int, Partial>()
+
+    val isEmpty: Boolean get() = partials.isEmpty()
+
+    fun add(delta: ToolCallDelta) {
+        val p = partials.getOrPut(delta.index) { Partial() }
+        delta.id?.let { p.id = it }
+        delta.name?.let { p.name = it }
+        delta.arguments?.let { p.arguments.append(it) }
+    }
+
+    /** The calls in index order. Throws [WireException] for a call with no function name. Empty arguments become "{}". */
+    fun build(): List<ToolCall> = partials.map { (index, p) ->
+        ToolCall(
+            id = p.id?.takeIf { it.isNotEmpty() } ?: "call_$index",
+            name = p.name?.takeIf { it.isNotEmpty() } ?: throw WireException(),
+            arguments = p.arguments.toString().ifBlank { "{}" },
+        )
+    }
+}
 
 /** Thrown for a chunk we can't read, and for an in-stream `error` object. Carries no body text. */
 internal class WireException : Exception()
@@ -51,12 +83,21 @@ internal fun parseChunk(json: String): Chunk {
             null
         } ?: throw WireException()
     if (root["error"] != null && root["error"] !is JsonNull) throw WireException()
-    val choice = (root["choices"] as? JsonArray)?.firstOrNull() as? JsonObject ?: return Chunk(null, false, null)
+    val choice = (root["choices"] as? JsonArray)?.firstOrNull() as? JsonObject ?: return Chunk(null, emptyList(), null)
     val delta = choice["delta"] as? JsonObject
-    val toolCalls = delta?.get("tool_calls") as? JsonArray
+    val toolCalls = (delta?.get("tool_calls") as? JsonArray).orEmpty().mapIndexed { position, element ->
+        val call = element as? JsonObject ?: throw WireException()
+        val function = call["function"] as? JsonObject
+        ToolCallDelta(
+            index = (call["index"] as? JsonPrimitive)?.intOrNull ?: position,
+            id = call["id"].stringOrNull(),
+            name = function?.get("name").stringOrNull(),
+            arguments = function?.get("arguments").stringOrNull(),
+        )
+    }
     return Chunk(
         text = delta?.get("content").stringOrNull()?.takeIf { it.isNotEmpty() },
-        hasToolCalls = toolCalls != null && toolCalls.isNotEmpty(),
+        toolCalls = toolCalls,
         finishReason = choice["finish_reason"].stringOrNull(),
     )
 }
@@ -91,6 +132,61 @@ internal fun chatBody(model: String, kind: RequestKind, messages: JsonArray, too
         put("tool_choice", toolChoice)
     }
 }.toString()
+
+/** `{"role":"assistant","tool_calls":[…]}`, carrying any [text] streamed alongside the calls. */
+internal fun assistantToolMessage(text: String, calls: List<ToolCall>): JsonObject = buildJsonObject {
+    put("role", "assistant")
+    if (text.isNotEmpty()) put("content", text)
+    put(
+        "tool_calls",
+        buildJsonArray {
+            for (c in calls) {
+                add(
+                    buildJsonObject {
+                        put("id", c.id)
+                        put("type", "function")
+                        put(
+                            "function",
+                            buildJsonObject {
+                                put("name", c.name)
+                                put("arguments", c.arguments)
+                            },
+                        )
+                    },
+                )
+            }
+        },
+    )
+}
+
+internal fun toolMessage(callId: String, content: String): JsonObject = buildJsonObject {
+    put("role", "tool")
+    put("tool_call_id", callId)
+    put("content", content)
+}
+
+internal const val CONTEXT_BUDGET_TOKENS = 60_000
+internal const val REMOVED_LOOKUP = "[earlier lookup removed to save space]"
+
+/**
+ * Keeps the conversation under [CONTEXT_BUDGET_TOKENS] (characters ÷ 4) by replacing the oldest tool results with [REMOVED_LOOKUP],
+ * oldest first, until it fits. Everything else stays.
+ */
+internal fun fitBudget(messages: MutableList<JsonObject>) {
+    fun size() = messages.sumOf { (it["content"] as? JsonPrimitive)?.takeIf { c -> c.isString }?.content?.length ?: 0 }
+    var total = size()
+    for (i in messages.indices) {
+        if (total / 4 <= CONTEXT_BUDGET_TOKENS) return
+        val m = messages[i]
+        if (m["role"].stringOrNull() != "tool") continue
+        val length = m["content"].stringOrNull()?.length ?: continue
+        if (length <= REMOVED_LOOKUP.length) continue
+        messages[i] = buildJsonObject {
+            for ((k, v) in m) put(k, if (k == "content") JsonPrimitive(REMOVED_LOOKUP) else v)
+        }
+        total -= length - REMOVED_LOOKUP.length
+    }
+}
 
 /** True when a 400 error body names the model in `error.code` or `error.param`. Looks at nothing else, and the text goes no further. */
 internal fun namesModel(body: String): Boolean {

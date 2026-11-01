@@ -295,12 +295,6 @@ class CloudEngineTest {
     }
 
     @Test
-    fun aToolCallFinishIsMalformedUntilTheToolLoopExists() = runBlocking {
-        server.enqueue(ok(sse("""data: {"choices":[{"delta":{"tool_calls":[{"index":0}]},"finish_reason":"tool_calls"}]}""", "data: [DONE]")))
-        assertEquals(AiFailure.Malformed, failure())
-    }
-
-    @Test
     fun cancellingCancelsTheCall() = runBlocking {
         // The first period carries the first event (padded with an SSE comment); the rest arrives 5 s later.
         val chunk = 1024
