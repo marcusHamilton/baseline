@@ -130,6 +130,7 @@ fun TodayScreen(
     zone: StateFlow<ZoneId>,
     updater: Updater? = null,
     onOpenTrends: () -> Unit = {},
+    insight: @Composable () -> Unit = {},
 ) {
     val context = LocalContext.current
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
@@ -161,6 +162,7 @@ fun TodayScreen(
             keyStatus, vm::toggleEdit, vm::moveRow, vm::toggleHidden, zoneNow,
             update, { updater?.primary() }, { tag -> updater?.dismiss(tag) },
             onOpenTrends = onOpenTrends,
+            insight = insight,
         )
     }
 }
@@ -184,6 +186,7 @@ fun TodayContent(
     onUpdate: () -> Unit = {},
     onDismissUpdate: (String) -> Unit = {},
     onOpenTrends: () -> Unit = {},
+    insight: @Composable () -> Unit = {},
 ) {
     val scroll = rememberScrollState()
     var viewport by remember { mutableStateOf(Rect.Zero) }
@@ -209,6 +212,7 @@ fun TodayContent(
         syncLine?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 20.dp), fontSize = 12.sp, color = TextMuted, textAlign = TextAlign.Center) }
         Dials(state, onOpenSleep)
         BodyBatteryStrip(state.bodyBattery, onToggleBodyBattery, Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp), state.isToday)
+        insight()
         InsightCard(state, onOpenTrends, Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp))
         if (state.activities.isNotEmpty()) {
             Section(if (state.isToday) "TODAY'S ACTIVITIES" else "ACTIVITIES") {

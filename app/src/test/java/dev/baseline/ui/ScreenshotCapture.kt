@@ -3,6 +3,7 @@ package dev.baseline.ui
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -18,6 +19,7 @@ import dev.baseline.ai.context.Suggestion
 import dev.baseline.ai.engine.EngineKind
 import dev.baseline.ai.engine.EngineLabel
 import dev.baseline.ai.engine.Role
+import dev.baseline.ai.insight.InsightState
 import dev.baseline.data.SportFamily
 import dev.baseline.data.db.DayEntity
 import dev.baseline.data.db.ScoreEntity
@@ -26,6 +28,7 @@ import dev.baseline.scores.RecoveryResult
 import dev.baseline.scores.RecoveryZone
 import dev.baseline.ui.ai.AskContent
 import dev.baseline.ui.ai.AskUiState
+import dev.baseline.ui.ai.InsightCard
 import dev.baseline.ui.components.ActivityCardUi
 import dev.baseline.ui.theme.BaselineTheme
 import dev.baseline.ui.theme.Bg
@@ -157,6 +160,28 @@ class ScreenshotCapture {
     @Test fun todayCalibrating() = today("today-calibrating", todayBuilt(todayState(scores(), earliest = today.minusDays(30))))
 
     @Test fun todayBodyBatteryExpanded() = today("today-body-battery-expanded", todayBuilt(todayState(scores(), bodyBatteryExpanded = true)))
+
+    private fun todayInsight(name: String, insight: InsightState) = todayBuilt(todayState(scores())).let { state ->
+        capture(name, heightDp = 1040) {
+            TodayContent(
+                state, null, {}, {}, {}, {}, {}, {},
+                insight = { InsightCard(insight, "today", {}, {}, Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp)) },
+            )
+        }
+    }
+
+    @Test fun todayInsightReady() = todayInsight(
+        "today-insight-ready",
+        InsightState.Ready(
+            "Your recovery is in the green at 72%, helped by an HRV 6% above your baseline. Last night's sleep covered most of what you needed, " +
+                "so a moderate day of training fits well.",
+            EngineLabel(EngineKind.NANO, null),
+        ),
+    )
+
+    @Test fun todayInsightGenerating() = todayInsight("today-insight-generating", InsightState.Generating(""))
+
+    @Test fun todayInsightFailed() = todayInsight("today-insight-failed", InsightState.Failed("Couldn't reach the cloud. Check your connection."))
 
     @Test fun trends90Days() = capture("trends-90d", heightDp = 1380) {
         TrendsContent(buildTrendsState(TrendRange.D90, today, days(), scores(), first, 100.0), {})

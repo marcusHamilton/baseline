@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
@@ -46,12 +47,15 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dev.baseline.AppContainer
 import dev.baseline.R
+import dev.baseline.ai.context.AskScope
 import dev.baseline.garmin.KeyStatus
 import dev.baseline.ui.activities.ActivitiesScreen
 import dev.baseline.ui.activities.ActivitiesViewModel
 import dev.baseline.ui.activity.ActivityScreen
 import dev.baseline.ui.activity.ActivityViewModel
 import dev.baseline.ui.activity.sections.RouteMap
+import dev.baseline.ui.ai.InsightSlot
+import dev.baseline.ui.ai.InsightViewModel
 import dev.baseline.ui.calendar.CalendarScreen
 import dev.baseline.ui.calendar.CalendarViewModel
 import dev.baseline.ui.components.OfflineBar
@@ -249,6 +253,7 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                         // null, not remove(): removing would drop the flow this screen is collecting.
                         if (picked != null) entry.savedStateHandle[SELECTED_DATE] = null as String?
                     }
+                    val insightVm = viewModel { InsightViewModel(container.insightService) }
                     TodayScreen(
                         vm,
                         onOpenCalendar = { nav.navigate(Routes.CALENDAR) },
@@ -263,6 +268,13 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                             }
                             runCatching { nav.getBackStackEntry(Routes.TRENDS) }.getOrNull()?.savedStateHandle?.set(FOCUS_TRAINING_LOAD, true)
                         },
+                        insight = {
+                            // The day Today's header shows, so the card follows the ‹ › buttons.
+                            val date = vm.state.collectAsStateWithLifecycle().value.date
+                            // onAsk is wired to the Ask sheet in the next task.
+                            InsightSlot(insightVm, AskScope.Today(date), container.today, onAsk = {
+                            }, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp))
+                        },
                     )
                 }
                 composable(Routes.CALENDAR) {
@@ -273,11 +285,14 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                     )
                 }
                 composable(Routes.SLEEP) { entry ->
+                    // Read once: the screen is for one fixed day, so nothing here should recompose.
+                    val date = remember(entry) {
+                        entry.arguments?.getString("date")?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: container.today.value
+                    }
+                    val insightVm = viewModel { InsightViewModel(container.insightService) }
                     SleepScreen(
                         viewModel {
-                            // Read once, when the ViewModel is made: the screen is for one fixed day, so nothing here should recompose.
                             val today = container.today.value
-                            val date = entry.arguments?.getString("date")?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: today
                             SleepViewModel(
                                 container.repository,
                                 container.db.taskDao(),
@@ -288,6 +303,8 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                             )
                         },
                         onBack = { nav.popBackStack() },
+                        // onAsk is wired to the Ask sheet in the next task.
+                        insight = { InsightSlot(insightVm, AskScope.Sleep(date), container.today, onAsk = {}) },
                     )
                 }
                 composable(Routes.ACTIVITIES) {
@@ -304,10 +321,18 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                     // Until then the map's card shows empty.
                     var settled by remember { mutableStateOf(false) }
                     if (transition.currentState == EnterExitState.Visible) settled = true
+                    val vm = viewModel { ActivityViewModel(container.repository, container.scheduler, id) }
+                    val insightVm = viewModel { InsightViewModel(container.insightService) }
                     ActivityScreen(
-                        viewModel { ActivityViewModel(container.repository, container.scheduler, id) },
+                        vm,
                         onBack = { nav.popBackStack() },
                         mapContent = { if (settled) RouteMap(it, Modifier.fillMaxSize()) },
+                        insight = {
+                            // The screen only draws this once the activity has loaded, so the sport is known.
+                            val family = vm.state.collectAsStateWithLifecycle().value.header?.family
+                            // onAsk is wired to the Ask sheet in the next task.
+                            InsightSlot(insightVm, AskScope.Activity(id, family), container.today, onAsk = {})
+                        },
                     )
                 }
                 composable(Routes.RECORDS) {

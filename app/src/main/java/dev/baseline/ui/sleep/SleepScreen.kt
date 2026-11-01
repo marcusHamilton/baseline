@@ -65,9 +65,9 @@ private val ChartHeight = 88.dp
 private val MonthDay = DateTimeFormatter.ofPattern("MMM d", Locale.US)
 
 @Composable
-fun SleepScreen(vm: SleepViewModel, onBack: () -> Unit) {
+fun SleepScreen(vm: SleepViewModel, onBack: () -> Unit, insight: @Composable () -> Unit = {}) {
     val state by vm.state.collectAsStateWithLifecycle()
-    SleepContent(state, DateFormat.is24HourFormat(LocalContext.current), onBack)
+    SleepContent(state, DateFormat.is24HourFormat(LocalContext.current), insight, onBack)
 }
 
 /** "Oct 22 – 23": the night that ends on [date]. */
@@ -76,8 +76,9 @@ internal fun nightLabel(date: LocalDate): String {
     return start.format(MonthDay) + " – " + if (start.month == date.month) "${date.dayOfMonth}" else date.format(MonthDay)
 }
 
+/** [insight] sits before [onBack] so existing `SleepContent(state, is24h) { … }` call sites still bind their lambda to [onBack]. */
 @Composable
-fun SleepContent(state: SleepUiState, is24h: Boolean, onBack: () -> Unit) {
+fun SleepContent(state: SleepUiState, is24h: Boolean, insight: @Composable () -> Unit = {}, onBack: () -> Unit) {
     Column(
         Modifier.fillMaxSize().testTag("screen-sleep").verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 32.dp),
         Arrangement.spacedBy(16.dp),
@@ -100,6 +101,7 @@ fun SleepContent(state: SleepUiState, is24h: Boolean, onBack: () -> Unit) {
         }
         if (state.unreadable) Text(NOTE_UNREADABLE, fontSize = 13.sp, color = RecoveryAmber)
         Hero(state, is24h)
+        insight()
         OvernightCard(state, is24h)
         Stages(state)
         state.needCard?.let { NeedCard(it, state.isToday, is24h) }
