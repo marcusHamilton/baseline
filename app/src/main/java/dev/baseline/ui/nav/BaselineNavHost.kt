@@ -38,10 +38,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import dev.baseline.AppContainer
 import dev.baseline.R
 import dev.baseline.garmin.KeyStatus
@@ -58,6 +60,10 @@ import dev.baseline.ui.onboarding.OnboardingState
 import dev.baseline.ui.onboarding.OnboardingViewModel
 import dev.baseline.ui.records.RecordsScreen
 import dev.baseline.ui.records.RecordsViewModel
+import dev.baseline.ui.settings.AiCard
+import dev.baseline.ui.settings.AiKeyScreen
+import dev.baseline.ui.settings.AiKeyViewModel
+import dev.baseline.ui.settings.AiSettingsViewModel
 import dev.baseline.ui.settings.HistoryCoverage
 import dev.baseline.ui.settings.SettingsScreen
 import dev.baseline.ui.settings.SettingsViewModel
@@ -84,8 +90,14 @@ object Routes {
     const val SLEEP = "sleep/{date}"
     const val ACTIVITY = "activity/{id}"
     const val RECORDS = "records"
+    const val AI_KEY = "settings/ai-key?step={step}"
     const val ONBOARDING = "onboarding"
 }
+
+private const val AI_STEP_CONNECTION = "connection"
+private const val AI_STEP_MODEL = "model"
+
+private fun aiKeyRoute(step: String) = "settings/ai-key?step=$step"
 
 internal const val SELECTED_DATE = "selectedDate"
 
@@ -330,6 +342,43 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                         container.dateTicker.zone,
                         container.updater,
                         container.clock,
+                        aiCard = {
+                            val ai = viewModel {
+                                AiSettingsViewModel(
+                                    container.aiPrefs,
+                                    container.aiKeyVault,
+                                    container.nanoEngine,
+                                    container.aiKeyEntry,
+                                    container.insightService,
+                                )
+                            }
+                            val aiState by ai.state.collectAsStateWithLifecycle()
+                            AiCard(
+                                aiState,
+                                onMode = ai::setMode,
+                                onDownload = ai::downloadNano,
+                                onAddKey = { nav.navigate(aiKeyRoute(AI_STEP_CONNECTION)) },
+                                onChangeModel = { nav.navigate(aiKeyRoute(AI_STEP_MODEL)) },
+                                onReplaceKey = { nav.navigate(aiKeyRoute(AI_STEP_CONNECTION)) },
+                                onRemove = ai::removeKey,
+                                onClearInsights = ai::clearInsights,
+                            )
+                        },
+                    )
+                }
+                composable(
+                    Routes.AI_KEY,
+                    arguments = listOf(
+                        navArgument("step") {
+                            type = NavType.StringType
+                            defaultValue = AI_STEP_CONNECTION
+                        },
+                    ),
+                ) { entry ->
+                    val startAtModel = entry.arguments?.getString("step") == AI_STEP_MODEL
+                    AiKeyScreen(
+                        viewModel { AiKeyViewModel(container.aiKeyEntry, container.aiKeyVault, startAtModel) },
+                        onBack = { nav.popBackStack() },
                     )
                 }
             }
