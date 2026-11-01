@@ -29,8 +29,10 @@ private class FakeNanoBackend : NanoBackend {
     var chunks = listOf("Hel", "lo")
     var streamError: NanoError? = null
     var hang = false
+    var systemPromptError: NanoError? = null
     var downloadSteps = listOf<Float?>(null, 0.5f, 1f)
     var warmups = 0
+    var availabilityError = false
 
     var lastSystem: String? = null
     var lastTurns: List<ChatTurn> = emptyList()
@@ -38,7 +40,10 @@ private class FakeNanoBackend : NanoBackend {
     var lastMaxOutput: Int? = null
     var lastTemperature: Float? = null
 
-    override suspend fun availability() = availability
+    override suspend fun availability(): NanoAvailability {
+        if (availabilityError) throw NanoBackendException(NanoError.OTHER)
+        return availability
+    }
 
     override fun download(): Flow<Float?> = flow {
         downloadSteps.forEach { emit(it) }
@@ -49,7 +54,10 @@ private class FakeNanoBackend : NanoBackend {
 
     override suspend fun tokenLimit() = limit
 
-    override suspend fun systemPromptSupported() = systemSupported
+    override suspend fun systemPromptSupported(): Boolean {
+        systemPromptError?.let { throw NanoBackendException(it) }
+        return systemSupported
+    }
 
     override suspend fun countTokens(system: String, turns: List<ChatTurn>, systemAsInstruction: Boolean) = tokens
 
@@ -311,6 +319,34 @@ class NanoEngineTest {
         }
         assertEquals(listOf<Float?>(null, 0.5f, 1f), progress)
         assertEquals(listOf(NanoStatus.Downloading(null), NanoStatus.Downloading(0.5f), NanoStatus.Downloading(1f)), seen)
+        assertEquals(NanoStatus.Ready("nano-v4", 4096), engine.status.value)
+    }
+
+    @Test
+    fun aFailingSystemPromptCheckInRunIsMappedToAFailure() {
+        runBlocking { engine.refresh() }
+        backend.systemPromptError = NanoError.BUSY
+        assertEquals(AiFailure.NanoBusy, failureOf())
+    }
+
+    @Test
+    fun aFailingSystemPromptCheckMakesFitsFalse() = runBlocking {
+        engine.refresh()
+        backend.systemPromptError = NanoError.BUSY
+        assertFalse(engine.fits(chat()))
+    }
+
+    @Test
+    fun lastCheckFailedTracksTheLatestRefresh() = runBlocking {
+        assertFalse(engine.lastCheckFailed.value)
+        backend.availabilityError = true
+        engine.refresh()
+        assertTrue(engine.lastCheckFailed.value)
+        assertEquals(NanoStatus.Unavailable, engine.status.value)
+        assertTrue(engine.known.value)
+        backend.availabilityError = false
+        engine.refresh()
+        assertFalse(engine.lastCheckFailed.value)
         assertEquals(NanoStatus.Ready("nano-v4", 4096), engine.status.value)
     }
 

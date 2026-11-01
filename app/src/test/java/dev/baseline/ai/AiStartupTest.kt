@@ -9,6 +9,8 @@ import dev.baseline.AppContainer
 import dev.baseline.ai.engine.ChatTurn
 import dev.baseline.ai.engine.NanoAvailability
 import dev.baseline.ai.engine.NanoBackend
+import dev.baseline.ai.engine.NanoBackendException
+import dev.baseline.ai.engine.NanoError
 import dev.baseline.testutil.ScopeCleanup
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -22,8 +24,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
 
-private class StubNano(private val availability: NanoAvailability) : NanoBackend {
-    override suspend fun availability() = availability
+private class StubNano(private val availability: NanoAvailability?) : NanoBackend {
+    /** A null availability makes the check itself fail. */
+    override suspend fun availability() = availability ?: throw NanoBackendException(NanoError.OTHER)
 
     override fun download(): Flow<Float?> = emptyFlow()
 
@@ -49,7 +52,7 @@ class AiStartupTest {
     private val scopes = ScopeCleanup()
     private lateinit var file: File
     private lateinit var store: DataStore<Preferences>
-    private var container: AppContainer? = null
+    private val containers = mutableListOf<AppContainer>()
 
     @Before
     fun setUp() {
@@ -59,13 +62,14 @@ class AiStartupTest {
 
     @After
     fun tearDown(): Unit = runBlocking {
-        container?.close()
+        containers.forEach { it.close() }
         scopes.close()
         file.delete()
     }
 
-    private fun start(availability: NanoAvailability, before: AiMode? = null): AiMode? = runBlocking {
-        val c = StartupContainer(ApplicationProvider.getApplicationContext(), store, StubNano(availability)).also { container = it }
+    /** One app start; a null [availability] is a failed check. Starts share the store, like successive launches. */
+    private fun start(availability: NanoAvailability?, before: AiMode? = null): AiMode? = runBlocking {
+        val c = StartupContainer(ApplicationProvider.getApplicationContext(), store, StubNano(availability)).also { containers += it }
         before?.let { c.aiPrefs.setMode(it) }
         c.startAi().join()
         c.aiPrefs.mode.first()
@@ -88,4 +92,16 @@ class AiStartupTest {
 
     @Test
     fun aDecidedModeIsKeptWhenNanoIsAvailable() = assertEquals(AiMode.CLOUD, start(NanoAvailability.AVAILABLE, before = AiMode.CLOUD))
+
+    @Test
+    fun aFailedCheckKeepsHybrid() = assertEquals(AiMode.HYBRID, start(null, before = AiMode.HYBRID))
+
+    @Test
+    fun aFailedCheckKeepsOnDevice() = assertEquals(AiMode.ON_DEVICE, start(null, before = AiMode.ON_DEVICE))
+
+    @Test
+    fun aFailedCheckLeavesAnUndecidedModeUndecidedUntilTheNextStart() {
+        assertEquals(null, start(null))
+        assertEquals(AiMode.ON_DEVICE, start(NanoAvailability.AVAILABLE))
+    }
 }

@@ -53,6 +53,14 @@ class NanoEngine(
     /** False until the first [refresh] completes, so callers can tell "not asked yet" from "not supported". */
     val known: StateFlow<Boolean> = _known
 
+    private val _lastCheckFailed = MutableStateFlow(false)
+
+    /**
+     * True when the latest [refresh] threw instead of getting an answer. [status] is then [NanoStatus.Unavailable] so nothing uses
+     * Nano, but that is not a verdict on the phone: callers must not change the user's settings because of it.
+     */
+    val lastCheckFailed: StateFlow<Boolean> = _lastCheckFailed
+
     // Kept across Resting, which has no model name of its own.
     @Volatile private var modelName: String? = null
 
@@ -62,6 +70,7 @@ class NanoEngine(
             _known.value = true
             return
         }
+        var failed = false
         _status.value =
             try {
                 when (backend.availability()) {
@@ -74,8 +83,10 @@ class NanoEngine(
                 throw e
             } catch (e: Exception) {
                 // AICore missing or misbehaving (a beta library): treat as not supported rather than crash.
+                failed = true
                 NanoStatus.Unavailable
             }
+        _lastCheckFailed.value = failed
         _known.value = true
     }
 
@@ -89,9 +100,9 @@ class NanoEngine(
     /** True when the request plus room for the answer fits the model's combined input and output limit. */
     suspend fun fits(req: AiRequest): Boolean {
         val ready = _status.value as? NanoStatus.Ready ?: return false
-        val prepared = prepare(req)
         val tokens =
             try {
+                val prepared = prepare(req)
                 backend.countTokens(prepared.system, prepared.turns, prepared.asInstruction)
             } catch (e: NanoBackendException) {
                 return false
@@ -116,8 +127,8 @@ class NanoEngine(
             refresh()
         }
         if (_status.value !is NanoStatus.Ready) throw AiFailure.NanoUnavailable
-        val prepared = prepare(req)
         try {
+            val prepared = prepare(req)
             withTimeout(timeoutMillis) {
                 backend
                     .stream(prepared.system, prepared.turns, prepared.asInstruction, maxOutput(req.kind), TEMPERATURE)
