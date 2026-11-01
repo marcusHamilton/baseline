@@ -9,6 +9,8 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import dev.baseline.ai.AiKeyVault
 import dev.baseline.ai.AiPrefs
+import dev.baseline.ai.engine.CloudEngine
+import dev.baseline.ai.engine.NoTools
 import dev.baseline.data.Repository
 import dev.baseline.data.db.AppDatabase
 import dev.baseline.fit.FitIngest
@@ -144,6 +146,9 @@ open class AppContainer(context: Context, val clock: Clock = SystemZoneClock) {
     // open: tests swap in a keyed vault and in-memory prefs.
     open val aiKeyVault by lazy { AiKeyVault(dataStore, aead::encrypt, aead::decrypt) }
     open val aiPrefs by lazy { AiPrefs(dataStore) }
+
+    // open: tests swap in a fake. The tool runner becomes HealthTools later.
+    open val cloudEngine by lazy { CloudEngine(aiHttp, aiKeyVault, NoTools, aiOnline::value) }
 
     /** A synchronous "online" for callers that can't collect [online]; true until the first reading. */
     val aiOnline: StateFlow<Boolean> by lazy { online.stateIn(appScope, SharingStarted.Eagerly, true) }
