@@ -2,22 +2,34 @@ package dev.baseline.ui
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.dp
+import dev.baseline.ai.ChatMessage
+import dev.baseline.ai.QuestionTag
+import dev.baseline.ai.context.Suggestion
+import dev.baseline.ai.engine.EngineKind
+import dev.baseline.ai.engine.EngineLabel
+import dev.baseline.ai.engine.Role
 import dev.baseline.data.SportFamily
 import dev.baseline.data.db.DayEntity
 import dev.baseline.data.db.ScoreEntity
 import dev.baseline.scores.Contributor
 import dev.baseline.scores.RecoveryResult
 import dev.baseline.scores.RecoveryZone
+import dev.baseline.ui.ai.AskContent
+import dev.baseline.ui.ai.AskUiState
 import dev.baseline.ui.components.ActivityCardUi
 import dev.baseline.ui.theme.BaselineTheme
 import dev.baseline.ui.theme.Bg
+import dev.baseline.ui.theme.Card
 import dev.baseline.ui.today.BodyBatteryUi
 import dev.baseline.ui.today.StatRowUi
 import dev.baseline.ui.today.TodayContent
@@ -149,4 +161,47 @@ class ScreenshotCapture {
     @Test fun trends90Days() = capture("trends-90d", heightDp = 1380) {
         TrendsContent(buildTrendsState(TrendRange.D90, today, days(), scores(), first, 100.0), {})
     }
+
+    private fun ask(name: String, state: AskUiState) = capture(name, heightDp = 560) {
+        Surface(Modifier.height(560.dp), color = Card) { AskContent(state, {}, {}, {}, {}, {}) }
+    }
+
+    private val askBase = AskUiState(
+        title = "Ask about last night",
+        hint = "Ask anything about last night, or how it fits your training and longer trends.",
+        placeholder = "Ask about last night…",
+        suggestions = listOf(
+            Suggestion("How did I sleep compared to usual?", QuestionTag.PAGE),
+            Suggestion("Why was deep sleep down?", QuestionTag.PAGE),
+            Suggestion("Is my sleep keeping up with my training?", QuestionTag.TRAINING),
+            Suggestion("Do late workouts affect my sleep?", QuestionTag.PATTERN),
+        ),
+        messages = emptyList(),
+        busy = false,
+    )
+
+    @Test fun askOpened() = ask("ask-opened", askBase)
+
+    @Test fun askAfterCloudFollowUp() = ask(
+        "ask-follow-up",
+        askBase.copy(
+            placeholder = "Ask a follow-up…",
+            messages = listOf(
+                ChatMessage(Role.USER, "How did I sleep compared to usual?"),
+                ChatMessage(
+                    Role.ASSISTANT,
+                    "You slept 7h 12m, about 20 minutes under your 30-day average, with deep sleep a little down.",
+                    label = EngineLabel(EngineKind.NANO, null),
+                    canMoreDetail = true,
+                ),
+                ChatMessage(Role.USER, "Has my HRV been trending down?"),
+                ChatMessage(
+                    Role.ASSISTANT,
+                    "Slightly. Your overnight HRV averaged 58 ms over the last week, against 63 ms for the month before.",
+                    label = EngineLabel(EngineKind.CLOUD, "deepseek/deepseek-v4.1-flash"),
+                    lookedUp = listOf("Looking up HRV, 1 Oct – 31 Oct"),
+                ),
+            ),
+        ),
+    )
 }
