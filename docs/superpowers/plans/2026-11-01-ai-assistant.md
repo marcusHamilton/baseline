@@ -1077,10 +1077,8 @@ It also says to use a `-PgarminBaseUrl` build and to enter `http://127.0.0.1:809
 Run: `./gradlew :app:testDebugUnitTest :app:lintDebug spotlessCheck`
 Expected: BUILD SUCCESSFUL, with no lint findings (the build treats warnings as errors).
 
-Run:
-```bash
-git grep -nIE '/Users/[A-Za-z]+|/home/[a-z]+|BEGIN (RSA|PRIVATE)|storePassword=|eyJ[A-Za-z0-9_-]{20,}\.' -- . ':!CLAUDE.md'
-```
+Run the first `git grep` from CLAUDE.md's "No personal data in the repo" section (it isn't repeated here: the pattern
+would match this file).
 Expected: no output.
 
 Where an emulator exists (the owner's Mac): build a minified release with `-PgarminBaseUrl=http://127.0.0.1:8080`, sign it with `/tmp/test.jks`, and install it on `Medium_Phone_API_35`. Then, with both fake servers running and `adb reverse` for 8080 and 8090:

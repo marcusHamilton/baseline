@@ -13,6 +13,9 @@ on the phone.
 Garmin Connect stays installed: the watch still uploads through the Connect phone
 app. Baseline never writes to Garmin.
 
+The app has two users, each on their own install (their own phone, Garmin key, data and, optionally, AI key). Nothing
+is shared between them and there is still no backend.
+
 ### What the user asked for
 - Replace Garmin Connect for looking at activities and health stats; Whoop-style daily view.
 - Whoop-style computed scores (Recovery %, Strain 0–21), not Garmin's metrics in a new skin.
@@ -31,7 +34,7 @@ app. Baseline never writes to Garmin.
 - The user re-creates the Garmin key at most once a year and pastes it into the app.
 
 ### Non-goals (v1)
-- iOS or web, a backend, multiple users or Play Store distribution.
+- iOS or web, a backend, accounts or data shared between users, or Play Store distribution.
 - Writing to Garmin (workouts, courses, renaming activities).
 - Notifications other than sync progress, Health Connect export. (Home-screen widgets were added later; see `2026-10-26-home-screen-widgets-design.md`.)
 - Nutrition, hydration, weight, women's health screens. The endpoints exist; they're left out until asked for.
@@ -115,6 +118,7 @@ app/src/main/java/dev/baseline/
   fit/       FitReader (Garmin FIT SDK) -> ActivityStreams
   scores/    Baselines, Recovery, Strain, SleepPerformance, StrainCalibration  (pure Kotlin)
   records/   BestEfforts (run/ride/swim)                                         (pure Kotlin)
+  ai/        Ask and insights: AiRouter, ChatSession, engine/ (NanoEngine, CloudEngine), context/ (packs, tools, prompts)
   prefs/     DataStore: baseline row order + hidden set, units, sync interval, key expiry
   ui/        theme, nav, today, calendar, sleep, activities, activity, records, trends, settings
 ```
@@ -126,6 +130,13 @@ app/src/main/java/dev/baseline/
 4. The Repository exposes `Flow`s, and Compose screens collect them.
 
 The UI never calls the network. Pull-to-refresh enqueues the same `SyncWorker` (expedited).
+
+**AI assistant (`ai/`).** An optional layer that answers questions about the user's own numbers and writes a short
+insight on Today, Sleep and each activity. Two engines: Gemini Nano on the device (ML Kit's Prompt API) and any
+OpenAI-compatible endpoint with the user's own key. `ContextPacks` turns the data the screens already show into plain
+text for a scope, and the cloud engine also gets read-only tools over Room (`HealthTools`). The AI key lives in its own
+vault (`AiKeyVault`) and goes over its own HTTP client (`aiHttp`), never the Garmin client. `AiRouter` picks the engine
+from the AI mode (Off, On-device only, Cloud only, Hybrid). Design: `2026-11-01-ai-assistant-design.md`.
 
 **Raw-plus-derived storage.** Every API response is stored as raw JSON, keyed by
 `(endpoint, key)` (key = date or activity id). Typed and derived tables are rebuilt from the raw
@@ -217,8 +228,13 @@ After any sync that changed raw rows for day D, recompute:
 | `activity_score` | activityId, load, loadSource (`HR` \| `GARMIN_SCALED`), strain |
 | `best_effort` | sport, distanceOrDuration, value, activityId, achievedAt |
 | `sync_task` | endpoint, key, status, attempts, lastError |
+| `ai_insight` | scope (`today` \| `sleep` \| `activity`), scopeKey (ISO date, or activity id), fingerprint, text, engine, model, createdAt. Primary key `(scope, scopeKey)`. A cache of generated insights, regenerated when the fingerprint of the data changes. Unlike every other table it can't be re-downloaded. |
 
 FIT ZIPs are unpacked into `filesDir/fit/{id}.fit` and kept, so they can be re-parsed later.
+
+**Schema version 3** adds `ai_insight`. The database still falls back to a destructive migration (every other table can be
+downloaded again), but 2 → 3 uses an explicit `MIGRATION_2_3` registered with `addMigrations`, so a schema bump never wipes
+the synced data. A later table that can't be re-downloaded needs a real migration too (AI spec §7.3).
 
 ## 7. Scores
 
@@ -351,19 +367,21 @@ All screens follow the mockups.
 
 | Screen | Notes |
 |---|---|
-| Today | Date header (tap → Calendar; ‹ › change day). Sleep / Recovery / Strain dials. A slim **Body Battery strip** sits under the dials (no card): "BODY BATTERY" styled like the dial labels, the overnight charge, the latest level and a thin track filled to that level out of 100, both in Garmin's band colours: 76–100 `#34D399`, 51–75 `#A3D94C`, 26–50 `#FBBF24`, 0–25 `#F87171`. With no reading it shows an empty track and "—". Tapping it shows the day's 3-min curve and the drained total. The **Recovery card** follows, with the strain target and the week's training load: a tag ("Productive week"), a callout only when the week needs attention, and "This week: 67% of normal · ~3 hard days left"; tapping it opens Trends at the Training load card (`2026-10-31-fitness-fatigue-form-design.md` §4). **Today's activities** section above the baseline list, shown only if there are activities. **Vs. 30-day baseline** rows: HRV, RHR, sleep, respiration, Body Battery at wake, stress, steps. An **Edit** mode adds drag handles (reorder) and an eye toggle (hide). Order and hidden set are saved in DataStore. |
+| Today | Date header (tap → Calendar; ‹ › change day). Sleep / Recovery / Strain dials. A slim **Body Battery strip** sits under the dials (no card): "BODY BATTERY" styled like the dial labels, the overnight charge, the latest level and a thin track filled to that level out of 100, both in Garmin's band colours: 76–100 `#34D399`, 51–75 `#A3D94C`, 26–50 `#FBBF24`, 0–25 `#F87171`. With no reading it shows an empty track and "—". Tapping it shows the day's 3-min curve and the drained total. The **Recovery card** follows, with the strain target and the week's training load: a tag ("Productive week"), a callout only when the week needs attention, and "This week: 67% of normal · ~3 hard days left"; tapping it opens Trends at the Training load card (`2026-10-31-fitness-fatigue-form-design.md` §4). An **insight card** (a 2–3 sentence AI note, with an "Ask about today ›" link) sits between the Body Battery strip and the Recovery card; it is hidden in AI mode Off and on a day with no data (AI spec §3.8). **Today's activities** section above the baseline list, shown only if there are activities. **Vs. 30-day baseline** rows: HRV, RHR, sleep, respiration, Body Battery at wake, stress, steps. An **Edit** mode adds drag handles (reorder) and an eye toggle (hide). Order and hidden set are saved in DataStore. |
 | Calendar | Month grid, Monday or Sunday start following the Garmin profile. Each day has a ring coloured by Recovery and up to 3 activity dots. Tap a day → summary card; "Open day" → Today for that date. Swipe or arrows change the month. |
-| Sleep detail | Sleep % and hours vs need, Garmin score, bed and wake times. Overnight HRV (5 min) and HR (2 min) chart *instead of a hypnogram*. Stage totals with bars. Sleep-need card. HRV, lowest HR, Body Battery charged, SpO₂ tiles. |
+| Sleep detail | Sleep % and hours vs need, Garmin score, bed and wake times. Overnight HRV (5 min) and HR (2 min) chart *instead of a hypnogram*. Stage totals with bars. Sleep-need card. HRV, lowest HR, Body Battery charged, SpO₂ tiles. The **insight card** sits under the sleep-performance header. |
 | Activities | Sport filter chips, week summary, list grouped by day. A **Records** button opens Records. |
-| Activity detail | Built from sections that depend on the sport: **Run**: map, summary, HR chart, zones, splits, cadence/power/stride. **Ride**: map, speed/power/elevation, zones, laps. **Swim**: lengths, pace per 100 m, strokes, zones. **Strength**: sets by exercise, HR chart. **Other**: summary, HR, zones. Garmin's training load is shown next to Baseline strain. |
+| Activity detail | Built from sections that depend on the sport: **Run**: map, summary, HR chart, zones, splits, cadence/power/stride. **Ride**: map, speed/power/elevation, zones, laps. **Swim**: lengths, pace per 100 m, strokes, zones. **Strength**: sets by exercise, HR chart. **Other**: summary, HR, zones. Garmin's training load is shown next to Baseline strain. The **insight card** sits under the summary tiles. |
 | Records | Run / Ride / Swim tabs, plus a best-power row for rides. |
 | Trends | 7 / 30 / 90-day range. Recovery bars, HRV line with Garmin's balanced band, RHR line, sleep vs need, and Training load: fitness and fatigue lines with a form-state strip (`2026-10-31-fitness-fatigue-form-design.md`). |
-| Settings | Key status, expiry and replace; sync interval and "Sync now"; "N items couldn't sync" + "Retry failed" when any sync task is FAILED (re-queues them and syncs now); history coverage; strain coefficient set; recalculate history; units. An **App** card: version, the update on offer with its notes and one button (Update / Allow / Cancel / Install / Retry), "Check now" and a daily-check switch (`2026-10-29-in-app-updates-design.md`). Today shows the same offer as a dismissable banner under the key banner. |
+| Settings | Key status, expiry and replace; sync interval and "Sync now"; "N items couldn't sync" + "Retry failed" when any sync task is FAILED (re-queues them and syncs now); history coverage; strain coefficient set; recalculate history; units. An **App** card: version, the update on offer with its notes and one button (Update / Allow / Cancel / Install / Retry), "Check now" and a daily-check switch (`2026-10-29-in-app-updates-design.md`). Today shows the same offer as a dismissable banner under the key banner. An **AI** card sits between the scores card and the App card: the AI mode, Gemini Nano's status (with a Download button), the cloud API key (host, model and whether it can call tools; change model, replace, remove), a privacy line and "Clear AI insights" (`2026-11-01-ai-assistant-design.md` §3.2–3.3). |
 
 **Navigation:**
 - Four tabs: Today, Activities, Trends, Settings. Tapping a tab always opens that tab's own page, never a page left open under it (Activities → Records, then Activities, shows Activities). Tapping Today also returns it to the current day. A page opened from a tab keeps that tab highlighted. Back from any tab lands on Today.
 - The centre Ask button opens the Ask sheet over the current page. It isn't a tab.
 - Transitions are quick: tabs swap with a ~120 ms fade; pages opened from a tab slide in over ~220 ms. The activity map is created once its page has finished sliding in.
+
+**Ask sheet** (AI spec §3.6): a Material 3 modal bottom sheet over the current page, opened from the centre button or an insight card's link. It is scoped to the page (Today, a night's sleep, an activity, Trends, or general), shows up to 4 suggestions, streams answers from Gemini Nano or the cloud, marks each with where it was made, and discards the chat when closed.
 
 **Look:**
 - Dark only for v1, background `#0E1013`.

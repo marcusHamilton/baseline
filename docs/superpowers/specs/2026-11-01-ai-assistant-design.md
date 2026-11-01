@@ -1,7 +1,7 @@
 # Baseline — AI assistant (Ask and insights): design spec
 
 Date: 2026-11-01
-Status: draft for review
+Status: implemented on branch claude/funny-hopper-j3ysau; on-device checks pending (§11.3)
 Extends: §3 (Architecture), §6 (Storage) and §9 (Screens, Navigation) of `docs/superpowers/specs/2026-10-24-baseline-android-design.md`
 
 ## 1. Intent
@@ -152,8 +152,8 @@ From top to bottom:
    - When set: the host (`openrouter.ai`); the model (`deepseek-v4.1-flash`) with "✓ Tools", or "⚠ No tools: answers
      use page data only"; then **Change model**, **Replace key** and **Remove**.
    - When the key is Invalid: "Key rejected. Replace it to keep using the cloud."
-4. **Hint**, shown only when the mode is On-device only and Nano is Ready: "Add an API key for better answers to
-   training and long-term questions."
+4. **Hint**, shown only when the mode is On-device only, Nano is Ready **and no key is set**: "Add an API key for
+   better answers to training and long-term questions."
 5. **Privacy line**, shown when a key is set: "Cloud requests send this page's numbers, and any history the model
    looks up, to *host*. Never GPS, routes or names. Not medical advice."
 6. **Clear AI insights.**
@@ -205,18 +205,20 @@ Each page reports its **Ask scope** to the nav host. The sheet title and the con
 | Page | Scope | Sheet title |
 |---|---|---|
 | Today (the shown date) | `Today(date)` | "Ask about today", or "Ask about Tue 27 Oct" for a past day |
-| Sleep detail | `Sleep(date)` | "Ask about last night", or "Ask about the night of 27 Oct" |
+| Sleep detail | `Sleep(date)` | "Ask about last night" (the date is today), or "Ask about the night of 27 Oct" |
 | Activity detail | `Activity(id)` | "Ask about this run", "this ride", "this swim", "this session" (strength) or "this activity" |
 | Trends | `Trends(range)` | "Ask about your trends" |
 | Activities, Records, Calendar, Settings | `General` | "Ask about your health" |
 
-`General` uses Today's pack for the current date (§5.1). The insight card's "Ask about … ›" link opens the same
+`Sleep(date)` holds the **wake date**, the date the Sleep screen shows and the one `DayEntity` and Garmin use. "Last
+night" is today's sleep; any other date is titled and described as "the night of *wake − 1 day*" (the night that began
+the evening before). `General` uses Today's pack for the current date (§5.1). The insight card's "Ask about … ›" link opens the same
 sheet with the same scope.
 
 ### 3.6 The Ask sheet
 
-- **Shape:** a Material 3 modal bottom sheet. It opens partly expanded (about 65% of the screen) and can be dragged to
-  full height. The page behind is dimmed. Closing it (✕, a drag down, or Back) cancels any request in flight and
+- **Shape:** a Material 3 modal bottom sheet. It opens at Material 3's default partial height (about half the screen; the
+  component has no setting for another height) and can be dragged to full height. The page behind is dimmed. Closing it (✕, a drag down, or Back) cancels any request in flight and
   **discards the chat**. The chat survives rotation (it lives in the ViewModel) but not process death.
 - **Empty state:**
   - The title, then one muted line: "Ask anything about *this night / today / this run …*, or how it fits your
@@ -389,7 +391,7 @@ The body by scope:
   - Body Battery charge, latest level and drain.
   - The training-load state and "This week: N% of normal · ~K hard days left".
   - The day's activities (sport, start time, duration, distance, strain).
-- **`Sleep(date)`:**
+- **`Sleep(date)`** (`date` is the wake date, so the header above reads "night of *date − 1*"):
   - Sleep performance, duration, need, bed and wake times, and Garmin's score.
   - Stage minutes against their 30-day averages.
   - Overnight HRV average, lowest HR, Body Battery charged, SpO₂ and respiration.
@@ -410,8 +412,10 @@ The body by scope:
 - **`General`:** the `Today(today)` pack.
 
 **Never included, in a pack or a tool result:** latitude, longitude, routes or polylines, place or activity names
-typed by the user, device names, IDs or serials, and Garmin user or profile IDs. Activities are referred to by sport
-and start time. Tools address them by Baseline's own row ID, which carries no meaning outside the app.
+typed by the user, device names, device IDs or serials, and Garmin user or profile IDs. Activities are referred to
+by sport and start time. Tools address them by `ActivityEntity.id`, which is **Garmin's own activity id**, not a number
+Baseline made up. It isn't a user or device identifier, and Garmin activities are private by default, but it does go to
+the user's chosen cloud provider as part of a tool result and the model's follow-up call.
 
 ### 5.2 Health tools (cloud only)
 
@@ -423,11 +427,12 @@ about 8,000 tokens (32,000 characters). When a result is cut, it ends with "(tru
 | `daily_metrics` | `from`, `to` (ISO dates, at most 400 days), `fields` (a subset of: recovery, hrv, rhr, sleep_performance, sleep_hours, respiration, body_battery_wake, stress, steps, strain) | One row per day |
 | `activities` | `from`, `to` (at most 400 days), optional `sport` (run, ride, swim, strength, other) | One row per activity: id, sport, start, duration, distance, average HR, strain |
 | `activity_detail` | `id` | The full `Activity(id)` pack body |
-| `sleep_night` | `date` | The full `Sleep(date)` pack body |
+| `sleep_night` | `date` (the wake date, as in §3.5) | The full `Sleep(date)` pack body |
 | `training_load` | `from`, `to` (at most 400 days) | One row per day: fitness, fatigue, form, state |
 | `records` | optional `sport` | All-time best efforts: distance, time, date |
 
-Bad arguments return `{"error": "…"}` as the tool result, so the model can correct itself; that counts as a round.
+Tool rows use **SI units, with the unit in the key** (`duration_min`, `distance_km`), whatever the user's unit
+setting; the pack bodies in §5.1 use the user's units. Bad arguments return `{"error": "…"}` as the tool result, so the model can correct itself; that counts as a round.
 No tool writes, triggers a sync, or reaches the network.
 
 ### 5.3 Prompts
@@ -511,7 +516,7 @@ is still shown. Only a change of data or prompt version regenerates it.
 @Entity(tableName = "ai_insight", primaryKeys = ["scope", "scopeKey"])
 data class AiInsightEntity(
     val scope: String,        // "today" | "sleep" | "activity"
-    val scopeKey: String,     // ISO date, or activity row id
+    val scopeKey: String,     // ISO date, or activity id (Garmin's)
     val fingerprint: String,
     val text: String,
     val engine: String,       // "nano" | "cloud"
@@ -567,7 +572,8 @@ These are added to CLAUDE.md's invariants:
   never carry it, and `aiHttp` never carries a Garmin credential.
 - **A key under test never touches the vault** (as with Garmin).
 - **On-device only mode makes no AI network requests.**
-- **Nothing sent to an AI engine contains GPS, routes, names, device IDs or Garmin IDs** (§5.1).
+- **Nothing sent to an AI engine contains GPS, routes, names, device names or IDs, or Garmin user or profile IDs** (§5.1). An
+  activity's Garmin id is sent so tools can address it.
 - **AI tools are read-only.** They only read Room, and never write, sync or reach the network. The one-Garmin-request
   rule is untouched.
 
@@ -580,7 +586,7 @@ dev/baseline/ai/
   AiRouter.kt, ChatSession.kt         routing table (§6), in-memory chat + tool loop driver
   engine/AiEngine.kt                  AiEvent, AiRequest, AiFailure, EngineLabel
   engine/NanoEngine.kt, NanoBackend.kt, MlKitNanoBackend.kt
-  engine/CloudEngine.kt, OpenAiWire.kt  (@Serializable request/response/SSE chunk types)
+  engine/CloudEngine.kt, OpenAiWire.kt  (request body, SSE chunk and tool-call parsing, built by hand)
   context/AskScope.kt, ContextPacks.kt, HealthTools.kt, Prompts.kt, Suggestions.kt
   insight/InsightService.kt
 data/db/AiInsightEntity.kt, AiInsightDao.kt, Migrations.kt
@@ -689,16 +695,19 @@ These can't be tested in the emulator or the cloud container:
 ### 11.4 Release
 
 - `lintDebug` (with warnings as errors) and `spotlessCheck` pass.
-- R8: ML Kit ships consumer rules; the `@Serializable` wire types are covered by kotlinx.serialization's rules. Both
-  are verified with a minified release smoke test against `fake_garmin.py` and `fake_llm.py` (CLAUDE.md's recipe).
+- R8: ML Kit ships consumer rules, and the wire format has no `@Serializable` types (§12). A minified release has to
+  build (it does, in the cloud container) and pass a smoke test against `fake_garmin.py` and `fake_llm.py`
+  (CLAUDE.md's recipe), which needs an emulator and is still owed.
 - The baseline profile gains the Ask sheet and insight card paths only if the smoke test shows jank.
 
 ## 12. Dependencies
 
-- **`com.google.mlkit:genai-prompt`** (beta), pinned in `gradle/libs.versions.toml` to the version current at
-  implementation. Reason: it's the only supported way to run Gemini Nano from a third-party app. It's isolated behind
+- **`com.google.mlkit:genai-prompt`** (beta), pinned in `gradle/libs.versions.toml` to `1.0.0-beta5`, the version
+  current at implementation. Reason: it's the only supported way to run Gemini Nano from a third-party app. It's isolated behind
   `NanoBackend`, so a breaking beta change touches one file.
-- No other new dependency. The cloud client uses OkHttp 5 and kotlinx.serialization, which are already present.
+- No other new dependency. The cloud client uses OkHttp 5 and kotlinx.serialization, which are already present. There are
+  no `@Serializable` types: JSON is built and parsed by hand with `JsonElement`, like the rest of the app, so there is
+  no kotlinx.serialization R8 concern.
 
 ## 13. Spec and doc updates in the same change
 
