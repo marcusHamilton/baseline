@@ -14,6 +14,7 @@ import dev.baseline.fit.zipOf
 import dev.baseline.garmin.ApiKeyVault
 import dev.baseline.garmin.GarminEndpoint
 import dev.baseline.prefs.UserPrefs
+import dev.baseline.records.RecordsRefresher
 import dev.baseline.scores.ScorePipeline
 import dev.baseline.sync.RawIngest
 import dev.baseline.testutil.ScopeCleanup
@@ -74,6 +75,7 @@ class PrivacyScanTest {
     private lateinit var db: AppDatabase
     private lateinit var file: File
     private lateinit var packs: ContextPacks
+    private lateinit var tools: HealthTools
     private val today = LocalDate.of(2026, 10, 24)
 
     @Before
@@ -107,9 +109,11 @@ class PrivacyScanTest {
             for ((fit, family) in picks) ingest.apply(GarminEndpoint.FIT, all.first { it.sportFamily == family }.id.toString(), zipOf("a.fit", fitFixture(fit)))
             ingest.apply(GarminEndpoint.FIT, all.filter { it.sportFamily == SportFamily.RIDE }[1].id.toString(), zipOf("a.fit", fitFixture("indoor_ride")))
             ScorePipeline(db, prefs, Clock.fixed(today.atTime(8, 0).toInstant(ZoneOffset.UTC), ZoneOffset.UTC)).recompute(LocalDate.of(2025, 8, 30))
+            RecordsRefresher(db).refresh()
         }
         val repo = Repository(db, prefs, ApiKeyVault(store, { it }, { it }, Clock.systemUTC()))
         packs = ContextPacks(db, repo, prefs, MutableStateFlow(today), MutableStateFlow(ZoneId.of("Europe/London")))
+        tools = HealthTools(db, packs, prefs, MutableStateFlow(today))
     }
 
     @After
@@ -203,5 +207,49 @@ class PrivacyScanTest {
         assertTrue(scanned.any { (label, text) -> label.startsWith("Sleep(") && "Sleep performance" in text })
         assertFalse(scanned.any { it.second.contains("NaN") || it.second.contains("Infinity") || it.second.contains("null") })
         scanned.filter { it.first.endsWith("COMPACT") }.forEach { (label, text) -> assertTrue("$label ${estimateTokens(text)}", estimateTokens(text) <= 1200) }
+    }
+
+    @Test
+    fun noToolResultCarriesAnIdentifierOrALocation() = runBlocking {
+        val forbidden = forbiddenValues().toMutableSet()
+        val activities = db.activityDao().list()
+        activities.mapNotNullTo(forbidden) { it.name?.takeIf(String::isNotBlank) }
+        assertTrue("identifiers: ${forbidden.size}", forbidden.size > 100)
+
+        val scanned = mutableListOf<Pair<String, String>>()
+
+        suspend fun scan(name: String, args: String) {
+            scanned += "$name $args" to tools.call(name, args).content
+        }
+        // The fixtures span about a year up to `today`: two 400-day windows cover them, then shorter ones.
+        val windows = listOf(400, 200, 30).map { days -> """"from":"${today.minusDays(days - 1L)}","to":"$today"""" }
+        for (w in windows) {
+            scan("daily_metrics", "{$w}")
+            scan("activities", "{$w}")
+            scan("training_load", "{$w}")
+        }
+        scan("daily_metrics", """{${windows[0]},"fields":["hrv","strain"]}""")
+        for (sport in listOf("run", "ride", "swim", "strength", "other")) {
+            scan("activities", """{${windows[0]},"sport":"$sport"}""")
+            scan("records", """{"sport":"$sport"}""")
+        }
+        scan("records", "{}")
+        for (a in activities) scan("activity_detail", """{"id":${a.id}}""")
+        for (back in 0L..60L) scan("sleep_night", """{"date":"${today.minusDays(back)}"}""")
+
+        val leaks = scanned.mapNotNull { (label, text) -> leak(text, forbidden)?.let { "$label: $it" } }
+        assertEquals(emptyList<String>(), leaks)
+        // The tools returned real rows.
+        fun content(prefix: String) = scanned.filter { it.first.startsWith(prefix) }.map { it.second }
+        assertTrue(content("daily_metrics").any { "\"hrv\":" in it && "\"recovery\":null" !in it })
+        assertTrue(content("activities").any { "\"sport\":\"run\"" in it })
+        assertTrue(content("training_load").any { "\"state\":\"" in it })
+        assertTrue(content("records").any { "\"distance_m\":" in it })
+        assertTrue(content("activity_detail").any { "- lap" in it })
+        assertTrue(content("sleep_night").any { "Sleep performance" in it })
+        assertFalse(scanned.any { it.second.contains("NaN") || it.second.contains("Infinity") })
+        // Only a night without sleep may answer with an error.
+        assertEquals(emptyList<String>(), scanned.filter { it.second.startsWith("""{"error"""") && !it.first.startsWith("sleep_night") }.map { it.first })
+        assertTrue(scanned.all { it.second.length <= 32_000 })
     }
 }

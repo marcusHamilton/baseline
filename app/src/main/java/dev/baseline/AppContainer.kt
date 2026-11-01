@@ -12,12 +12,12 @@ import dev.baseline.ai.AiKeyVault
 import dev.baseline.ai.AiPrefs
 import dev.baseline.ai.applyAiDefaults
 import dev.baseline.ai.context.ContextPacks
+import dev.baseline.ai.context.HealthTools
 import dev.baseline.ai.engine.CloudEngine
 import dev.baseline.ai.engine.MlKitNanoBackend
 import dev.baseline.ai.engine.NanoBackend
 import dev.baseline.ai.engine.NanoEngine
 import dev.baseline.ai.engine.NanoStatus
-import dev.baseline.ai.engine.NoTools
 import dev.baseline.data.Repository
 import dev.baseline.data.db.AppDatabase
 import dev.baseline.fit.FitIngest
@@ -171,8 +171,10 @@ open class AppContainer(context: Context, val clock: Clock = SystemZoneClock) {
     /** Checks Nano and settles the AI mode defaults (spec: AI assistant §3.1). Call once on app start; join the [Job] to wait for it. */
     fun startAi(): Job = appScope.launch { applyAiDefaults(nanoEngine, aiPrefs) }
 
-    // open: tests swap in a fake. The tool runner becomes HealthTools later.
-    open val cloudEngine by lazy { CloudEngine(aiHttp, aiKeyVault, NoTools, aiOnline::value) }
+    val healthTools by lazy { HealthTools(db, contextPacks, userPrefs, today) }
+
+    // open: tests swap in a fake.
+    open val cloudEngine by lazy { CloudEngine(aiHttp, aiKeyVault, healthTools, aiOnline::value) }
 
     /** A synchronous "online" for callers that can't collect [online]; true until the first reading. */
     val aiOnline: StateFlow<Boolean> by lazy { online.stateIn(appScope, SharingStarted.Eagerly, true) }
