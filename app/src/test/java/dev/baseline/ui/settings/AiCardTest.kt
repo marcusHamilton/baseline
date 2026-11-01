@@ -184,10 +184,43 @@ class AiCardTest {
     fun removeAsksForAConfirmingSecondTap() {
         val calls = Calls()
         show(state(key = keySet), calls)
-        rule.onNodeWithText("Remove").performScrollTo().performClick()
+        rule.onNodeWithText("Remove").performScrollTo()
+        rule.mainClock.autoAdvance = false // the confirmation times out, and idling would skip the clock past it
+        rule.onNodeWithText("Remove").performClick()
         assertEquals(0, calls.remove)
-        rule.onNodeWithText("Remove key?").performScrollTo().performClick()
+        rule.mainClock.advanceTimeByFrame()
+        rule.onNodeWithText("Remove key?").performClick()
         assertEquals(1, calls.remove)
+    }
+
+    @Test
+    fun theRemoveConfirmationTimesOut() {
+        val calls = Calls()
+        show(state(key = keySet), calls)
+        rule.onNodeWithText("Remove").performScrollTo()
+        rule.mainClock.autoAdvance = false
+        rule.onNodeWithText("Remove").performClick()
+        rule.mainClock.advanceTimeByFrame()
+        rule.onNodeWithText("Remove key?").assertExists()
+        rule.mainClock.advanceTimeBy(5_000)
+        rule.onNodeWithText("Remove").assertExists()
+        rule.onNodeWithText("Remove").performClick() // armed afresh, not removed
+        assertEquals(0, calls.remove)
+    }
+
+    @Test
+    fun tappingAnotherControlDisarmsTheRemoveConfirmation() {
+        val calls = Calls()
+        show(state(key = keySet, mode = AiMode.HYBRID), calls)
+        rule.onNodeWithText("Remove").performScrollTo()
+        rule.mainClock.autoAdvance = false
+        rule.onNodeWithText("Remove").performClick()
+        rule.mainClock.advanceTimeByFrame()
+        rule.onNodeWithText("Replace key").performClick()
+        rule.mainClock.advanceTimeByFrame()
+        rule.onNodeWithText("Remove").assertExists()
+        assertEquals(1, calls.replaceKey)
+        assertEquals(0, calls.remove)
     }
 
     @Test
@@ -195,6 +228,15 @@ class AiCardTest {
         val hint = "Add an API key for better answers to training and long-term questions."
         show(state(mode = AiMode.ON_DEVICE, nano = ready))
         rule.onNodeWithText(hint).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun noHintOnceAKeyIsSet() {
+        val hint = "Add an API key for better answers to training and long-term questions."
+        assertEquals(true, state(mode = AiMode.ON_DEVICE, nano = ready, key = AiKeyStatus.Missing).showHint)
+        assertEquals(false, state(mode = AiMode.ON_DEVICE, nano = ready, key = keySet).showHint)
+        show(state(mode = AiMode.ON_DEVICE, nano = ready, key = keySet))
+        assertEquals(0, rule.onAllNodesWithText(hint).fetchSemanticsNodes().size)
     }
 
     @Test

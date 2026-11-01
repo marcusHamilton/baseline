@@ -31,7 +31,7 @@ data class AiSettingsState(
     val nano: NanoStatus,
     val nanoKnown: Boolean,
     val key: AiKeyStatus,
-    /** "Add an API key for better answers…": On-device only with Nano ready, which is when a key would add something. */
+    /** "Add an API key for better answers…": On-device only with Nano ready and no key yet, which is when a key would add something. */
     val showHint: Boolean,
 )
 
@@ -41,7 +41,7 @@ internal fun buildAiSettingsState(mode: AiMode?, nano: NanoStatus, nanoKnown: Bo
     nano = nano,
     nanoKnown = nanoKnown,
     key = key,
-    showHint = mode == AiMode.ON_DEVICE && nano is NanoStatus.Ready,
+    showHint = mode == AiMode.ON_DEVICE && nano is NanoStatus.Ready && key is AiKeyStatus.Missing,
 )
 
 /** The Settings AI card (spec: AI assistant §3.2). Adding a key and choosing a model is [AiKeyViewModel]. */

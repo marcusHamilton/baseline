@@ -50,6 +50,7 @@ import java.util.Locale
 
 private const val HINT = "Add an API key for better answers to training and long-term questions."
 private const val CLEARED_MS = 2_000L
+private const val CONFIRM_MS = 4_000L
 
 private fun modeLabel(mode: AiMode) = when (mode) {
     AiMode.OFF -> "Off"
@@ -73,24 +74,60 @@ fun AiCard(
     onRemove: () -> Unit,
     onClearInsights: () -> Unit,
 ) {
+    // "Remove key?" is armed by the first tap and disarmed by a timeout or a tap on anything else in the card.
+    var confirming by remember { mutableStateOf(false) }
+    LaunchedEffect(confirming) {
+        if (confirming) {
+            delay(CONFIRM_MS)
+            confirming = false
+        }
+    }
+    val disarm: () -> Unit = { confirming = false }
     SettingsCard("AI ASSISTANT") {
         Text("Mode", fontSize = 14.sp, color = TextBody)
         Column {
-            state.options.forEach { option -> ModeRow(option, option.mode == state.mode, onMode) }
+            state.options.forEach { option ->
+                ModeRow(option, option.mode == state.mode) {
+                    disarm()
+                    onMode(it)
+                }
+            }
         }
         if (state.nanoKnown) {
             Text("On-device", fontSize = 14.sp, color = TextBody)
-            NanoRow(state.nano, onDownload)
+            NanoRow(state.nano) {
+                disarm()
+                onDownload()
+            }
         }
         Text("API key", fontSize = 14.sp, color = TextBody)
         when (val key = state.key) {
             AiKeyStatus.Missing -> OutlinedButton(
-                onClick = onAddKey,
+                onClick = {
+                    disarm()
+                    onAddKey()
+                },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 border = BorderStroke(1.dp, Outline),
             ) { Text("Add API key", fontWeight = FontWeight.SemiBold) }
 
-            is AiKeyStatus.Set -> KeyRows(key, onChangeModel, onReplaceKey, onRemove)
+            is AiKeyStatus.Set -> KeyRows(
+                key,
+                confirming,
+                onChangeModel = {
+                    disarm()
+                    onChangeModel()
+                },
+                onReplaceKey = {
+                    disarm()
+                    onReplaceKey()
+                },
+                onRemove = {
+                    confirming = false
+                    onRemove()
+                },
+                onArm = { confirming = true },
+            )
         }
         if (state.showHint) Text(HINT, fontSize = 13.sp, lineHeight = 19.sp, color = TextBody)
         (state.key as? AiKeyStatus.Set)?.let { key ->
@@ -101,7 +138,10 @@ fun AiCard(
                 color = TextMuted,
             )
         }
-        ClearInsights(onClearInsights)
+        ClearInsights {
+            disarm()
+            onClearInsights()
+        }
     }
 }
 
@@ -157,9 +197,8 @@ private fun NanoRow(nano: NanoStatus, onDownload: () -> Unit) {
 }
 
 @Composable
-private fun KeyRows(key: AiKeyStatus.Set, onChangeModel: () -> Unit, onReplaceKey: () -> Unit, onRemove: () -> Unit) {
+private fun KeyRows(key: AiKeyStatus.Set, confirming: Boolean, onChangeModel: () -> Unit, onReplaceKey: () -> Unit, onRemove: () -> Unit, onArm: () -> Unit) {
     // A second tap on "Remove key?" deletes the key; there's no undo, so it takes two deliberate taps.
-    var confirming by remember { mutableStateOf(false) }
     InfoRow("Host", key.host)
     InfoRow("Model", shortModel(key.model))
     if (key.toolsSupported) {
@@ -183,14 +222,7 @@ private fun KeyRows(key: AiKeyStatus.Set, onChangeModel: () -> Unit, onReplaceKe
             Text("Replace key", fontWeight = FontWeight.SemiBold)
         }
         TextButton(
-            onClick = {
-                if (confirming) {
-                    confirming = false
-                    onRemove()
-                } else {
-                    confirming = true
-                }
-            },
+            onClick = if (confirming) onRemove else onArm,
             Modifier.heightIn(min = 48.dp),
         ) { Text(if (confirming) "Remove key?" else "Remove", color = RecoveryRed, fontWeight = FontWeight.SemiBold) }
     }
