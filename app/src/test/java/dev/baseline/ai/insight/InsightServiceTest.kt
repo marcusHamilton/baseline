@@ -7,11 +7,13 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.baseline.ai.AiKeyStatus
 import dev.baseline.ai.AiMode
 import dev.baseline.ai.context.AskScope
+import dev.baseline.ai.context.BASIS_SETTLE_MILLIS
 import dev.baseline.ai.context.ContextPacks
 import dev.baseline.ai.context.Pack
 import dev.baseline.ai.context.PackFacts
 import dev.baseline.ai.context.PackSize
 import dev.baseline.ai.context.Prompts
+import dev.baseline.ai.context.settledBasis
 import dev.baseline.ai.engine.AiEngine
 import dev.baseline.ai.engine.AiEvent
 import dev.baseline.ai.engine.AiFailure
@@ -30,6 +32,7 @@ import dev.baseline.data.Repository
 import dev.baseline.data.SportFamily
 import dev.baseline.data.db.ActivityEntity
 import dev.baseline.data.db.ActivityScoreEntity
+import dev.baseline.data.db.AiInsightDao
 import dev.baseline.data.db.AiInsightEntity
 import dev.baseline.data.db.AppDatabase
 import dev.baseline.data.db.DayEntity
@@ -45,12 +48,15 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import org.junit.After
@@ -429,7 +435,7 @@ class InsightServiceTest {
         val store = PreferenceDataStoreFactory.create(scope = scopes.storeScope) { file }
         val prefs = UserPrefs(store)
         val repo = Repository(db, prefs, ApiKeyVault(store, { it }, { it }, Clock.systemUTC()))
-        return ContextPacks(db, repo, prefs, MutableStateFlow(today), MutableStateFlow(ZoneId.of("Europe/London")))
+        return ContextPacks(db, repo, prefs, MutableStateFlow(today), MutableStateFlow(ZoneId.of("Europe/London")), settleMillis = 0)
     }
 
     private suspend fun realService(): InsightService {
@@ -575,5 +581,112 @@ class InsightServiceTest {
         } finally {
             job.cancelAndJoin()
         }
+    }
+
+    // ---- Settling: virtual time over a fake stream of Room reads ----
+
+    /** In memory, so the virtual-time tests below never wait on Room's threads. */
+    private class MapDao : AiInsightDao {
+        val rows = mutableMapOf<Pair<String, String>, AiInsightEntity>()
+
+        override suspend fun get(scope: String, key: String) = rows[scope to key]
+
+        override suspend fun put(row: AiInsightEntity) {
+            rows[row.scope to row.scopeKey] = row
+        }
+
+        override suspend fun clear() = rows.clear()
+    }
+
+    private val mapDao = MapDao()
+
+    /** A service whose basis stream is [settledBasis] over [reads], with the basis (and so the pack) read from [data]. */
+    private suspend fun settlingService(reads: Flow<Unit>): InsightService {
+        nano.refresh()
+        return InsightService(
+            pack = { _, size -> Pack("T-$data", PackFacts(null, null, null, null), true, if (size == PackSize.COMPACT) compactBasis() else fullBasis()) },
+            nano = nano,
+            cloud = cloud,
+            dao = mapDao,
+            mode = mode,
+            keyStatus = keyStatus,
+            online = online,
+            clock = clock,
+            basisChanges = { settledBasis(reads, BASIS_SETTLE_MILLIS) { compactBasis() } },
+        )
+    }
+
+    @Test
+    fun theFirstBasisArrivesWithoutWaiting() = runTest {
+        backend.answer("First.")
+        val reads = MutableSharedFlow<Unit>(replay = 1)
+        reads.emit(Unit)
+        val seen = mutableListOf<InsightState>()
+        backgroundScope.launch { settlingService(reads).insight(scope).collect { seen += it } }
+        runCurrent() // no advanceTimeBy
+        assertEquals(InsightState.Ready("First.", EngineLabel(EngineKind.NANO, "nano-v4")), seen.last())
+        assertEquals(1, backend.calls)
+    }
+
+    @Test
+    fun aBurstOfWritesRegeneratesOnce() = runTest {
+        backend.answer("First.")
+        backend.answer("Second.")
+        val reads = MutableSharedFlow<Unit>(replay = 1)
+        reads.emit(Unit)
+        val seen = mutableListOf<InsightState>()
+        backgroundScope.launch { settlingService(reads).insight(scope).collect { seen += it } }
+        runCurrent()
+        assertEquals(1, backend.calls)
+
+        // An activity, then its score a second later: the basis only differs once both are in.
+        data = "v2"
+        reads.emit(Unit)
+        advanceTimeBy(1_000)
+        reads.emit(Unit)
+        advanceTimeBy(BASIS_SETTLE_MILLIS - 1)
+        runCurrent()
+        assertEquals(1, backend.calls)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(2, backend.calls)
+        assertEquals(InsightState.Ready("Second.", EngineLabel(EngineKind.NANO, "nano-v4")), seen.last())
+        advanceTimeBy(60_000)
+        runCurrent()
+        assertEquals(2, backend.calls)
+    }
+
+    @Test
+    fun aChangeFollowedByQuietRegenerates() = runTest {
+        backend.answer("First.")
+        backend.answer("Second.")
+        val reads = MutableSharedFlow<Unit>(replay = 1)
+        reads.emit(Unit)
+        val seen = mutableListOf<InsightState>()
+        backgroundScope.launch { settlingService(reads).insight(scope).collect { seen += it } }
+        runCurrent()
+
+        data = "v2"
+        reads.emit(Unit)
+        runCurrent()
+        assertEquals(1, backend.calls)
+        advanceTimeBy(BASIS_SETTLE_MILLIS)
+        runCurrent()
+        assertEquals(2, backend.calls)
+        assertEquals("Second.", mapDao.rows.getValue("today" to "2026-11-01").text)
+    }
+
+    @Test
+    fun aReadThatLeavesTheBasisAloneRegeneratesNothing() = runTest {
+        backend.answer("First.")
+        val reads = MutableSharedFlow<Unit>(replay = 1)
+        reads.emit(Unit)
+        backgroundScope.launch { settlingService(reads).insight(scope).collect { } }
+        runCurrent()
+
+        reads.emit(Unit) // steps moved; the basis is the same
+        advanceTimeBy(BASIS_SETTLE_MILLIS * 2)
+        runCurrent()
+        assertEquals(1, backend.calls)
     }
 }

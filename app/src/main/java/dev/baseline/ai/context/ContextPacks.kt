@@ -26,12 +26,16 @@ import dev.baseline.ui.components.formStateLabel
 import dev.baseline.ui.components.weekLine
 import dev.baseline.ui.format.Formatters
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import java.time.Instant
@@ -54,6 +58,19 @@ data class PackFacts(val recovery: Int?, val sleepScore: Int?, val stageFurthest
  * every sync neither regenerate an insight nor change its text (spec §7.1). It equals [text] for every other pack.
  */
 data class Pack(val text: String, val facts: PackFacts, val hasData: Boolean, val basis: String = text)
+
+/** How long Room changes must be quiet before an insight's basis is rebuilt (spec §7.1). */
+const val BASIS_SETTLE_MILLIS = 3_000L
+
+/**
+ * [basis] after each of [reads]: the first read at once, later ones only after [settleMillis] without another, so a burst of
+ * writes costs one rebuild. Emits when the basis differs from the last one emitted.
+ */
+@OptIn(FlowPreview::class)
+internal fun settledBasis(reads: Flow<Unit>, settleMillis: Long, basis: suspend () -> String): Flow<Unit> = flow {
+    var seen = 0
+    emitAll(reads.debounce { if (seen++ == 0) 0L else settleMillis }.map { basis() }.distinctUntilChanged().map { })
+}
 
 /** Four characters to a token. */
 fun estimateTokens(text: String): Int = (text.length + 3) / 4
@@ -87,10 +104,13 @@ class ContextPacks(
     private val userPrefs: UserPrefs,
     private val today: StateFlow<LocalDate>,
     private val zone: StateFlow<ZoneId>,
+    private val settleMillis: Long = BASIS_SETTLE_MILLIS,
 ) {
     /**
      * Emits once when collected and again each time the compact pack's basis for [scope] changes, driven by the Room flows the
-     * scope reads (so a change that only touches volatile lines emits nothing). It never completes. Used by the insight cards.
+     * scope reads (so a change that only touches volatile lines emits nothing). Changes settle for [settleMillis] first, so a
+     * sync writing several rows costs one rebuild and one regeneration; the first emission is immediate. It never completes.
+     * Used by the insight cards.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun basisChanges(scope: AskScope): Flow<Unit> {
@@ -101,7 +121,7 @@ class ContextPacks(
             is AskScope.Activity -> combine(repository.activity(scope.id), repository.activityScore(scope.id)) { _, _ -> }
             is AskScope.Trends -> return flowOf(Unit)
         }
-        return reads.map { build(scope, PackSize.COMPACT).basis }.distinctUntilChanged().map { }
+        return settledBasis(reads, settleMillis) { build(scope, PackSize.COMPACT).basis }
     }
 
     private fun dayReads(date: LocalDate): Flow<Unit> =

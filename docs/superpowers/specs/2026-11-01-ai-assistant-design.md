@@ -510,7 +510,9 @@ The sheet carries no banner. "Not medical advice" is in the Settings privacy lin
    basis whenever the Room rows the scope reads change (for Today, the day, its score, its activities and their scores; for
    Sleep, the day and its score; for an activity, the activity and its score) and ticks when the basis differs from the last
    one. Each tick cancels the run in progress and repeats steps 2 to 4 (`flatMapLatest`), so a new activity or its strain
-   regenerates the card in place. A change that touches only volatile lines ticks nothing.
+   regenerates the card in place. The first tick is immediate (opening a page never waits); later changes settle for 3 s
+   before the basis is rebuilt, so a sync that writes an activity and then its score regenerates once. A change that touches
+   only volatile lines ticks nothing.
 
 **The basis** is the pack text without its volatile lines (`Pack.basis`; `Pack.text` is unchanged and is what the model
 reads). Volatile lines exist only for Today's pack when the date is today (and General, which builds it), because they are
