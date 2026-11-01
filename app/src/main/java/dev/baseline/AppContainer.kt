@@ -11,6 +11,7 @@ import dev.baseline.ai.AiKeyEntry
 import dev.baseline.ai.AiKeyVault
 import dev.baseline.ai.AiPrefs
 import dev.baseline.ai.applyAiDefaults
+import dev.baseline.ai.context.ContextPacks
 import dev.baseline.ai.engine.CloudEngine
 import dev.baseline.ai.engine.MlKitNanoBackend
 import dev.baseline.ai.engine.NanoBackend
@@ -158,6 +159,8 @@ open class AppContainer(context: Context, val clock: Clock = SystemZoneClock) {
     // open: tests swap in a fake; ML Kit can't load on the JVM.
     open val nanoBackend: NanoBackend by lazy { MlKitNanoBackend() }
     val nanoEngine by lazy { NanoEngine(nanoBackend, clock, dateTicker.zone) }
+
+    val contextPacks by lazy { ContextPacks(db, repository, userPrefs, today, dateTicker.zone) }
 
     val aiKeyEntry by lazy {
         AiKeyEntry(aiHttp, aiKeyVault, aiPrefs, nanoSupported = {
