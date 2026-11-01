@@ -82,7 +82,7 @@ class AskViewModelTest {
 
     @After fun tearDown() = Dispatchers.resetMain()
 
-    private fun vm(scope: AskScope = AskScope.Today(today.value)): AskViewModel {
+    private fun vm(scope: AskScope = AskScope.Today(today.value), warmup: suspend () -> Unit = {}): AskViewModel {
         val nano = NanoEngine(UnusedNano(), Clock.systemUTC(), MutableStateFlow(ZoneOffset.UTC))
         val session = ChatSession(
             scope = scope,
@@ -93,7 +93,7 @@ class AskViewModelTest {
             keySet = { true },
             online = { online.value },
         )
-        return AskViewModel(scope, session, { PackFacts(71, null, null, null) }, mode, online, today)
+        return AskViewModel(scope, session, { PackFacts(71, null, null, null) }, mode, online, today, warmup)
     }
 
     private fun TestScope.watch(vm: AskViewModel) {
@@ -191,5 +191,27 @@ class AskViewModelTest {
         advanceUntilIdle()
         assertFalse(vm.state.value.busy)
         assertEquals("Answer to Q", vm.state.value.messages.last().text)
+    }
+
+    @Test
+    fun warmsNanoOnceWhenTheModeUsesIt() = runTest(dispatcher) {
+        for (m in listOf(AiMode.HYBRID, AiMode.ON_DEVICE)) {
+            mode.value = m
+            var warmed = 0
+            vm(warmup = { warmed++ })
+            advanceUntilIdle()
+            assertEquals("$m", 1, warmed)
+        }
+    }
+
+    @Test
+    fun doesNotWarmNanoForCloudOrOff() = runTest(dispatcher) {
+        for (m in listOf(AiMode.CLOUD, null)) {
+            mode.value = m
+            var warmed = 0
+            vm(warmup = { warmed++ })
+            advanceUntilIdle()
+            assertEquals("$m", 0, warmed)
+        }
     }
 }

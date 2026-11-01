@@ -247,7 +247,7 @@ class ChatSession(
                     when (event) {
                         is AiEvent.Text -> {
                             text.append(event.delta)
-                            if (!released && !Prompts.NEEDS_HISTORY.startsWith(text.toString().trim())) released = true
+                            if (!released && !Prompts.NEEDS_HISTORY.startsWith(escalationForm(text))) released = true
                             if (released) updateLast { it.copy(text = text.toString()) }
                         }
 
@@ -256,7 +256,7 @@ class ChatSession(
                         is AiEvent.ToolStatus -> Unit
                     }
                 }
-                if (!released && text.toString().trim() == Prompts.NEEDS_HISTORY) return Outcome.NeedsHistory
+                if (!released && escalationForm(text) == Prompts.NEEDS_HISTORY) return Outcome.NeedsHistory
                 updateLast { it.copy(text = text.toString()) }
                 return Outcome.Answered(label)
             } catch (e: AiFailure) {
@@ -273,6 +273,9 @@ class ChatSession(
             }
         }
     }
+
+    /** The reply as compared with `NEEDS_HISTORY`: without surrounding whitespace or the full stop or "!" Nano may add. */
+    private fun escalationForm(text: CharSequence) = text.toString().trim().trimEnd('.', '!').trimEnd()
 
     /** Streams the cloud into the in-progress (last) message, with the tool lines: running in [ChatMessage.status], then in [ChatMessage.lookedUp]. */
     private suspend fun streamCloud(req: AiRequest): Outcome {

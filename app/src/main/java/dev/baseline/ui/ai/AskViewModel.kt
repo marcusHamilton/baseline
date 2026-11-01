@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -47,6 +48,7 @@ class AskViewModel(
     mode: Flow<AiMode?>,
     online: Flow<Boolean>,
     today: StateFlow<LocalDate>,
+    private val warmup: suspend () -> Unit = {},
 ) : ViewModel() {
     constructor(
         scope: AskScope,
@@ -55,12 +57,18 @@ class AskViewModel(
         mode: Flow<AiMode?>,
         online: Flow<Boolean>,
         today: StateFlow<LocalDate>,
-    ) : this(scope, session, { packs.build(it, PackSize.COMPACT).facts }, mode, online, today)
+        warmup: suspend () -> Unit = {},
+    ) : this(scope, session, { packs.build(it, PackSize.COMPACT).facts }, mode, online, today, warmup)
 
     /** Null until the numbers are in, so the chips don't flash the fact-free versions first. */
     private val packFacts = MutableStateFlow<PackFacts?>(null)
 
     init {
+        // A head start for Nano while the sheet opens (spec §4.1); the cloud has nothing to warm.
+        viewModelScope.launch {
+            val m = mode.first()
+            if (m == AiMode.ON_DEVICE || m == AiMode.HYBRID) warmup()
+        }
         viewModelScope.launch {
             packFacts.value =
                 try {

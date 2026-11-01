@@ -523,7 +523,7 @@ private fun AskSheetHost(container: AppContainer, scope: AskScope, store: ViewMo
             keySet = { container.aiKeySet.value },
             online = container.aiOnline::value,
         )
-        AskViewModel(scope, session, container.contextPacks, container.aiPrefs.mode, container.online, container.today)
+        AskViewModel(scope, session, container.contextPacks, container.aiPrefs.mode, container.online, container.today, container.nanoEngine::warmup)
     }
     AskSheet(vm, onDismiss)
 }

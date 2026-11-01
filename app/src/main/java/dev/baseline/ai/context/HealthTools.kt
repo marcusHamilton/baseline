@@ -28,6 +28,7 @@ import kotlin.math.roundToInt
 
 private const val MAX_RANGE_DAYS = 400L
 private const val MAX_CONTENT_CHARS = 32_000
+private const val MAX_NAMED_FIELDS = 3
 private const val TRUNCATED = "(truncated — ask for a shorter range)"
 private const val LOOKING_UP = "Looking up …"
 private const val UNKNOWN_TOOL = """{"error":"unknown tool"}"""
@@ -221,7 +222,9 @@ class HealthTools(private val db: AppDatabase, private val packs: ContextPacks, 
                 for (m in metrics) put(m.key, m.pick(days[date], scores[date]))
             }.toString()
         }
-        return ToolResult("Looking up ${metrics.joinToString(", ") { it.label }}, ${range.label}", capRows(rows))
+        // Ten field names make a long line under the answer; name them only when a few were asked for.
+        val what = if (metrics.size > MAX_NAMED_FIELDS) "daily metrics" else metrics.joinToString(", ") { it.label }
+        return ToolResult("Looking up $what, ${range.label}", capRows(rows))
     }
 
     private fun fields(args: JsonObject): List<Metric> {

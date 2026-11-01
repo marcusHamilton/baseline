@@ -180,9 +180,20 @@ class HealthToolsTest {
             assertEquals(8.4, last["strain"]!!.jsonPrimitive.content.toDouble(), 0.0)
             assertEquals(9000, last["steps"]!!.jsonPrimitive.content.toInt())
         }
-        assertTrue(
-            call("daily_metrics", """{"from":"$oldest","to":"$today"}""").statusLabel.startsWith("Looking up recovery, HRV, resting HR, sleep, sleep hours,"),
+        assertEquals("Looking up daily metrics, 26 Oct – 31 Oct", call("daily_metrics", """{"from":"$oldest","to":"$today"}""").statusLabel)
+    }
+
+    @Test
+    fun dailyMetricsLabelNamesAtMostThreeFields() {
+        runBlocking { seed(30) }
+        assertEquals(
+            "Looking up HRV, resting HR, strain, 2 Oct – 31 Oct",
+            call("daily_metrics", range(30, ""","fields":["hrv","rhr","strain"]""")).statusLabel,
         )
+        val short = "Looking up daily metrics, 2 Oct – 31 Oct"
+        assertEquals(short, call("daily_metrics", range(30, ""","fields":["hrv","rhr","strain","steps"]""")).statusLabel)
+        assertEquals(short, call("daily_metrics", range(30)).statusLabel)
+        assertEquals(short, call("daily_metrics", range(30, ""","fields":[]""")).statusLabel)
     }
 
     @Test

@@ -212,6 +212,21 @@ class ChatSessionTest {
     }
 
     @Test
+    fun needsHistoryWithTrailingPunctuationIsHiddenAndEscalates() = runTest {
+        backend.answer("NEEDS_HISTORY", ".")
+        cloud.answer("From your history")
+        val s = session()
+        val seen = mutableListOf<List<ChatMessage>>()
+        val watcher = backgroundScope.launch { s.messages.collect { seen += it } }
+        s.send("What changed this month?", QuestionTag.PAGE)
+        advanceUntilIdle()
+        watcher.cancel()
+        assertTrue(seen.flatten().none { it.text.contains("NEEDS") })
+        assertEquals(listOf(ChatTurn(Role.USER, "What changed this month?")), cloud.requests.single().turns)
+        assertEquals("From your history", s.assistant.single().text)
+    }
+
+    @Test
     fun needsHistoryOfflineShowsTheNote() = runTest {
         online = false
         backend.answer("NEEDS_HISTORY")
