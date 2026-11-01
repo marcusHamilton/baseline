@@ -263,11 +263,19 @@ question takes its place.
 ### 3.8 The insight card
 
 - **Where:**
-  - On Today: under the Body Battery strip, above the Recovery card.
-  - On Sleep: under the sleep-performance header.
-  - On an activity: under the summary tiles.
+  - On Today: **inside the Recovery card**, not as a card of its own. When Ready, the AI text replaces the rule-based
+    sentence (a 12dp `#A78BFA` sparkle, then the text in the same style), and a tail row at the bottom of the card
+    carries the muted engine label on the left and **"Ask about today ›"** (or the past day's date) in `#A78BFA` on the
+    right, its own 48dp target. The training-load callout and the footer lines stay as they are. Generating, Hidden and
+    mode Off leave the card exactly as it was (the rule-based sentence, no tail row, no shimmer). Couldn't generate
+    keeps the rule-based sentence; the tail row shows the muted reason and **Retry** (`#3B82F6`, 48dp). The Ask and
+    Retry links are separate clicks, so they don't open Trends; the rest of the card still does. TalkBack reads the
+    merged card with the AI text in place of the sentence, then "Made on-device." or "Made in the cloud.", and adds the
+    "Ask about today" action.
+  - On Sleep: under the sleep-performance header (the standalone card below).
+  - On an activity: under the summary tiles (the standalone card below).
   - Not on Trends in this piece.
-- **Look:** a `#171A1F` card. The header is a small `#A78BFA` sparkle with "INSIGHT" in the dial-label style. The text
+- **Look (Sleep and activity):** a `#171A1F` card. The header is a small `#A78BFA` sparkle with "INSIGHT" in the dial-label style. The text
   is 2–3 sentences in body text. The footer has the muted engine label on the left and **"Ask about today ›"** (or "last
   night", "this run" …, as in §3.5) on the right, with a 48dp touch target. Tapping anywhere on the card also opens
   the sheet.
@@ -497,7 +505,7 @@ The sheet carries no banner. "Not medical advice" is in the Settings privacy lin
 
 ### 7.1 Flow
 
-1. A page with an insight slot (Today, Sleep, Activity) asks `InsightService.insight(scope)` while it's on screen.
+1. A page with an insight (Today's Recovery card, the Sleep and Activity slots) asks `InsightService.insight(scope)` while it's on screen.
 2. The service builds the scope's pack (compact if Nano will run it, full for the cloud) and computes
    `fingerprint = SHA-256(PROMPT_VERSION + "\n" + compact pack basis)`.
 3. **Cache hit** (same scope and key, same fingerprint): emit Ready.

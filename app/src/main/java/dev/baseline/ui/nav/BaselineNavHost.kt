@@ -56,6 +56,8 @@ import dev.baseline.R
 import dev.baseline.ai.AiMode
 import dev.baseline.ai.ChatSession
 import dev.baseline.ai.context.AskScope
+import dev.baseline.ai.context.subject
+import dev.baseline.ai.insight.InsightState
 import dev.baseline.garmin.KeyStatus
 import dev.baseline.ui.activities.ActivitiesScreen
 import dev.baseline.ui.activities.ActivitiesViewModel
@@ -89,6 +91,7 @@ import dev.baseline.ui.settings.SettingsViewModel
 import dev.baseline.ui.sleep.SleepScreen
 import dev.baseline.ui.sleep.SleepViewModel
 import dev.baseline.ui.theme.Bg
+import dev.baseline.ui.today.TodayInsightUi
 import dev.baseline.ui.today.TodayScreen
 import dev.baseline.ui.today.TodayViewModel
 import dev.baseline.ui.trends.TrendsScreen
@@ -268,7 +271,17 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                         val insightVm = viewModel { InsightViewModel(container.insightService) }
                         // Only the shown day matters here, so the rest of Today's state doesn't recompose this block.
                         val shownDate by vm.state.sliceAsState { it.date }
-                        ReportAskScope(AskScope.Today(shownDate))
+                        val scope = AskScope.Today(shownDate)
+                        ReportAskScope(scope)
+                        // The Recovery card shows no shimmer and no partial text, so streaming chunks are folded into one Generating state:
+                        // the card isn't recomposed for every token.
+                        val insightState by remember(insightVm, scope) {
+                            insightVm.state(scope).map { if (it is InsightState.Generating) InsightState.Generating("") else it }.distinctUntilChanged()
+                        }.collectAsStateWithLifecycle(InsightState.Hidden)
+                        val todayNow by container.today.collectAsStateWithLifecycle()
+                        val insight = remember(insightState, scope, todayNow) {
+                            TodayInsightUi(insightState, scope.subject(todayNow), onAsk = { askHost.open(scope) }, onRetry = insightVm::retry)
+                        }
                         TodayScreen(
                             vm,
                             onOpenCalendar = { nav.navigate(Routes.CALENDAR) },
@@ -283,14 +296,7 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                                 }
                                 runCatching { nav.getBackStackEntry(Routes.TRENDS) }.getOrNull()?.savedStateHandle?.set(FOCUS_TRAINING_LOAD, true)
                             },
-                            insight = {
-                                // The day Today's header shows, so the card follows the ‹ › buttons.
-                                val date = vm.state.collectAsStateWithLifecycle().value.date
-                                val scope = AskScope.Today(date)
-                                InsightSlot(insightVm, scope, container.today, onAsk = {
-                                    askHost.open(scope)
-                                }, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp))
-                            },
+                            insight = insight,
                         )
                     }
                     composable(Routes.CALENDAR) {

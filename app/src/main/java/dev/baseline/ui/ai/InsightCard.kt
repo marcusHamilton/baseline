@@ -79,8 +79,8 @@ fun InsightSlot(vm: InsightViewModel, scope: AskScope, today: StateFlow<LocalDat
 }
 
 /**
- * The AI insight card (spec §3.8) for Today, Sleep and an activity. [subject] is the scope as it reads after "Ask about"
- * (`AskScope.subject`). Hidden emits nothing at all, not even a spacer, so callers put their own padding in [modifier].
+ * The AI insight card (spec §3.8) for Sleep and an activity; Today puts its insight inside the Recovery card instead. [subject] is the scope
+ * as it reads after "Ask about" (`AskScope.subject`). Hidden emits nothing at all, not even a spacer, so callers put their own padding in [modifier].
  */
 @Composable
 fun InsightCard(state: InsightState, subject: String, onAsk: () -> Unit, onRetry: () -> Unit, modifier: Modifier = Modifier) {

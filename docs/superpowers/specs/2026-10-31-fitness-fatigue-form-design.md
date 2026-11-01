@@ -156,7 +156,7 @@ today?" for both time scales: Recovery for today, form for the weeks.
 "Calibrating" / "No recent training". It is `TextMuted` while the week is normal, and takes the callout's colour when
 there is one.
 
-**Callout, only when the week needs attention.** A tinted note under the insight sentence (the colour at 12 % alpha
+**Callout, only when the week needs attention.** A tinted note under the insight sentence (the rule-based one, or the AI insight when it is Ready: `2026-11-01-ai-assistant-design.md` §3.8) (the colour at 12 % alpha
 behind it, a 6 dp dot, text in the colour). The text carries the meaning; colour only backs it up.
 
 | Condition (first match) | Text | Colour |
@@ -182,7 +182,7 @@ two never disagree. The stored `ScoreEntity` target is not changed.
 
 **Tap.** When there is a training load, the whole card is one button ("Open training load in Trends", at least
 48 dp) that opens the Trends tab scrolled to its Training load card (§5). Before the first score the card isn't
-clickable. TalkBack reads the merged card: title, tag, insight, callout, footer.
+clickable. TalkBack reads the merged card: title, tag, insight, callout, footer. When the AI insight is Ready, a tail row adds its engine label and an "Ask about today ›" link; that link is a separate click and does not open Trends.
 
 **Past days.** Today's ‹ › navigation shows the state as of that date and that date's week budget (with `daysLeft`
 from that date). Before the first score there is no tag, callout or week line.

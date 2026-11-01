@@ -28,7 +28,6 @@ import dev.baseline.scores.RecoveryResult
 import dev.baseline.scores.RecoveryZone
 import dev.baseline.ui.ai.AskContent
 import dev.baseline.ui.ai.AskUiState
-import dev.baseline.ui.ai.InsightCard
 import dev.baseline.ui.components.ActivityCardUi
 import dev.baseline.ui.theme.BaselineTheme
 import dev.baseline.ui.theme.Bg
@@ -36,6 +35,7 @@ import dev.baseline.ui.theme.Card
 import dev.baseline.ui.today.BodyBatteryUi
 import dev.baseline.ui.today.StatRowUi
 import dev.baseline.ui.today.TodayContent
+import dev.baseline.ui.today.TodayInsightUi
 import dev.baseline.ui.today.TodayUiState
 import dev.baseline.ui.today.buildTrainingLoadUi
 import dev.baseline.ui.trends.TrendRange
@@ -163,10 +163,7 @@ class ScreenshotCapture {
 
     private fun todayInsight(name: String, insight: InsightState) = todayBuilt(todayState(scores())).let { state ->
         capture(name, heightDp = 1040) {
-            TodayContent(
-                state, null, {}, {}, {}, {}, {}, {},
-                insight = { InsightCard(insight, "today", {}, {}, Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp)) },
-            )
+            TodayContent(state, null, {}, {}, {}, {}, {}, {}, insight = TodayInsightUi(insight, "today", {}, {}))
         }
     }
 

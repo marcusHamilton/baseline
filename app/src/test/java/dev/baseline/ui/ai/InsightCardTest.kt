@@ -42,9 +42,6 @@ import dev.baseline.ui.sleep.SleepTiles
 import dev.baseline.ui.sleep.SleepUiState
 import dev.baseline.ui.sleep.StageUi
 import dev.baseline.ui.theme.BaselineTheme
-import dev.baseline.ui.today.BodyBatteryUi
-import dev.baseline.ui.today.TodayContent
-import dev.baseline.ui.today.TodayUiState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -54,7 +51,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.time.Duration
-import java.time.Instant
 import java.time.LocalDate
 import kotlin.math.abs
 
@@ -201,22 +197,6 @@ class InsightCardTest {
 
     private fun top(tag: String) = rule.onNodeWithTag(tag).getBoundsInRoot().top
     private fun bottom(tag: String) = rule.onNodeWithTag(tag).getBoundsInRoot().bottom
-
-    @Test
-    fun todayPutsTheSlotBetweenBodyBatteryAndRecovery() {
-        val state = TodayUiState(
-            date, true, 86, null, "calibrating — need 7 nights", 11.4, 14.0..18.0, emptyList(), emptyList(),
-            BodyBatteryUi(80, emptyList(), 62, null, false), Instant.EPOCH, date,
-        )
-        rule.setContent {
-            BaselineTheme { Surface { TodayContent(state, null, {}, {}, {}, {}, {}, {}, insight = slot) } }
-        }
-        val strip = rule.onNodeWithText("BODY BATTERY", useUnmergedTree = true).getBoundsInRoot()
-        val recovery = rule.onNodeWithText("NOT ENOUGH DATA FOR RECOVERY YET", useUnmergedTree = true).getBoundsInRoot()
-        val slotTop = top("slot")
-        assertTrue("slot ($slotTop) below the Body Battery strip (${strip.bottom})", slotTop >= strip.bottom)
-        assertTrue("slot ($slotTop) above the Recovery card (${recovery.top})", slotTop < recovery.top)
-    }
 
     @Test
     fun sleepPutsTheSlotUnderTheHeader() {
