@@ -182,7 +182,8 @@ two never disagree. The stored `ScoreEntity` target is not changed.
 
 **Tap.** When there is a training load, the whole card is one button ("Open training load in Trends", at least
 48 dp) that opens the Trends tab scrolled to its Training load card (§5). Before the first score the card isn't
-clickable. TalkBack reads the merged card: title, tag, insight, callout, footer. When the AI insight is Ready, a tail row adds its engine label and an "Ask about today ›" link; that link is a separate click and does not open Trends.
+clickable, and neither is it while the AI is on (any insight state but Hidden): the card then has its own "Ask about …" link, and a tap
+anywhere else must not navigate. TalkBack reads the merged card: title, tag, insight, callout, footer. When the AI insight is Ready, a tail row adds its engine label and an "Ask about today ›" link; that link is a separate click and does not open Trends.
 
 **Past days.** Today's ‹ › navigation shows the state as of that date and that date's week budget (with `daysLeft`
 from that date). Before the first score there is no tag, callout or week line.

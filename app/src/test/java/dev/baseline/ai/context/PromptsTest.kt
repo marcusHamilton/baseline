@@ -45,4 +45,12 @@ class PromptsTest {
         assertTrue("this day" in Prompts.insight(AskScope.General))
         assertFalse("NEEDS_HISTORY" in Prompts.insight(AskScope.Today(date)))
     }
+
+    @Test
+    fun insightPromptAsksForNumbersAndBansTheOpener() {
+        val p = Prompts.insight(AskScope.Today(date))
+        assertTrue("numbers" in p)
+        assertTrue("The most useful insight" in p)
+        assertTrue("2 short sentences" in p)
+    }
 }

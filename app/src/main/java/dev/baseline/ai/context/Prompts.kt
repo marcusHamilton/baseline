@@ -4,7 +4,7 @@ import dev.baseline.ai.engine.EngineKind
 
 /** The system prompts (spec §5.3). Bump [PROMPT_VERSION] on any wording change: it is part of the insight cache fingerprint. */
 object Prompts {
-    const val PROMPT_VERSION = 1
+    const val PROMPT_VERSION = 2
 
     /** What Nano replies, and nothing else, when the question needs data beyond the page it was shown. */
     const val NEEDS_HISTORY = "NEEDS_HISTORY"
@@ -44,7 +44,10 @@ object Prompts {
                 is AskScope.Activity -> "this activity"
                 is AskScope.Today, is AskScope.Trends, AskScope.General -> "this day"
             }
-        return "In 2–3 sentences, tell the user the most useful thing about $subject, against their baselines. " +
-            "Lead with the conclusion. No greeting, no advice to see a doctor unless something is clearly abnormal."
+        return "In 2 short sentences, name the one or two signals that moved furthest from their baseline for $subject, " +
+            "with their numbers and the baselines. Don't restate the headline score and don't give advice. " +
+            "Start with the finding: no greeting, and no opener such as \"The most useful insight\". " +
+            "Don't say \"significant\" or \"substantial\" without a figure. If nothing stands out, say it is a typical day. " +
+            "Mention a doctor only if something is clearly abnormal."
     }
 }

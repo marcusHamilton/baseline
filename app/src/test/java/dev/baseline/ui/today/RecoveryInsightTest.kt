@@ -98,11 +98,25 @@ class RecoveryInsightTest {
     }
 
     @Test
-    fun theRestOfTheCardStillOpensTrends() {
+    fun withTheAiOnTheRestOfTheCardDoesNothing() {
         show(ui(InsightState.Ready(aiText, nano)))
         rule.onNodeWithText("Productive week", useUnmergedTree = true).performScrollTo().performClick()
-        assertEquals(1, opened)
+        assertEquals(0, opened)
         assertEquals(0, asks)
+    }
+
+    @Test
+    fun whileGeneratingTheCardDoesNotOpenTrendsEither() {
+        show(ui(InsightState.Generating("")))
+        rule.onNodeWithText("Productive week", useUnmergedTree = true).performScrollTo().performClick()
+        assertEquals(0, opened)
+    }
+
+    @Test
+    fun withTheAiOffTheCardStillOpensTrends() {
+        show(ui(InsightState.Hidden))
+        rule.onNodeWithText("Productive week", useUnmergedTree = true).performScrollTo().performClick()
+        assertEquals(1, opened)
     }
 
     @Test
@@ -112,7 +126,7 @@ class RecoveryInsightTest {
         rule.onNodeWithText("Ask about today ›", useUnmergedTree = true).performScrollTo().performClick()
         assertEquals(1, asks)
         rule.onNodeWithText(aiText, useUnmergedTree = true).performClick()
-        assertEquals("no training load, so no card click", 0, opened)
+        assertEquals("no card click with the AI on", 0, opened)
     }
 
     @Test
@@ -133,6 +147,29 @@ class RecoveryInsightTest {
         show(ui(InsightState.Ready(aiText, cloud)))
         val config = rule.onNodeWithTag("recovery-card").fetchSemanticsNode().config
         assertEquals(listOf("Made in the cloud."), config[SemanticsProperties.ContentDescription])
+    }
+
+    private fun withForm(form: FormState) = state.copy(trainingLoad = load.copy(day = load.day.copy(state = form)))
+
+    private val restedPill = "You're rested. A good day for a hard session."
+
+    @Test
+    fun theRestedPillStepsAsideForAnInsight() {
+        show(ui(InsightState.Ready(aiText, nano)), withForm(FormState.FRESH))
+        rule.onNodeWithText(restedPill, useUnmergedTree = true).assertDoesNotExist()
+        rule.onNodeWithText("Fresh week", useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun theRestedPillStaysWithoutAnInsight() {
+        show(null, withForm(FormState.FRESH))
+        rule.onNodeWithText(restedPill, useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun aWeekThatNeedsAttentionKeepsItsCalloutBesideAnInsight() {
+        show(ui(InsightState.Ready(aiText, nano)), withForm(FormState.OVERREACHING))
+        rule.onNodeWithText("Fatigue is well above your fitness. Keep today easy.", useUnmergedTree = true).assertExists()
     }
 
     private fun assertCardUnchanged(insight: TodayInsightUi?) {

@@ -259,7 +259,7 @@ class InsightServiceTest {
     fun promptVersionIsPartOfFingerprint() {
         assertNotEquals(sha256("x"), fingerprint("x"))
         assertEquals(sha256("${Prompts.PROMPT_VERSION}\nx"), fingerprint("x"))
-        assertEquals(sha256("1\nx"), fingerprint("x"))
+        assertEquals(sha256("2\nx"), fingerprint("x"))
     }
 
     @Test

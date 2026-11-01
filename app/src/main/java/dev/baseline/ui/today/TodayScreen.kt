@@ -87,6 +87,7 @@ import dev.baseline.ai.engine.EngineKind
 import dev.baseline.ai.engine.EngineLabel
 import dev.baseline.ai.insight.InsightState
 import dev.baseline.garmin.KeyStatus
+import dev.baseline.scores.FormState
 import dev.baseline.ui.activity.NOTE_UNREADABLE
 import dev.baseline.ui.components.ActivityCard
 import dev.baseline.ui.components.BodyBatteryStrip
@@ -574,7 +575,7 @@ private fun targetText(r: ClosedFloatingPointRange<Double>) = "${r.start.roundTo
 
 /**
  * Recovery's verdict plus the week's training load (fitness-fatigue-form spec §4): a tag, a callout only when the week
- * needs attention, and the strain-target and week lines. Tapping it opens the Training load card on Trends.
+ * needs attention, and the strain-target and week lines. Tapping it opens the Training load card on Trends, except with the AI on.
  * Once the AI [insight] is ready it replaces the rule-based sentence and a tail row names the engine and offers "Ask about …";
  * a failed one adds a Retry to that row. Generating and Hidden change nothing (ai-assistant spec §3.8).
  */
@@ -583,13 +584,17 @@ private fun RecoveryCard(state: TodayUiState, onOpenTrends: () -> Unit, insight:
     val recovery = state.recovery
     val color = recovery?.let { zoneColor(it.zone) } ?: Surface2
     val load = state.trainingLoad
-    val callout = load?.let(::weekCallout)
-    val tappable = if (load != null && !state.loading) {
+    val ready = (insight?.state as? InsightState.Ready)?.takeIf { !state.loading }
+    // The "rested, good day for a hard session" pill says what the strain target line already does, so it steps aside for an
+    // AI insight; a week that needs attention (overreaching, past the safe range, detraining) always keeps its callout.
+    val callout = load?.let(::weekCallout)?.takeUnless { ready != null && load.day.state == FormState.FRESH }
+    // With the AI on, the card has its own "Ask about …" link, so a stray tap anywhere else must not navigate; the Trends shortcut is for AI off.
+    val aiOn = insight != null && insight.state !is InsightState.Hidden
+    val tappable = if (load != null && !state.loading && !aiOn) {
         Modifier.clickable(onClickLabel = "Open training load in Trends", role = Role.Button, onClick = onOpenTrends)
     } else {
         Modifier
     }
-    val ready = (insight?.state as? InsightState.Ready)?.takeIf { !state.loading }
     // With an insight to read out, the card is one TalkBack node even when it isn't tappable, and carries the Ask action.
     val spoken = if (ready != null) {
         Modifier.semantics(mergeDescendants = true) {

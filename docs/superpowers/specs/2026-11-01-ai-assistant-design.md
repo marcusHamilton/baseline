@@ -130,6 +130,11 @@ We write the client ourselves on the existing OkHttp 5 and kotlinx.serialization
 - **Defaults and transitions** (the user can always change the mode afterwards):
   - **First launch, once Nano's status is known:** On-device only if Nano isn't Unavailable, otherwise Off. Until the
     status is known, the mode is undecided and nothing shows.
+  - **First-run prompt** (`AiFirstRun`): once, on Today, in On-device only when Nano is `Downloadable`: "Turn on AI
+    insights?" with **Download** (keeps the mode and starts the download, which runs on the app scope) and **Turn off AI**
+    (sets Off). It has no other dismiss. It is never shown on a phone that doesn't support Nano, or in any other mode or
+    Nano state: `applyAiDefaults` marks it done (`AiPrefs.promptDone`) after every start where it wouldn't apply, and a
+    failed Nano check leaves it for the next start.
   - **A key is saved:** Off or On-device only becomes **Hybrid** if Nano is supported, otherwise **Cloud only**.
     Cloud only and Hybrid are left alone.
   - **The key is removed:** Cloud only or Hybrid becomes On-device only if Nano is supported, otherwise Off.
@@ -217,8 +222,10 @@ sheet with the same scope.
 
 ### 3.6 The Ask sheet
 
-- **Shape:** a Material 3 modal bottom sheet. It opens at Material 3's default partial height (about half the screen; the
-  component has no setting for another height) and can be dragged to full height. The page behind is dimmed. Closing it (✕, a drag down, or Back) cancels any request in flight and
+- **Shape:** a Material 3 modal bottom sheet. It opens at Material 3's default partial height (about half the screen) and can be
+  dragged to full height. A sheet lays its content out at full height and slides it up, so the content is sized to the part
+  that is on screen (`onScreen` in `AskSheet.kt`); otherwise the suggestions and the text box sit below the screen edge at the
+  half-height stop. The page behind is dimmed. Closing it (✕, a drag down, or Back) cancels any request in flight and
   **discards the chat**. The chat survives rotation (it lives in the ViewModel) but not process death.
 - **Empty state:**
   - The title, then one muted line: "Ask anything about *this night / today / this run …*, or how it fits your
@@ -271,7 +278,8 @@ question takes its place.
     keeps the rule-based sentence; the tail row shows the muted reason and **Retry** (`#3B82F6`, 48dp). The Ask and
     Retry links are separate clicks, so they don't open Trends; the rest of the card still does. TalkBack reads the
     merged card with the AI text in place of the sentence, then "Made on-device." or "Made in the cloud.", and adds the
-    "Ask about today" action.
+    "Ask about today" action. With an AI insight showing, the rule-based "You're rested…" pill (Fresh week) is hidden because the
+    strain-target line already says it; the Overreaching, past-the-safe-range and Detraining callouts always stay.
   - On Sleep: under the sleep-performance header (the standalone card below).
   - On an activity: under the summary tiles (the standalone card below).
   - Not on Trends in this piece.
@@ -457,8 +465,11 @@ No tool writes, triggers a sync, or reaches the network.
 - **Chat, Nano:** a trimmed version of the cloud prompt, plus: "If answering needs data that isn't shown above, reply
   with exactly NEEDS_HISTORY."
 - **Insight:**
-  - "In 2–3 sentences, tell the user the most useful thing about this {day / night / activity}, against their
-    baselines. Lead with the conclusion. No greeting, no advice to see a doctor unless something is clearly abnormal."
+  - "In 2 short sentences, name the one or two signals that moved furthest from their baseline for this {day / night /
+    activity}, with their numbers and the baselines. Don't restate the headline score and don't give advice. Start with the
+    finding: no greeting and no opener such as "The most useful insight". Don't say "significant" or "substantial" without a
+    figure. If nothing stands out, say it is a typical day. Mention a doctor only if something is clearly abnormal."
+    (`PROMPT_VERSION` 2; version 1 asked for "the most useful thing" in 2–3 sentences and got meta openers and no numbers.)
   - Insights never use tools.
 
 ### 5.4 Disclaimer
