@@ -1,9 +1,13 @@
 package dev.baseline.ai.insight
 
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.room3.immediateTransaction
+import androidx.room3.useWriterConnection
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.baseline.ai.AiKeyStatus
 import dev.baseline.ai.AiMode
 import dev.baseline.ai.context.AskScope
+import dev.baseline.ai.context.ContextPacks
 import dev.baseline.ai.context.Pack
 import dev.baseline.ai.context.PackFacts
 import dev.baseline.ai.context.PackSize
@@ -22,19 +26,33 @@ import dev.baseline.ai.engine.NanoEngine
 import dev.baseline.ai.engine.NanoError
 import dev.baseline.ai.engine.RequestKind
 import dev.baseline.ai.engine.Role
+import dev.baseline.data.Repository
+import dev.baseline.data.SportFamily
+import dev.baseline.data.db.ActivityEntity
+import dev.baseline.data.db.ActivityScoreEntity
 import dev.baseline.data.db.AiInsightEntity
 import dev.baseline.data.db.AppDatabase
+import dev.baseline.data.db.DayEntity
+import dev.baseline.data.db.LoadSource
+import dev.baseline.data.db.ScoreEntity
+import dev.baseline.garmin.ApiKeyVault
+import dev.baseline.prefs.UserPrefs
+import dev.baseline.testutil.ScopeCleanup
 import dev.baseline.testutil.inMemoryDatabase
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -43,10 +61,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 import java.security.MessageDigest
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneId
 import java.time.ZoneOffset
 
 private class ScriptedNano : NanoBackend {
@@ -114,7 +136,10 @@ class InsightServiceTest {
     private val packCalls = mutableListOf<PackSize>()
     private var hasData = true
     private var data = "v1"
+    private var volatileTail = ""
     private val scope = AskScope.Today(LocalDate.of(2026, 11, 1))
+    private val scopes = ScopeCleanup()
+    private val files = mutableListOf<File>()
 
     @Before
     fun setUp() {
@@ -123,19 +148,31 @@ class InsightServiceTest {
 
     @After
     fun tearDown() {
+        runBlocking { scopes.close() }
         db.close()
+        files.forEach { it.delete() }
     }
 
     private fun compactText() = "COMPACT-$data"
 
     private fun fullText() = "FULL-$data"
 
+    // What the fake packs fingerprint: the text without its volatile lines, which differs by size so a test can tell which one was used.
+    private fun compactBasis() = "CBASIS-$data"
+
+    private fun fullBasis() = "FBASIS-$data"
+
     private suspend fun service(): InsightService {
         nano.refresh()
         return InsightService(
             pack = { _, size ->
                 packCalls += size
-                Pack(if (size == PackSize.COMPACT) compactText() else fullText(), PackFacts(null, null, null, null), hasData)
+                Pack(
+                    if (size == PackSize.COMPACT) compactText() + volatileTail else fullText() + volatileTail,
+                    PackFacts(null, null, null, null),
+                    hasData,
+                    if (size == PackSize.COMPACT) compactBasis() else fullBasis(),
+                )
             },
             nano = nano,
             cloud = cloud,
@@ -153,7 +190,7 @@ class InsightServiceTest {
 
     @Test
     fun cacheHitSkipsEngine() = runTest {
-        db.aiInsightDao().put(row(fingerprint(compactText())))
+        db.aiInsightDao().put(row(fingerprint(compactBasis())))
         val states = service().insight(scope).toList()
         assertEquals(listOf<InsightState>(InsightState.Ready("Cached.", EngineLabel(EngineKind.NANO, "nano-v4"))), states)
         assertEquals(0, backend.calls)
@@ -161,9 +198,18 @@ class InsightServiceTest {
     }
 
     @Test
-    fun aRowFromTheOtherEnginesPackStillHits() = runTest {
-        // Written by the cloud from the full pack; this run would use Nano, but the text is shown anyway.
-        db.aiInsightDao().put(row(fingerprint(fullText()), engine = "cloud", model = "deepseek/deepseek-v4.1-flash"))
+    fun aChangeOnlyInTheTextKeepsTheCachedInsight() = runTest {
+        db.aiInsightDao().put(row(fingerprint(compactBasis())))
+        volatileTail = "\nSteps 9,999, so far today"
+        val states = service().insight(scope).toList()
+        assertEquals(listOf<InsightState>(InsightState.Ready("Cached.", EngineLabel(EngineKind.NANO, "nano-v4"))), states)
+        assertEquals(0, backend.calls)
+    }
+
+    @Test
+    fun aRowWrittenByTheOtherEngineStillHits() = runTest {
+        // Written by the cloud; this run would use Nano, but the text is shown anyway (both fingerprint the compact basis).
+        db.aiInsightDao().put(row(fingerprint(compactBasis()), engine = "cloud", model = "deepseek/deepseek-v4.1-flash"))
         val states = service().insight(scope).toList()
         assertEquals(
             listOf<InsightState>(InsightState.Ready("Cached.", EngineLabel(EngineKind.CLOUD, "deepseek/deepseek-v4.1-flash"))),
@@ -173,8 +219,17 @@ class InsightServiceTest {
     }
 
     @Test
+    fun theFullPacksBasisIsNotAFingerprint() = runTest {
+        db.aiInsightDao().put(row(fingerprint(fullBasis())))
+        backend.answer("Fresh.")
+        val states = service().insight(scope).toList()
+        assertEquals("Fresh.", (states.last() as InsightState.Ready).text)
+        assertEquals(1, backend.calls)
+    }
+
+    @Test
     fun dataChangeRegenerates() = runTest {
-        db.aiInsightDao().put(row(fingerprint("COMPACT-old")))
+        db.aiInsightDao().put(row(fingerprint("CBASIS-old")))
         backend.answer("Fresh ", "take. ")
         val states = service().insight(scope).toList()
         assertEquals(
@@ -188,7 +243,7 @@ class InsightServiceTest {
         )
         val stored = db.aiInsightDao().get("today", "2026-11-01")!!
         assertEquals("Fresh take.", stored.text)
-        assertEquals(fingerprint(compactText()), stored.fingerprint)
+        assertEquals(fingerprint(compactBasis()), stored.fingerprint)
         assertEquals("nano", stored.engine)
         assertEquals("nano-v4", stored.model)
         assertEquals(Instant.parse("2026-11-01T08:00:00Z"), stored.createdAt)
@@ -254,7 +309,7 @@ class InsightServiceTest {
         assertEquals(EngineKind.CLOUD, ready.label.kind)
         val stored = db.aiInsightDao().get("today", "2026-11-01")!!
         assertEquals("cloud", stored.engine)
-        assertEquals(fingerprint(fullText()), stored.fingerprint)
+        assertEquals(fingerprint(compactBasis()), stored.fingerprint)
     }
 
     @Test
@@ -347,7 +402,7 @@ class InsightServiceTest {
         // Cloud only, offline (a cached row doesn't change that).
         mode.value = AiMode.CLOUD
         online.value = false
-        db.aiInsightDao().put(row(fingerprint(fullText())))
+        db.aiInsightDao().put(row(fingerprint(compactBasis())))
         assertEquals(listOf<InsightState>(InsightState.Hidden), service().insight(scope).toList())
         assertEquals(0, cloud.requests.size)
     }
@@ -363,5 +418,162 @@ class InsightServiceTest {
         online.value = false
         backend.tokens = 5000
         assertEquals(listOf<InsightState>(InsightState.Hidden), service().insight(scope).toList())
+    }
+
+    // ---- Real packs over the in-memory database: what counts as a change, and the live refresh ----
+
+    private val today = LocalDate.of(2026, 11, 1)
+
+    private fun realPacks(): ContextPacks {
+        val file = File.createTempFile("insight", ".preferences_pb").also { it.delete() }.also { files += it }
+        val store = PreferenceDataStoreFactory.create(scope = scopes.storeScope) { file }
+        val prefs = UserPrefs(store)
+        val repo = Repository(db, prefs, ApiKeyVault(store, { it }, { it }, Clock.systemUTC()))
+        return ContextPacks(db, repo, prefs, MutableStateFlow(today), MutableStateFlow(ZoneId.of("Europe/London")))
+    }
+
+    private suspend fun realService(): InsightService {
+        nano.refresh()
+        return InsightService(realPacks(), nano, cloud, db.aiInsightDao(), mode, keyStatus, online, clock)
+    }
+
+    private suspend fun seedToday(steps: Int = 4200) {
+        db.dayDao().upsert(
+            DayEntity(
+                date = today,
+                restingHr = 52,
+                steps = steps,
+                stressAvg = 30,
+                bodyBatteryWake = 80,
+                bodyBatteryCharged = 60,
+                sleepSeconds = 25200,
+                hrvLastNight = 58.0,
+            ),
+        )
+        db.scoreDao().upsert(ScoreEntity(today, 71, false, 1.0, 80.0, 8.4, 14.0, 18.0, 1))
+    }
+
+    /** The run and its strain in one transaction, so a collector sees one change, not two. */
+    private suspend fun addRun(id: Long = 900, strain: Double = 9.1) {
+        db.useWriterConnection { tx ->
+            tx.immediateTransaction {
+                db.activityDao().upsert(
+                    ActivityEntity(
+                        id, null, "running", SportFamily.RUN, LocalDateTime.of(today, LocalTime.of(7, 5)), today, today.atTime(7, 5).toInstant(ZoneOffset.UTC),
+                        3135.0, 10200.0, 151.0, 172.0, 120.0, 900.0, 1500.0, 500.0, 115.0, 120.0, 86.0, null, null, null, null, null, null,
+                    ),
+                )
+                db.activityScoreDao().upsert(ActivityScoreEntity(id, 90.0, LoadSource.HR, strain))
+            }
+        }
+    }
+
+    /** Collects one run of the card: everything up to its Ready, Failed or Hidden. */
+    private suspend fun Flow<InsightState>.untilSettled(): List<InsightState> = transformWhile {
+        emit(it)
+        it is InsightState.Generating
+    }.toList()
+
+    @Test
+    fun aStepsOnlyChangeBetweenVisitsIsACacheHit() = runBlocking {
+        seedToday(steps = 4200)
+        backend.answer("First.")
+        val service = realService()
+        assertEquals("First.", (service.insight(scope).untilSettled().last() as InsightState.Ready).text)
+
+        db.dayDao().upsert(db.dayDao().get(today)!!.copy(steps = 9100, stressAvg = 41))
+        db.scoreDao().upsert(db.scoreDao().get(today)!!.copy(strain = 12.0))
+
+        val second = service.insight(scope).untilSettled()
+        assertEquals(listOf<InsightState>(InsightState.Ready("First.", EngineLabel(EngineKind.NANO, "nano-v4"))), second)
+        assertEquals(1, backend.calls)
+        assertEquals(0, cloud.requests.size)
+    }
+
+    @Test
+    fun aNewActivityRegeneratesOnTheNextVisit() = runBlocking {
+        seedToday()
+        backend.answer("First.")
+        backend.answer("After the run.")
+        val service = realService()
+        service.insight(scope).untilSettled()
+
+        addRun()
+
+        val second = service.insight(scope).untilSettled()
+        assertEquals(InsightState.Generating(""), second.first())
+        assertEquals("After the run.", (second.last() as InsightState.Ready).text)
+        assertEquals(2, backend.calls)
+        assertTrue(backend.systems.last().contains("Run, Sun 1 Nov 07:05"))
+    }
+
+    @Test
+    fun anActivitysStrainArrivingLaterRegenerates() = runBlocking {
+        seedToday()
+        addRun()
+        backend.answer("First.")
+        backend.answer("Scored.")
+        val service = realService()
+        service.insight(scope).untilSettled()
+
+        db.activityScoreDao().upsert(ActivityScoreEntity(900, 90.0, LoadSource.HR, 12.3))
+
+        assertEquals("Scored.", (service.insight(scope).untilSettled().last() as InsightState.Ready).text)
+        assertEquals(2, backend.calls)
+    }
+
+    @Test
+    fun aMeaningfulChangeWhileOnScreenRegeneratesInPlace() = runBlocking {
+        seedToday()
+        backend.answer("First.")
+        backend.answer("After the run.")
+        val service = realService()
+        val states = Channel<InsightState>(Channel.UNLIMITED)
+        val job = launch(Dispatchers.Default) { service.insight(scope).collect { states.send(it) } }
+        suspend fun next() = withTimeout(30_000) { states.receive() }
+        try {
+            assertEquals(InsightState.Generating(""), next())
+            assertEquals(InsightState.Generating("First."), next())
+            assertEquals(InsightState.Ready("First.", EngineLabel(EngineKind.NANO, "nano-v4")), next())
+
+            addRun()
+
+            assertEquals(InsightState.Generating(""), next())
+            assertEquals(InsightState.Generating("After the run."), next())
+            assertEquals(InsightState.Ready("After the run.", EngineLabel(EngineKind.NANO, "nano-v4")), next())
+            assertEquals(2, backend.calls)
+            assertEquals("After the run.", db.aiInsightDao().get("today", "2026-11-01")!!.text)
+        } finally {
+            job.cancelAndJoin()
+        }
+    }
+
+    @Test
+    fun aVolatileOnlyChangeWhileOnScreenDoesNothing() = runBlocking {
+        seedToday()
+        backend.answer("First.")
+        backend.answer("After the run.")
+        val service = realService()
+        val states = Channel<InsightState>(Channel.UNLIMITED)
+        val job = launch(Dispatchers.Default) { service.insight(scope).collect { states.send(it) } }
+        suspend fun next() = withTimeout(30_000) { states.receive() }
+        try {
+            repeat(3) { next() }
+
+            // Steps, stress and strain so far move on every sync. Had any of them regenerated, its states would arrive
+            // before the run's, and the run would find no scripted answer left.
+            db.dayDao().upsert(db.dayDao().get(today)!!.copy(steps = 9100, stressAvg = 41))
+            db.scoreDao().upsert(db.scoreDao().get(today)!!.copy(strain = 12.0))
+            addRun()
+
+            assertEquals(InsightState.Generating(""), next())
+            assertEquals(InsightState.Generating("After the run."), next())
+            assertEquals(InsightState.Ready("After the run.", EngineLabel(EngineKind.NANO, "nano-v4")), next())
+            assertEquals(2, backend.calls)
+            assertEquals(0, cloud.requests.size)
+            assertTrue(states.tryReceive().isFailure)
+        } finally {
+            job.cancelAndJoin()
+        }
     }
 }

@@ -310,6 +310,117 @@ class ContextPacksTest {
         assertEquals("3 months", runBlocking { packs.build(AskScope.Trends(90), PackSize.COMPACT) }.facts.rangeLabel)
     }
 
+    private fun pack(scope: AskScope, size: PackSize = PackSize.COMPACT) = runBlocking { packs.build(scope, size) }
+
+    @Test
+    fun todaysBasisLeavesOutTheRunningTotalsButTextKeepsThem() {
+        runBlocking {
+            seed()
+            run(900, 0)
+        }
+        for (size in PackSize.entries) {
+            val p = pack(AskScope.Today(today), size)
+            // The model still sees every number.
+            for (volatile in listOf("Steps 4,200", ", so far today", "Strain 8.4 so far", "latest", "drained", "Avg stress 30", "This week: ")) {
+                assertTrue("$volatile in text\n${p.text}", volatile in p.text)
+            }
+            // The basis drops them.
+            for (volatile in listOf("Steps", "so far", "latest", "drained", "Avg stress", "This week", "Strain 8.4", "4,200")) {
+                assertFalse("$volatile in basis\n${p.basis}", volatile in p.basis)
+            }
+            // Everything else stays.
+            val kept = listOf(
+                "Today is Sun 1 Nov 2026 (Europe/London). Units: metric.\nScope: today, Sun 1 Nov.",
+                "Recovery 71% (green)",
+                "HRV 58 ms vs 30-day baseline 53 ms (+9%)",
+                "Resting HR 52 bpm vs 30-day baseline 54 bpm (−2 bpm)",
+                "Sleep ",
+                "Sleep performance ",
+                "Respiration ",
+                "Body Battery at wake 80",
+                "Body Battery: charged +60",
+                "Strain target 14.0–18.0",
+                "Training load",
+                "Activities:\n- Run, Sun 1 Nov 07:05, ",
+                ", strain 9.1",
+            )
+            for (line in kept) assertTrue("$line in basis\n${p.basis}", line in p.basis)
+            // The training-load line is the same line the text has (fitness and fatigue come from the days before).
+            assertEquals(p.text.lines().single { it.startsWith("Training load") }, p.basis.lines().single { it.startsWith("Training load") })
+        }
+    }
+
+    @Test
+    fun todaysBasisIgnoresStepsStressAndTheBatteryCurveButNotRecoveryOrActivities() {
+        runBlocking { seed() }
+        val before = pack(AskScope.Today(today))
+        runBlocking {
+            db.dayDao().upsert(db.dayDao().get(today)!!.copy(steps = 7100, stressAvg = 44))
+            val score = db.scoreDao().get(today)!!
+            db.scoreDao().upsert(score.copy(strain = 11.2))
+        }
+        val busier = pack(AskScope.Today(today))
+        assertFalse(busier.text == before.text)
+        assertEquals(before.basis, busier.basis)
+
+        runBlocking { run(900, 0) }
+        val withRun = pack(AskScope.Today(today))
+        assertFalse(withRun.basis == busier.basis)
+
+        // The run's strain arrives after the run itself.
+        runBlocking { db.activityScoreDao().upsert(ActivityScoreEntity(900, 90.0, LoadSource.HR, 12.3)) }
+        assertFalse(pack(AskScope.Today(today)).basis == withRun.basis)
+
+        runBlocking { db.scoreDao().upsert(db.scoreDao().get(today)!!.copy(recovery = 40)) }
+        assertFalse(pack(AskScope.Today(today)).basis == withRun.basis)
+    }
+
+    @Test
+    fun basisEqualsTextEverywhereElse() {
+        runBlocking {
+            seed()
+            run(900, 0)
+            run(901, 1)
+        }
+        val others = listOf(
+            AskScope.Today(today.minusDays(1)),
+            AskScope.Sleep(today),
+            AskScope.Sleep(today.minusDays(1)),
+            AskScope.Activity(900, SportFamily.RUN),
+            AskScope.Trends(30),
+        )
+        for (scope in others) {
+            for (size in PackSize.entries) {
+                val p = pack(scope, size)
+                assertEquals("$scope $size", p.text, p.basis)
+            }
+        }
+        // A past day keeps its steps and week line.
+        val past = pack(AskScope.Today(today.minusDays(1)))
+        assertTrue(past.basis, "Steps 9,000" in past.basis && "This week: " in past.basis && "Strain 8.4;" in past.basis)
+        // A day with no data is its own text too.
+        val none = pack(AskScope.Today(today.minusDays(60)))
+        assertEquals(none.text, none.basis)
+    }
+
+    @Test
+    fun generalHasTodaysBasis() {
+        runBlocking { seed() }
+        for (size in PackSize.entries) {
+            assertEquals(pack(AskScope.Today(today), size).basis, pack(AskScope.General, size).basis)
+        }
+        assertFalse("Steps" in pack(AskScope.General).basis)
+    }
+
+    @Test
+    fun todaysBasisIsTheSameForBothPackSizes() {
+        runBlocking {
+            seed()
+            run(900, 0)
+        }
+        assertEquals(pack(AskScope.Today(today), PackSize.COMPACT).basis, pack(AskScope.Today(today), PackSize.FULL).basis)
+    }
+
     @Test
     fun generalIsTodaysPack() {
         runBlocking { seed() }

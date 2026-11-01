@@ -499,16 +499,38 @@ The sheet carries no banner. "Not medical advice" is in the Settings privacy lin
 
 1. A page with an insight slot (Today, Sleep, Activity) asks `InsightService.insight(scope)` while it's on screen.
 2. The service builds the scope's pack (compact if Nano will run it, full for the cloud) and computes
-   `fingerprint = SHA-256(PROMPT_VERSION + pack text)`.
+   `fingerprint = SHA-256(PROMPT_VERSION + "\n" + compact pack basis)`.
 3. **Cache hit** (same scope and key, same fingerprint): emit Ready.
 4. **Miss:** emit Generating, run the engine from the router, and stream the text.
    - When it completes, write the row and emit Ready.
    - When it fails, emit Couldn't generate. Nothing is written.
    - When it's cancelled (the page left), nothing is written.
-5. A failed generation retries only when the user taps Retry or reopens the page.
+5. A failed generation retries when the user taps Retry, reopens the page, or the basis changes (step 6).
+6. **Live refresh.** While the card is collected the flow stays open. `ContextPacks.basisChanges(scope)` re-computes the
+   basis whenever the Room rows the scope reads change (for Today, the day, its score, its activities and their scores; for
+   Sleep, the day and its score; for an activity, the activity and its score) and ticks when the basis differs from the last
+   one. Each tick cancels the run in progress and repeats steps 2 to 4 (`flatMapLatest`), so a new activity or its strain
+   regenerates the card in place. A change that touches only volatile lines ticks nothing.
 
-The fingerprint uses the pack that was actually used. If the engine changes later (a different mode), the cached text
-is still shown. Only a change of data or prompt version regenerates it.
+**The basis** is the pack text without its volatile lines (`Pack.basis`; `Pack.text` is unchanged and is what the model
+reads). Volatile lines exist only for Today's pack when the date is today (and General, which builds it), because they are
+running totals that move with every sync and would regenerate the insight each visit for no new information:
+
+- the steps line (steps so far today);
+- the running number in the strain line ("Strain 8.4 so far"); the strain **target** stays in the basis;
+- Body Battery "latest" and "drained"; "charged" stays;
+- average stress;
+- the "This week: N% of normal" line.
+
+Everything else is in the basis: recovery and its drivers, HRV, resting HR, sleep and respiration lines, Body Battery at
+wake, the training-load state line (fitness and fatigue for a date come from the days before it, so it holds all day), and
+every line of the day's activity list (sport, start, duration, distance, strain), so a new activity, or its strain once
+scored, regenerates the insight. For past days and for the Sleep and Activity scopes the basis equals the text. Compact and
+full Today packs have the same lines, so they share a basis; Sleep and Activity packs differ by size, and the compact
+basis is the one fingerprinted whichever engine runs.
+
+The fingerprint is of the compact basis whichever engine produced the text. If the engine changes later (a different
+mode), the cached text is still shown. Only a change of the stable data or the prompt version regenerates it.
 
 ### 7.2 Table
 

@@ -25,8 +25,15 @@ import dev.baseline.ui.components.formPctText
 import dev.baseline.ui.components.formStateLabel
 import dev.baseline.ui.components.weekLine
 import dev.baseline.ui.format.Formatters
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -41,7 +48,12 @@ enum class PackSize { COMPACT, FULL }
 /** [stageFurthest] is the sleep stage furthest from its 30-day average ("deep", "light" or "REM") and whether it is above it. */
 data class PackFacts(val recovery: Int?, val sleepScore: Int?, val stageFurthest: Pair<String, Boolean>?, val rangeLabel: String?)
 
-data class Pack(val text: String, val facts: PackFacts, val hasData: Boolean)
+/**
+ * [basis] is [text] without its volatile lines: the running totals of a day still in progress (steps, strain so far, Body Battery
+ * latest and drained, average stress, the week's percentage). The insight cache fingerprints the basis, so those totals moving on
+ * every sync neither regenerate an insight nor change its text (spec §7.1). It equals [text] for every other pack.
+ */
+data class Pack(val text: String, val facts: PackFacts, val hasData: Boolean, val basis: String = text)
 
 /** Four characters to a token. */
 fun estimateTokens(text: String): Int = (text.length + 3) / 4
@@ -76,6 +88,25 @@ class ContextPacks(
     private val today: StateFlow<LocalDate>,
     private val zone: StateFlow<ZoneId>,
 ) {
+    /**
+     * Emits once when collected and again each time the compact pack's basis for [scope] changes, driven by the Room flows the
+     * scope reads (so a change that only touches volatile lines emits nothing). It never completes. Used by the insight cards.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun basisChanges(scope: AskScope): Flow<Unit> {
+        val reads: Flow<Unit> = when (scope) {
+            is AskScope.Today -> dayReads(scope.date)
+            AskScope.General -> today.flatMapLatest(::dayReads)
+            is AskScope.Sleep -> combine(repository.day(scope.date), repository.score(scope.date)) { _, _ -> }
+            is AskScope.Activity -> combine(repository.activity(scope.id), repository.activityScore(scope.id)) { _, _ -> }
+            is AskScope.Trends -> return flowOf(Unit)
+        }
+        return reads.map { build(scope, PackSize.COMPACT).basis }.distinctUntilChanged().map { }
+    }
+
+    private fun dayReads(date: LocalDate): Flow<Unit> =
+        combine(repository.day(date), repository.score(date), repository.activitiesOn(date), repository.activityScores(date)) { _, _, _, _ -> }
+
     /** [AskScope.General] builds Today's pack for the current date. */
     suspend fun build(scope: AskScope, size: PackSize): Pack {
         val fmt = Formatters(repository.imperial.first())
@@ -105,11 +136,29 @@ class ContextPacks(
     /** The Sleep pack without its header for the night that ended on [date] (the wake date), or null when it has no sleep. Used by `sleep_night`. */
     suspend fun sleepBody(date: LocalDate, size: PackSize): String? = sleep(date, size)?.body
 
-    private fun pack(scope: String, body: String?, missing: String, facts: PackFacts, fmt: Formatters): Pack {
+    private fun pack(scope: String, body: String?, missing: String, facts: PackFacts, fmt: Formatters, basisBody: String? = body): Pack {
         val header =
             "Today is ${today.value.format(FULL_DATE)} (${zone.value.id}). Units: ${if (fmt.imperial) "imperial" else "metric"}.\n" +
                 "Scope: $scope\n$GLOSSARY\n"
-        return Pack(header + (body ?: missing), facts, hasData = body != null)
+        return Pack(header + (body ?: missing), facts, hasData = body != null, basis = header + (basisBody ?: missing))
+    }
+
+    /**
+     * The lines of a pack body. [add] puts a line in the text, and in the basis as [stable]: the line itself by default, null to
+     * leave it out of the basis, or only the part of it that doesn't move.
+     */
+    private class Lines {
+        private val text = mutableListOf<String>()
+        private val basis = mutableListOf<String>()
+
+        fun add(line: String, stable: String? = line) {
+            text += line
+            stable?.let { basis += it }
+        }
+
+        fun text() = text.joinToString("\n")
+
+        fun basis() = basis.joinToString("\n")
     }
 
     // ---- Today ----
@@ -121,34 +170,40 @@ class ContextPacks(
         val facts = PackFacts(score?.recovery, day?.sleepScore, null, null)
         if (day == null && score == null) return pack(scope, null, "No data recorded for this day.", facts, fmt)
         val w = Window(date, repository.days(date.minusDays(30), date.minusDays(1)).first())
-        val body = buildList {
-            val sleepPerf = score?.sleepPerformance ?: SleepPerformance.of(day?.sleepSeconds, day?.sleepNeedMinutes)
-            add(recoveryLine(score))
-            val top = score?.recovery?.let { day?.let { d -> Recovery.compute(d, w.recovery, sleepPerf) } }?.top.orEmpty()
-            if (top.isNotEmpty()) add("Main drivers vs baseline: " + top.joinToString(", ") { driver(it.metric, it.delta) })
-            add(metric("HRV", " ms", day?.let(HRV), w.hrv, ::whole, ::pct))
-            add(metric("Resting HR", " bpm", day?.let(RHR), w.rhr, ::whole, absolute(" bpm", 0)))
-            add(metric("Sleep", "", day?.let(SLEEP), w.mean(SLEEP), ::hm, ::hmDelta))
-            add("Sleep performance " + (sleepPerf?.takeIf { it.isFinite() }?.let { "${(it * 100).roundToInt()}%" } ?: NO_DATA) + garminScore(day))
-            add(metric("Respiration", " brpm", day?.let(RESP), w.mean(RESP), ::one, absolute(" brpm", 1)))
-            add(metric("Body Battery at wake", "", day?.bodyBatteryWake?.toDouble(), w.mean({ it.bodyBatteryWake?.toDouble() }), ::whole, absolute("", 0)))
-            add(metric("Avg stress", "", day?.stressAvg?.toDouble(), w.mean({ it.stressAvg?.toDouble() }), ::whole, absolute("", 0)))
-            val steps = metric("Steps", "", day?.steps?.toDouble(), w.mean({ it.steps?.toDouble() }, { it > 0 }), ::grouped, ::pct)
-            add(if (date == today.value && day?.steps != null) "$steps, so far today" else steps)
-            val load = load(date)
-            add(strainLine(score, load?.first?.state, date == today.value))
-            add(batteryLine(day, date))
-            add(trainingLine(load?.first))
-            load?.second?.let { add(weekLine(it)) }
-            val activities = db.activityDao().byDay(date)
-            if (activities.isEmpty()) {
-                add("Activities: none")
-            } else {
-                add("Activities:")
-                activities.forEach { add("- " + describe(it, fmt, strain = db.activityScoreDao().get(it.id)?.strain)) }
-            }
+        // The day in progress has running totals; everything else about it, and every past day, is stable (see Pack.basis).
+        val live = date == today.value
+        val lines = Lines()
+
+        fun running(line: String, stable: String? = null) = lines.add(line, if (live) stable else line)
+        val sleepPerf = score?.sleepPerformance ?: SleepPerformance.of(day?.sleepSeconds, day?.sleepNeedMinutes)
+        lines.add(recoveryLine(score))
+        val top = score?.recovery?.let { day?.let { d -> Recovery.compute(d, w.recovery, sleepPerf) } }?.top.orEmpty()
+        if (top.isNotEmpty()) lines.add("Main drivers vs baseline: " + top.joinToString(", ") { driver(it.metric, it.delta) })
+        lines.add(metric("HRV", " ms", day?.let(HRV), w.hrv, ::whole, ::pct))
+        lines.add(metric("Resting HR", " bpm", day?.let(RHR), w.rhr, ::whole, absolute(" bpm", 0)))
+        lines.add(metric("Sleep", "", day?.let(SLEEP), w.mean(SLEEP), ::hm, ::hmDelta))
+        lines.add("Sleep performance " + (sleepPerf?.takeIf { it.isFinite() }?.let { "${(it * 100).roundToInt()}%" } ?: NO_DATA) + garminScore(day))
+        lines.add(metric("Respiration", " brpm", day?.let(RESP), w.mean(RESP), ::one, absolute(" brpm", 1)))
+        lines.add(metric("Body Battery at wake", "", day?.bodyBatteryWake?.toDouble(), w.mean({ it.bodyBatteryWake?.toDouble() }), ::whole, absolute("", 0)))
+        running(metric("Avg stress", "", day?.stressAvg?.toDouble(), w.mean({ it.stressAvg?.toDouble() }), ::whole, absolute("", 0)))
+        val steps = metric("Steps", "", day?.steps?.toDouble(), w.mean({ it.steps?.toDouble() }, { it > 0 }), ::grouped, ::pct)
+        running(if (live && day?.steps != null) "$steps, so far today" else steps)
+        val load = load(date)
+        val (strain, strainTarget) = strainLine(score, load?.first?.state, live)
+        lines.add(strain, if (live) strainTarget else strain)
+        val (battery, batteryCharged) = batteryLine(day, date)
+        lines.add(battery, if (live) batteryCharged else battery)
+        // Fitness and fatigue for a date are built from the days before it, so this line holds all day.
+        lines.add(trainingLine(load?.first))
+        load?.second?.let { running(weekLine(it)) }
+        val activities = db.activityDao().byDay(date)
+        if (activities.isEmpty()) {
+            lines.add("Activities: none")
+        } else {
+            lines.add("Activities:")
+            activities.forEach { lines.add("- " + describe(it, fmt, strain = db.activityScoreDao().get(it.id)?.strain)) }
         }
-        return pack(scope, body.joinToString("\n"), "", facts, fmt)
+        return pack(scope, lines.text(), "", facts, fmt, basisBody = lines.basis())
     }
 
     private fun recoveryLine(score: ScoreEntity?): String {
@@ -166,19 +221,23 @@ class ContextPacks(
 
     private fun garminScore(day: DayEntity?) = day?.sleepScore?.let { " (Garmin sleep score $it)" }.orEmpty()
 
-    private fun strainLine(score: ScoreEntity?, state: FormState?, isToday: Boolean): String {
-        if (score == null) return "Strain $NO_DATA"
+    /** The line, and the line without the running number ("Strain 8.4 so far; target 14.0–18.0" and "Strain target 14.0–18.0"). */
+    private fun strainLine(score: ScoreEntity?, state: FormState?, isToday: Boolean): Pair<String, String> {
+        if (score == null) return "Strain $NO_DATA".let { it to it }
         val stored = score.strainTargetLow?.let { lo -> score.strainTargetHigh?.let { hi -> lo..hi } }
         val eased = stored?.let { TrainingLoad.easedTarget(it, state) }
-        val target = (eased ?: stored)?.let { "; target ${one(it.start)}–${one(it.endInclusive)}" + if (eased != null) " (eased: overreaching week)" else "" }
-        return "Strain ${one(score.strain)}" + (if (isToday) " so far" else "") + (target ?: "; target $NO_DATA")
+        val target =
+            (eased ?: stored)?.let { "target ${one(it.start)}–${one(it.endInclusive)}" + if (eased != null) " (eased: overreaching week)" else "" }
+                ?: "target $NO_DATA"
+        return "Strain ${one(score.strain)}" + (if (isToday) " so far" else "") + "; $target" to "Strain $target"
     }
 
-    private suspend fun batteryLine(day: DayEntity?, date: LocalDate): String {
+    /** The line, and the line without the latest level and what has drained so far. */
+    private suspend fun batteryLine(day: DayEntity?, date: LocalDate): Pair<String, String> {
         val curve = repository.bodyBatteryCurve(date).first().map { it.second }
         val drained = if (curve.size >= 2) curve.zipWithNext { a, b -> maxOf(0, a - b) }.sum() else null
-        return "Body Battery: charged " + (day?.bodyBatteryCharged?.let { "+$it" } ?: NO_DATA) +
-            ", latest " + (curve.lastOrNull() ?: NO_DATA) + ", drained " + (drained?.let { "−$it" } ?: NO_DATA)
+        val charged = "Body Battery: charged " + (day?.bodyBatteryCharged?.let { "+$it" } ?: NO_DATA)
+        return charged + ", latest " + (curve.lastOrNull() ?: NO_DATA) + ", drained " + (drained?.let { "−$it" } ?: NO_DATA) to charged
     }
 
     private fun trainingLine(d: TrainingLoadDay?): String = when {

@@ -83,8 +83,16 @@ corrected for the ones marked (spec).
 - No Nano fallback after a NEEDS_HISTORY escalation, a Nano-failure escalation or More detail, to avoid loops and
   duplicate answers. Costs an error instead of a weaker answer in those rare cases.
 - Nano `BUSY` is retried once after 1 s in every mode. Costs a 1 s wait.
-- An insight cache hit accepts a row whose fingerprint matches either the compact or the full pack, so a cached insight
-  survives a mode change as §7.1 asks. Costs one extra pack build per page open.
+- (Superseded, see the next entry.) An insight cache hit accepted a row whose fingerprint matched either the compact or
+  the full pack, so a cached insight survives a mode change as §7.1 asks.
+- (Changed after the plan, owner-approved.) The insight fingerprint is `SHA-256(PROMPT_VERSION + "\n" + Pack.basis)` of the
+  **compact** pack, whichever engine ran, and a hit is one comparison. `Pack.basis` is the text minus Today's running
+  totals while the date is today (steps, strain so far, Body Battery latest and drained, average stress, the "This week"
+  percentage), so hourly syncs no longer regenerate the Today insight. A new activity, or its strain once scored, still
+  does. The insight flow also stays open: `ContextPacks.basisChanges` re-checks the basis as the Room rows change and
+  `InsightService` regenerates in place while the card is on screen (spec §7.1). Costs: one more pack build per page open
+  and per tick; a sync that writes an activity and then its score can regenerate twice (the first run is cancelled); the
+  first Today insight after this update regenerates once, because old fingerprints hashed the whole text.
 - Hidden conditions are checked before the cache (§7.1 order), so Cloud only while offline hides even a cached insight.
   Costs not showing cached text offline in that mode.
 - (spec) The add-key hint in Settings requires that no key is set; the spec said only "On-device only and Nano Ready".

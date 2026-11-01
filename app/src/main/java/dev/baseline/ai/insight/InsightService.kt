@@ -27,11 +27,14 @@ import dev.baseline.ai.engine.insightMessage
 import dev.baseline.data.db.AiInsightDao
 import dev.baseline.data.db.AiInsightEntity
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import java.security.MessageDigest
 import java.time.Clock
 
@@ -47,19 +50,25 @@ sealed interface InsightState {
     data class Failed(val message: String) : InsightState
 }
 
-/** Lowercase hex SHA-256 of the prompt version and the pack text. A new version or new data gives a new fingerprint (spec §7.1). */
-fun fingerprint(pack: String): String = MessageDigest
+/**
+ * Lowercase hex SHA-256 of the prompt version and a pack's basis (the pack text without its volatile lines, spec §7.1).
+ * A new version or a change in the stable lines gives a new fingerprint.
+ */
+fun fingerprint(basis: String): String = MessageDigest
     .getInstance("SHA-256")
-    .digest("${Prompts.PROMPT_VERSION}\n$pack".toByteArray())
+    .digest("${Prompts.PROMPT_VERSION}\n$basis".toByteArray())
     .joinToString("") { "%02x".format(it) }
 
 private const val NANO_BUSY_RETRY_MILLIS = 1_000L
 private const val INSIGHT_USER_TURN = "Write the insight."
 
 /**
- * The insight cards' source (spec §7.1): a cached insight per page, regenerated when the page's data or the prompt version changes.
- * [insight] reads the mode, key and connectivity once when collected; the card collects again on Retry or when the page reopens.
+ * The insight cards' source (spec §7.1): a cached insight per page, regenerated when the page's stable data or the prompt version
+ * changes. Running totals that move on every sync (today's steps, strain so far …) are not part of that. [insight] stays open
+ * while the card is collected: [basisChanges] ticks when the page's stable lines change and the insight is regenerated in place.
+ * Each run reads the mode, key and connectivity afresh; Retry and reopening the page collect again.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class InsightService(
     private val pack: suspend (AskScope, PackSize) -> Pack,
     private val nano: NanoEngine,
@@ -69,6 +78,8 @@ class InsightService(
     private val keyStatus: Flow<AiKeyStatus>,
     private val online: Flow<Boolean>,
     private val clock: Clock,
+    /** Emits once when collected, then each time the scope's pack basis changes. The default never changes. */
+    private val basisChanges: (AskScope) -> Flow<Unit> = { flowOf(Unit) },
     private val delay: suspend (Long) -> Unit = { kotlinx.coroutines.delay(it) },
 ) {
     constructor(
@@ -80,7 +91,7 @@ class InsightService(
         keyStatus: Flow<AiKeyStatus>,
         online: Flow<Boolean>,
         clock: Clock,
-    ) : this({ scope, size -> packs.build(scope, size) }, nano, cloud, dao, mode, keyStatus, online, clock)
+    ) : this({ scope, size -> packs.build(scope, size) }, nano, cloud, dao, mode, keyStatus, online, clock, packs::basisChanges)
 
     private sealed interface Attempt {
         data class Done(val text: String, val label: EngineLabel) : Attempt
@@ -91,13 +102,21 @@ class InsightService(
     /** One generation: the pack and request for one engine. */
     private class Plan(val kind: EngineKind, val pack: Pack, val request: AiRequest)
 
-    /** Cold. Cancelling the collector cancels generation, and nothing is written after that. */
-    fun insight(scope: AskScope): Flow<InsightState> = flow {
-        val key = scope.insightKey()
+    /**
+     * Cold, and open-ended for a scope with a card: a change of the basis cancels the run in progress and starts the next.
+     * Cancelling the collector cancels generation, and nothing is written after that.
+     */
+    fun insight(scope: AskScope): Flow<InsightState> {
+        val key = scope.insightKey() ?: return flowOf(InsightState.Hidden)
+        return basisChanges(scope).flatMapLatest { flow { generate(scope, key) } }
+    }
+
+    /** One pass: Hidden, the cached insight, or a generation. */
+    private suspend fun FlowCollector<InsightState>.generate(scope: AskScope, key: Pair<String, String>) {
         val aiMode = mode.first()
-        if (key == null || aiMode == null || aiMode == AiMode.OFF) {
+        if (aiMode == null || aiMode == AiMode.OFF) {
             emit(InsightState.Hidden)
-            return@flow
+            return
         }
         val keySet = keyStatus.first() is AiKeyStatus.Set
         val isOnline = online.first()
@@ -124,14 +143,15 @@ class InsightService(
             )
         if ((!compact.hasData && !full.hasData) || route is Route.Note || route is Route.Error) {
             emit(InsightState.Hidden)
-            return@flow
+            return
         }
 
-        // The cached text is shown whichever pack it came from, so a mode change alone doesn't regenerate it (spec §7.1).
+        // Both engines fingerprint the compact basis, so a mode change alone doesn't regenerate the cached text (spec §7.1).
+        val fingerprint = fingerprint(compact.basis)
         val cached = dao.get(key.first, key.second)
-        if (cached != null && (cached.fingerprint == fingerprint(compact.text) || cached.fingerprint == fingerprint(full.text))) {
+        if (cached != null && cached.fingerprint == fingerprint) {
             emit(InsightState.Ready(cached.text, EngineLabel(if (cached.engine == "nano") EngineKind.NANO else EngineKind.CLOUD, cached.model)))
-            return@flow
+            return
         }
 
         val hybrid = aiMode == AiMode.HYBRID
@@ -158,17 +178,16 @@ class InsightService(
                 val next = run(second)
                 // Nano is the engine the user preferred; when both fail, the cloud's reason is the one worth showing.
                 attempt = if (next is Attempt.Failed && second.kind == EngineKind.NANO) attempt else next
-                if (next is Attempt.Failed && next.failure == AiFailure.NanoBackground) return@flow
+                if (next is Attempt.Failed && next.failure == AiFailure.NanoBackground) return
             }
         }
         when (attempt) {
             is Attempt.Done -> {
-                val used = if (attempt.label.kind == EngineKind.NANO) nanoPlan else cloudPlan
                 dao.put(
                     AiInsightEntity(
                         key.first,
                         key.second,
-                        fingerprint(used.pack.text),
+                        fingerprint,
                         attempt.text,
                         if (attempt.label.kind == EngineKind.NANO) "nano" else "cloud",
                         attempt.label.model,
