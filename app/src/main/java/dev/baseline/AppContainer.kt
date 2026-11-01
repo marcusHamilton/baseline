@@ -10,7 +10,12 @@ import androidx.work.WorkManager
 import dev.baseline.ai.AiKeyEntry
 import dev.baseline.ai.AiKeyVault
 import dev.baseline.ai.AiPrefs
+import dev.baseline.ai.applyAiDefaults
 import dev.baseline.ai.engine.CloudEngine
+import dev.baseline.ai.engine.MlKitNanoBackend
+import dev.baseline.ai.engine.NanoBackend
+import dev.baseline.ai.engine.NanoEngine
+import dev.baseline.ai.engine.NanoStatus
 import dev.baseline.ai.engine.NoTools
 import dev.baseline.data.Repository
 import dev.baseline.data.db.AppDatabase
@@ -40,6 +45,7 @@ import dev.baseline.update.updatesEnabled
 import dev.baseline.widget.WidgetUpdater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -51,6 +57,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import java.time.Clock
@@ -148,8 +155,18 @@ open class AppContainer(context: Context, val clock: Clock = SystemZoneClock) {
     open val aiKeyVault by lazy { AiKeyVault(dataStore, aead::encrypt, aead::decrypt) }
     open val aiPrefs by lazy { AiPrefs(dataStore) }
 
-    // Task 6 (the Nano engine) replaces `{ false }` with the engine's availability.
-    val aiKeyEntry by lazy { AiKeyEntry(aiHttp, aiKeyVault, aiPrefs, nanoSupported = { false }, allowLoopbackHttp = BuildConfig.ALLOW_LOOPBACK_HTTP) }
+    // open: tests swap in a fake; ML Kit can't load on the JVM.
+    open val nanoBackend: NanoBackend by lazy { MlKitNanoBackend() }
+    val nanoEngine by lazy { NanoEngine(nanoBackend, clock, dateTicker.zone) }
+
+    val aiKeyEntry by lazy {
+        AiKeyEntry(aiHttp, aiKeyVault, aiPrefs, nanoSupported = {
+            nanoEngine.status.value !is NanoStatus.Unavailable
+        }, allowLoopbackHttp = BuildConfig.ALLOW_LOOPBACK_HTTP)
+    }
+
+    /** Checks Nano and settles the AI mode defaults (spec: AI assistant §3.1). Call once on app start; join the [Job] to wait for it. */
+    fun startAi(): Job = appScope.launch { applyAiDefaults(nanoEngine, aiPrefs) }
 
     // open: tests swap in a fake. The tool runner becomes HealthTools later.
     open val cloudEngine by lazy { CloudEngine(aiHttp, aiKeyVault, NoTools, aiOnline::value) }

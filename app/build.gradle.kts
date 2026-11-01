@@ -134,6 +134,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.garmin.fit)
+    implementation(libs.mlkit.genai.prompt)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.vico.compose.m3)
     implementation(libs.maplibre)

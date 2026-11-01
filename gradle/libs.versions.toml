@@ -23,6 +23,7 @@ maplibre = "13.7.1"
 profileinstaller = "1.4.1"
 spotless = "8.10.4"
 ktlint = "1.8.0"
+mlkitGenaiPrompt = "1.0.0-beta5"
 
 [libraries]
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
@@ -50,6 +51,7 @@ androidx-work-testing = { module = "androidx.work:work-testing", version.ref = "
 vico-compose-m3 = { module = "com.patrykandpatrick.vico:compose-m3", version.ref = "vico" }
 maplibre = { module = "org.maplibre.gl:android-sdk", version.ref = "maplibre" }
 androidx-profileinstaller = { module = "androidx.profileinstaller:profileinstaller", version.ref = "profileinstaller" }
+mlkit-genai-prompt = { module = "com.google.mlkit:genai-prompt", version.ref = "mlkitGenaiPrompt" }
 garmin-fit = { module = "com.garmin:fit", version.ref = "garminFit" }
 junit = { module = "junit:junit", version.ref = "junit" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }

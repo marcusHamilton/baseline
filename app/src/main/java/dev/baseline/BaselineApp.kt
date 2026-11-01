@@ -32,6 +32,8 @@ class BaselineApp :
         UpdateDownloadWorker.createChannel(this)
         // Tidies up after an update, then keeps the daily release check in step with Settings.
         container.updater.start()
+        // Checks Gemini Nano and settles the AI mode defaults.
+        container.startAi()
         // Midnight and clock/timezone changes while the process is alive; MainActivity.onResume covers the rest.
         val dateChanged =
             object : BroadcastReceiver() {
