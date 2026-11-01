@@ -53,6 +53,8 @@ android {
         val releasesUrl = "https://api.github.com/repos/marcusHamilton/baseline/releases/latest"
         buildConfigField("String", "DEFAULT_UPDATES_URL", "\"$releasesUrl\"")
         buildConfigField("String", "UPDATES_URL", "\"${fakeUpdatesUrl ?: releasesUrl}\"")
+        // Test builds also accept http://127.0.0.1 and http://localhost as an AI base URL (the fake LLM server); a release never does.
+        buildConfigField("boolean", "ALLOW_LOOPBACK_HTTP", "$testBuild")
         manifestPlaceholders["cleartext"] = testBuild
         if (testBuild) versionNameSuffix = "-fake"
     }

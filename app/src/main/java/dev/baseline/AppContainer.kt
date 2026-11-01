@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import dev.baseline.ai.AiKeyEntry
 import dev.baseline.ai.AiKeyVault
 import dev.baseline.ai.AiPrefs
 import dev.baseline.ai.engine.CloudEngine
@@ -146,6 +147,9 @@ open class AppContainer(context: Context, val clock: Clock = SystemZoneClock) {
     // open: tests swap in a keyed vault and in-memory prefs.
     open val aiKeyVault by lazy { AiKeyVault(dataStore, aead::encrypt, aead::decrypt) }
     open val aiPrefs by lazy { AiPrefs(dataStore) }
+
+    // Task 6 (the Nano engine) replaces `{ false }` with the engine's availability.
+    val aiKeyEntry by lazy { AiKeyEntry(aiHttp, aiKeyVault, aiPrefs, nanoSupported = { false }, allowLoopbackHttp = BuildConfig.ALLOW_LOOPBACK_HTTP) }
 
     // open: tests swap in a fake. The tool runner becomes HealthTools later.
     open val cloudEngine by lazy { CloudEngine(aiHttp, aiKeyVault, NoTools, aiOnline::value) }
