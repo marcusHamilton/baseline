@@ -164,8 +164,9 @@ A page, `ui/settings/AiKeyScreen`, opened from Settings like the other sub-pages
 
 1. **Connection:**
    - **Base URL** (pre-filled with `https://openrouter.ai/api/v1`) and **API key**.
-   - **Continue** checks the URL: it must be `https://`. Debug builds also accept `http://127.0.0.1` and
-     `http://localhost` for the fake server (§11.2). It then fetches `GET {baseUrl}/models` with the key.
+   - **Continue** checks the URL: it must be `https://`. Test builds (made with `-PgarminBaseUrl`, which already
+     allow cleartext and are never released) also accept `http://127.0.0.1` and `http://localhost` for the fake server
+     (§11.2). It then fetches `GET {baseUrl}/models` with the key.
 2. **Model:**
    - A searchable list.
    - When the response has OpenRouter's fields, each row shows the price of a typical question (10,000 input tokens
@@ -203,7 +204,7 @@ Each page reports its **Ask scope** to the nav host. The sheet title and the con
 
 | Page | Scope | Sheet title |
 |---|---|---|
-| Today (the shown date) | `Today(date)` | "Ask about today", or "Ask about Mon 27 Oct" for a past day |
+| Today (the shown date) | `Today(date)` | "Ask about today", or "Ask about Tue 27 Oct" for a past day |
 | Sleep detail | `Sleep(date)` | "Ask about last night", or "Ask about the night of 27 Oct" |
 | Activity detail | `Activity(id)` | "Ask about this run", "this ride", "this swim", "this session" (strength) or "this activity" |
 | Trends | `Trends(range)` | "Ask about your trends" |
@@ -372,7 +373,7 @@ transition (§3.1).
 Every pack starts with a header:
 
 ```
-Today is Sat 1 Nov 2026 (Europe/London). Units: metric.
+Today is Sun 1 Nov 2026 (Europe/London). Units: metric.
 Scope: sleep, night of Fri 31 Oct.
 Glossary: Recovery 0–100% (green ≥67, amber 34–66, red ≤33) from HRV, resting HR, sleep and breathing vs 30-day baselines.
 Strain 0–21 (90th-percentile day ≈ 17). Sleep performance = sleep vs need. Fitness/Fatigue = 42/7-day load averages;
@@ -669,9 +670,9 @@ ui/settings/AiCard.kt, AiKeyScreen.kt, AiKeyViewModel.kt
 - It logs method, path, status and the request's size in tokens (never the body).
 - `tools/test_fake_llm.py` covers it.
 
-Debug builds accept `http://127.0.0.1` and `http://localhost` as base URLs, through a debug-only network security
-config that permits cleartext to those hosts only. Use it with `adb reverse tcp:8090 tcp:8090` and the base URL
-`http://127.0.0.1:8090/v1`, next to `fake_garmin.py`. This covers Cloud only mode, Settings, the sheet, insights and
+Test builds made with `-PgarminBaseUrl` accept `http://127.0.0.1` and `http://localhost` as base URLs. Those builds
+already allow cleartext traffic for the fake Garmin server and are never released (`BuildConfig.ALLOW_LOOPBACK_HTTP`).
+Use it with `adb reverse tcp:8090 tcp:8090` and the base URL `http://127.0.0.1:8090/v1`, next to `fake_garmin.py`. This covers Cloud only mode, Settings, the sheet, insights and
 the error rows end to end.
 
 ### 11.3 On the owner's phone (Pixel 11 Pro) and the second user's (Pixel 10 Pro)
