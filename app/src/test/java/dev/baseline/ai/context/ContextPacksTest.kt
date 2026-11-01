@@ -20,8 +20,13 @@ import dev.baseline.prefs.UserPrefs
 import dev.baseline.scores.StrainCalibration
 import dev.baseline.testutil.ScopeCleanup
 import dev.baseline.testutil.inMemoryDatabase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -53,12 +58,13 @@ class ContextPacksTest {
     private lateinit var prefs: UserPrefs
     private lateinit var file: File
     private lateinit var packs: ContextPacks
+    private lateinit var store: DataStore<Preferences>
 
     @Before
     fun setUp() {
         db = inMemoryDatabase(ApplicationProvider.getApplicationContext())
         file = File.createTempFile("packs", ".preferences_pb").also { it.delete() }
-        val store: DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = scopes.storeScope) { file }
+        store = PreferenceDataStoreFactory.create(scope = scopes.storeScope) { file }
         prefs = UserPrefs(store)
         val repo = Repository(db, prefs, ApiKeyVault(store, { it }, { it }, Clock.systemUTC()))
         packs = ContextPacks(db, repo, prefs, MutableStateFlow(today), MutableStateFlow(zone))
@@ -73,6 +79,9 @@ class ContextPacksTest {
     }
 
     private fun at(date: LocalDate, h: Int, m: Int): Instant = date.atTime(LocalTime.of(h, m)).toInstant(ZoneOffset.UTC)
+
+    /** Bedtimes are local: the clocks went back on 25 Oct, and a fixed UTC bedtime would move an hour on the clock. */
+    private fun local(date: LocalDate, h: Int, m: Int): Instant = date.atTime(LocalTime.of(h, m)).atZone(zone).toInstant()
 
     /** 120 days up to [today]; every day before today is identical, so the baselines are exact (HRV 53 ms, RHR 54 bpm). */
     private suspend fun seed(days: Int = 120) {
@@ -97,8 +106,8 @@ class ContextPacksTest {
                     awakeSeconds = 900,
                     sleepScore = 80,
                     sleepNeedMinutes = 450,
-                    sleepStart = at(d.minusDays(1), 23, 0),
-                    sleepEnd = at(d, 6, 30),
+                    sleepStart = local(d.minusDays(1), 23, 0),
+                    sleepEnd = local(d, 6, 30),
                     spo2Avg = 95.0,
                     hrvLastNight = if (now) 58.0 else 53.0,
                 ),
@@ -216,7 +225,7 @@ class ContextPacksTest {
             assertTrue(t, "Garmin training load 120" in t)
             assertEquals(t, 20, t.lines().count { it.startsWith("- lap") })
         }
-        assertEquals(3, compact.lines().count { it.startsWith("- prev ") })
+        assertEquals(0, compact.lines().count { it.startsWith("- prev ") })
         assertEquals(10, full.lines().count { it.startsWith("- prev ") })
     }
 
@@ -266,8 +275,11 @@ class ContextPacksTest {
         assertTrue(full, "7h 0m asleep vs need 7h 30m" in full)
         assertTrue(full, "Bed 23:00, wake 06:30" in full)
         assertTrue(full, "Garmin score 80" in full)
-        assertEquals(7, compact.lines().count { it.startsWith("- night of ") })
+        // Compact sums the week up in one line; full has a row per night.
+        assertEquals(0, compact.lines().count { it.startsWith("- night of ") })
+        assertTrue(compact, "Last 7 nights: average 7h 26m asleep, performance 99%." in compact)
         assertEquals(30, full.lines().count { it.startsWith("- night of ") })
+        assertTrue(full, "Recovery the morning after: 71% (green)" in full)
     }
 
     @Test
@@ -290,6 +302,11 @@ class ContextPacksTest {
             seed()
             for (i in 0L..11L) run(900 + i, i * 2)
             db.lapDao().insertAll(laps(900, 45))
+            // Every link at once: a hard day before with a late run, a late bedtime, short nights and a run of low HRV.
+            run(950, 1, hour = 21, minute = 0)
+            db.scoreDao().upsert(db.scoreDao().get(today.minusDays(1))!!.copy(strain = 15.0))
+            db.dayDao().upsert(db.dayDao().get(today)!!.copy(sleepStart = local(today, 1, 0), hrvLastNight = 45.0))
+            for (i in 1L..3L) db.dayDao().upsert(db.dayDao().get(today.minusDays(i))!!.copy(sleepSeconds = 25000, hrvLastNight = 45.0))
         }
         val all =
             listOf(
@@ -484,5 +501,132 @@ class ContextPacksTest {
         } finally {
             TimeZone.setDefault(original)
         }
+    }
+
+    // ---- Links across pages ----
+
+    @Test
+    fun aNormalDayHasNoLinks() {
+        runBlocking { seed() }
+        for (scope in listOf(AskScope.Today(today), AskScope.Sleep(today))) {
+            for (size in PackSize.entries) {
+                val t = text(scope, size)
+                assertTrue(t, "Links: nothing unusual on the days around it." in t)
+            }
+        }
+    }
+
+    @Test
+    fun aHardDayAndALateWorkoutLinkToTheNightAndTheMorning() {
+        runBlocking {
+            seed()
+            // Yesterday: a 21:00 run (52 min, so it ended 1h 8m before the 23:00 bedtime) on a day far harder than usual.
+            run(900, 1, hour = 21, minute = 0)
+            db.scoreDao().upsert(db.scoreDao().get(today.minusDays(1))!!.copy(strain = 15.0))
+        }
+        for (scope in listOf(AskScope.Today(today), AskScope.Sleep(today))) {
+            for (size in PackSize.entries) {
+                val t = text(scope, size)
+                assertTrue(t, "Links (from other pages; possible causes, not proof):" in t)
+                assertTrue(t, "- The day before (Sat 31 Oct) was harder than usual: day strain 15.0 vs 30-day average 8.4; Run, Sat 31 Oct 21:00, " in t)
+                assertTrue(t, "- Run, strain 9.1, ended 1h 8m before bed." in t)
+                // HRV was 58 ms against 53: the model is told it held up, so it can't credit the hard day for it.
+                assertTrue(t, "- Despite these, overnight HRV held up (+9% vs baseline): they don't show a toll." in t)
+            }
+        }
+        // A day only a little harder than usual is no link.
+        runBlocking { db.scoreDao().upsert(db.scoreDao().get(today.minusDays(1))!!.copy(strain = 10.0)) }
+        assertFalse("The day before" in text(AskScope.Sleep(today), PackSize.COMPACT))
+    }
+
+    @Test
+    fun aLateBedtimeShortNightsAndARunOfLowHrvAreLinks() {
+        runBlocking {
+            seed()
+            db.dayDao().upsert(db.dayDao().get(today)!!.copy(sleepStart = local(today, 1, 0), hrvLastNight = 45.0))
+            for (i in 1L..3L) db.dayDao().upsert(db.dayDao().get(today.minusDays(i))!!.copy(sleepSeconds = 25000, hrvLastNight = 45.0))
+        }
+        val t = text(AskScope.Today(today), PackSize.COMPACT)
+        assertTrue(t, "- Bed 01:00, 2h 0m later than usual (23:00, the median of the last 14 nights)." in t)
+        assertTrue(t, "- The 3 nights before were short: 1h 40m under need in total." in t)
+        assertTrue(t, "- HRV below baseline 4 days running." in t)
+        assertTrue(t, "- Overnight HRV came in −14% vs baseline, as these usually make it." in t)
+        val sleep = text(AskScope.Sleep(today), PackSize.COMPACT)
+        assertTrue(sleep, "- Bed 01:00, 2h 0m later than usual" in sleep)
+    }
+
+    @Test
+    fun anActivityKnowsTheMorningBeforeAndTheNightAfter() {
+        runBlocking {
+            seed()
+            run(900, 1)
+            run(901, 0)
+        }
+        for (size in PackSize.entries) {
+            val y = text(AskScope.Activity(900, SportFamily.RUN), size)
+            assertTrue(y, "- Going in: recovery that morning 60% (amber); sleep the night before 7h 30m, 100% of need." in y)
+            assertTrue(y, "- Day strain that day 8.4 vs 30-day average 8.4." in y)
+            assertTrue(
+                y,
+                "- The night after: 7h 0m asleep, 93% of need; HRV 58 ms vs 30-day baseline 53 ms (+9%); " +
+                    "resting HR 52 bpm vs 30-day baseline 54 bpm (−2 bpm); recovery next morning 71% (green)." in y,
+            )
+            val t = text(AskScope.Activity(901, SportFamily.RUN), size)
+            assertTrue(t, "- The night after: not recorded yet." in t)
+        }
+    }
+
+    @Test
+    fun aRankAmongTooFewSessionsIsLeftOut() {
+        runBlocking {
+            seed()
+            run(900, 0, distance = 20000.0)
+            for (i in 1L..3L) run(900 + i, i * 2, distance = 4000.0 + i * 1000)
+        }
+        assertFalse(text(AskScope.Activity(900, SportFamily.RUN), PackSize.COMPACT).contains("longest distance"))
+    }
+
+    /** Collects [scope]'s basis ticks, runs [change], and says whether another tick came within a few seconds. */
+    private fun ticksAfter(scope: AskScope, change: suspend () -> Unit): Boolean = runBlocking {
+        val live =
+            ContextPacks(
+                db,
+                Repository(
+                    db,
+                    prefs,
+                    ApiKeyVault(store, {
+                        it
+                    }, { it }, Clock.systemUTC()),
+                ),
+                prefs,
+                MutableStateFlow(today),
+                MutableStateFlow(zone),
+                0L,
+            )
+        val ticks = Channel<Unit>(Channel.UNLIMITED)
+        val job = launch(Dispatchers.Default) { live.basisChanges(scope).collect { ticks.send(it) } }
+        withTimeout(10_000) { ticks.receive() }
+        change()
+        val again = withTimeoutOrNull(5_000) { ticks.receive() } != null
+        job.cancel()
+        again
+    }
+
+    @Test
+    fun sleepInsightRefreshesWhenTheDayBeforeIsScored() {
+        runBlocking {
+            seed()
+            run(900, 1)
+        }
+        assertTrue(ticksAfter(AskScope.Sleep(today)) { db.scoreDao().upsert(db.scoreDao().get(today.minusDays(1))!!.copy(strain = 15.0)) })
+    }
+
+    @Test
+    fun activityInsightRefreshesWhenTheNightAfterArrives() {
+        runBlocking {
+            seed()
+            run(900, 2)
+        }
+        assertTrue(ticksAfter(AskScope.Activity(900, SportFamily.RUN)) { db.dayDao().upsert(db.dayDao().get(today.minusDays(1))!!.copy(hrvLastNight = 40.0)) })
     }
 }

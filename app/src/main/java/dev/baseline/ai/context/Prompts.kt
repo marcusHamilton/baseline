@@ -4,7 +4,7 @@ import dev.baseline.ai.engine.EngineKind
 
 /** The system prompts (spec §5.3). Bump [PROMPT_VERSION] on any wording change: it is part of the insight cache fingerprint. */
 object Prompts {
-    const val PROMPT_VERSION = 4
+    const val PROMPT_VERSION = 7
 
     /** What Nano replies, and nothing else, when the question needs data beyond the page it was shown. */
     const val NEEDS_HISTORY = "NEEDS_HISTORY"
@@ -31,12 +31,34 @@ object Prompts {
         If answering needs data that isn't shown below, reply with exactly $NEEDS_HISTORY.
         """.trimIndent()
 
-    /** An activity has no baseline: it is read against the user's records and earlier sessions of the sport. */
+    private const val INSIGHT_RULES =
+        "A hard day, a late workout, a late bedtime and short nights usually lower HRV, sleep and recovery: when the result went " +
+            "the other way, say it held up despite them, not because of them. A change of less than 10% from baseline is normal; " +
+            "don't lead with it. Quote the numbers behind each point. " +
+            "Present a link as \"likely\" or \"may\", never as certain, and use only the Links lines for it, " +
+            "but don't mention \"Links\" or \"the data\" in the answer. Make each point once. " +
+            "No greeting, no opener such as \"The most useful insight\", and no advice. " +
+            "Don't say \"significant\" or \"substantial\" without a figure. Mention a doctor only if something is clearly abnormal."
+
+    /** An activity has no baseline: it is read against the user's records, their usual session and the days around it. */
     private const val ACTIVITY_INSIGHT =
-        "In 2 short sentences, say what stands out about this activity. Lead with any all-time record it set or any ranking " +
-            "among their sessions (longest, fastest). Then say how hard it was: pace or speed against heart rate, time in zones " +
-            "and strain, compared with their previous sessions. Use the numbers; don't repeat the distance and time already shown. " +
-            "No greeting, no opener such as \"The most useful insight\", and no advice. If nothing stands out, say it was a typical session."
+        "In 2 or 3 short sentences, say what stands out about this activity and how it fits the days around it. " +
+            "Lead with any all-time record it set; say \"personal best\" only for a line under \"All-time records\". " +
+            "Then say how hard it was against their usual session, from the \"Against your usual\" line. " +
+            "Then use the Links: what they came in with, and how the night after and the next morning responded. " +
+            "Don't repeat the distance, time, pace or heart rate already shown. If nothing stands out, say it was a typical session. " +
+            INSIGHT_RULES
+
+    private const val SLEEP_INSIGHT =
+        "In 2 or 3 short sentences, explain this night. Say what was different about it (stages, timing, HRV, heart rate, breathing) " +
+            "and, if a Links line accounts for it (a hard day before, a late workout, a late bedtime, short nights before), tie the two " +
+            "together. Don't restate the sleep time, performance or Garmin score. If the night was near usual and Links has nothing, " +
+            "say it was a typical night. " + INSIGHT_RULES
+
+    private const val DAY_INSIGHT =
+        "In 2 or 3 short sentences, explain this day's recovery. Name what drove it and, from the Links lines, what is behind that " +
+            "(the day before, a late workout, a late bedtime, short nights, a run of low or high HRV). Don't restate the recovery score. " +
+            "If Links has nothing and no signal is far from its baseline, say it is a typical day. " + INSIGHT_RULES
 
     fun chat(engine: EngineKind): String = when (engine) {
         EngineKind.NANO -> NANO_CHAT
@@ -44,13 +66,9 @@ object Prompts {
     }
 
     /** The insight prompt for a page. Insights never use tools or NEEDS_HISTORY; General and Trends have no insight card and get the Today wording. */
-    fun insight(scope: AskScope): String {
-        if (scope is AskScope.Activity) return ACTIVITY_INSIGHT
-        val subject = if (scope is AskScope.Sleep) "this night" else "this day"
-        return "In 2 short sentences, name the one or two signals that moved furthest from their baseline for $subject, " +
-            "with their numbers and the baselines. Don't restate the headline score and don't give advice. " +
-            "Start with the finding: no greeting, and no opener such as \"The most useful insight\". " +
-            "Don't say \"significant\" or \"substantial\" without a figure. If nothing stands out, say it is a typical day. " +
-            "Mention a doctor only if something is clearly abnormal."
+    fun insight(scope: AskScope): String = when (scope) {
+        is AskScope.Activity -> ACTIVITY_INSIGHT
+        is AskScope.Sleep -> SLEEP_INSIGHT
+        else -> DAY_INSIGHT
     }
 }

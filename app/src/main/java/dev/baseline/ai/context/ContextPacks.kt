@@ -80,6 +80,17 @@ private const val NO_DATA = "no data"
 private const val MAX_LAPS = 20
 private const val MAX_EXERCISES = 12
 private const val MAX_SET_CHIPS = 8
+
+/** A ranking among fewer sessions than this says nothing ("fastest of 3 runs" read as a personal best). */
+private const val MIN_RANK_PEERS = 4
+
+/** A day's strain this far from its 30-day average, either way, is a link worth naming. */
+private const val NOTABLE_STRAIN = 3.0
+private const val LATE_WORKOUT_SECONDS = 3 * 3600L
+private const val BEDTIME_SHIFT_MINUTES = 45
+private const val SLEEP_DEBT_SECONDS = 90 * 60.0
+private const val HRV_BAND = 0.05
+private const val HRV_RUN_DAYS = 3
 private const val GLOSSARY =
     "Glossary: Recovery 0–100% (green ≥67, amber 34–66, red ≤33) from HRV, resting HR, sleep and breathing vs 30-day baselines.\n" +
         "Strain 0–21 (90th-percentile day ≈ 17). Sleep performance = sleep vs need. Fitness/Fatigue = 42/7-day load averages;\n" +
@@ -116,10 +127,20 @@ class ContextPacks(
     @OptIn(ExperimentalCoroutinesApi::class)
     fun basisChanges(scope: AskScope): Flow<Unit> {
         val reads: Flow<Unit> = when (scope) {
-            is AskScope.Today -> dayReads(scope.date)
-            AskScope.General -> today.flatMapLatest(::dayReads)
-            is AskScope.Sleep -> combine(repository.day(scope.date), repository.score(scope.date)) { _, _ -> }
-            is AskScope.Activity -> combine(repository.activity(scope.id), repository.activityScore(scope.id)) { _, _ -> }
+            is AskScope.Today -> todayReads(scope.date)
+
+            AskScope.General -> today.flatMapLatest(::todayReads)
+
+            is AskScope.Sleep -> nightReads(scope.date)
+
+            is AskScope.Activity ->
+                repository.activity(scope.id).map { it?.day }.distinctUntilChanged().flatMapLatest { date ->
+                    val around = date?.let {
+                        combine(repository.days(it.minusDays(1), it.plusDays(1)), repository.scores(it.minusDays(1), it.plusDays(1))) { _, _ -> }
+                    }
+                    combine(repository.activity(scope.id), repository.activityScore(scope.id), around ?: flowOf(Unit)) { _, _, _ -> }
+                }
+
             is AskScope.Trends -> return flowOf(Unit)
         }
         return settledBasis(reads, settleMillis) { build(scope, PackSize.COMPACT).basis }
@@ -127,6 +148,12 @@ class ContextPacks(
 
     private fun dayReads(date: LocalDate): Flow<Unit> =
         combine(repository.day(date), repository.score(date), repository.activitiesOn(date), repository.activityScores(date)) { _, _, _, _ -> }
+
+    /** The rows a night's Links read: the nights before it (bedtimes, short sleep) and the day before with its activities. */
+    private fun nightReads(wake: LocalDate): Flow<Unit> =
+        combine(repository.days(wake.minusDays(14), wake), repository.scores(wake.minusDays(1), wake), dayReads(wake.minusDays(1))) { _, _, _ -> }
+
+    private fun todayReads(date: LocalDate): Flow<Unit> = combine(dayReads(date), nightReads(date)) { _, _ -> }
 
     /** [AskScope.General] builds Today's pack for the current date. */
     suspend fun build(scope: AskScope, size: PackSize): Pack {
@@ -224,6 +251,8 @@ class ContextPacks(
             lines.add("Activities:")
             activities.forEach { lines.add("- " + describe(it, fmt, strain = db.activityScoreDao().get(it.id)?.strain)) }
         }
+        val history = w.history
+        links(nightLinks(date, day, history, fmt) + listOfNotNull(hrvRun(date, day, history, w.hrv))).forEach { lines.add(it) }
         return pack(scope, lines.text(), "", facts, fmt, basisBody = lines.basis())
     }
 
@@ -330,6 +359,28 @@ class ContextPacks(
             add("Body Battery charged " + (day.bodyBatteryCharged?.let { "+$it" } ?: NO_DATA))
             add("SpO2 " + (day.spo2Avg?.takeIf { it > 0 && it.isFinite() }?.let { "${it.roundToInt()}%" } ?: NO_DATA))
             add(metric("Respiration", " brpm", RESP(day), w.mean(RESP), ::one, absolute(" brpm", 1)))
+            score?.recovery?.let { add("Recovery the morning after: $it% (${RecoveryZone.of(it).name.lowercase()})") }
+            val overreaching = load(wake)?.first?.state == FormState.OVERREACHING
+            addAll(
+                links(
+                    nightLinks(wake, day, history, Formatters(repository.imperial.first())) +
+                        listOfNotNull("Training load is overreaching.".takeIf { overreaching }),
+                ),
+            )
+            if (size == PackSize.COMPACT) {
+                // A small model reads rows poorly: one line with the averages (spec §5.1).
+                val rows = nights.values.filter { SLEEP(it) != null }
+                val perfs = rows.mapNotNull { r ->
+                    (scores[r.date]?.sleepPerformance ?: SleepPerformance.of(r.sleepSeconds, r.sleepNeedMinutes))?.takeIf { it.isFinite() }
+                }
+                if (rows.isNotEmpty()) {
+                    add(
+                        "Last $n nights: average ${hm(rows.mapNotNull(SLEEP).average())} asleep" +
+                            (perfs.takeIf { it.isNotEmpty() }?.let { ", performance ${(it.average() * 100).roundToInt()}%" }.orEmpty()) + ".",
+                    )
+                }
+                return@buildList
+            }
             add("Last $n nights:")
             for (i in n - 1 downTo 0) {
                 val d = wake.minusDays(i.toLong())
@@ -360,6 +411,152 @@ class ContextPacks(
     }
 
     private fun clock(at: Instant?) = at?.atZone(zone.value)?.format(CLOCK) ?: NO_DATA
+
+    // ---- Links across pages ----
+
+    /** The Links block of a pack (spec §5.1): what other pages say about this one, or a line saying nothing stood out. */
+    private fun links(found: List<String>): List<String> = if (found.isEmpty()) {
+        listOf("Links: nothing unusual on the days around it.")
+    } else {
+        listOf("Links (from other pages; possible causes, not proof):") + found.map { "- $it" }
+    }
+
+    /** A day's strain and the average of the 30 days before it; null without a score or a week of history. */
+    private class DayStrain(val strain: Double, val usual: Double) {
+        val diff get() = strain - usual
+    }
+
+    private suspend fun dayStrain(date: LocalDate): DayStrain? {
+        val strain = db.scoreDao().get(date)?.strain ?: return null
+        val usual = repository.scores(date.minusDays(30), date.minusDays(1)).first().map { it.strain }.takeIf { it.size >= 7 }?.average()
+        return usual?.let { DayStrain(strain, it) }
+    }
+
+    /** "The day before (Sat 31 Oct) was much harder than usual: …" when its strain is [NOTABLE_STRAIN] or more from its average. */
+    private suspend fun dayBefore(date: LocalDate, fmt: Formatters): String? {
+        val before = date.minusDays(1)
+        val l = dayStrain(before)?.takeIf { abs(it.diff) >= NOTABLE_STRAIN } ?: return null
+        val activities = db.activityDao().byDay(before).map { describe(it, fmt, db.activityScoreDao().get(it.id)?.strain) }
+        return "The day before (${before.format(DAY)}) was ${if (l.diff > 0) "harder" else "lighter"} than usual: day strain " +
+            "${one(l.strain)} vs 30-day average ${one(l.usual)}" + activities.joinToString("") { "; $it" } + "."
+    }
+
+    /** Seconds from [a]'s end to [bed] when it ended no more than [LATE_WORKOUT_SECONDS] before it, else null. */
+    private fun beforeBed(a: ActivityEntity, bed: Instant?): Long? {
+        val gap = bed?.epochSecond?.minus(a.startGmt.epochSecond + a.durationSec.toLong()) ?: return null
+        return gap.takeIf { it in 0..LATE_WORKOUT_SECONDS }
+    }
+
+    /** Minutes after noon, so bedtimes either side of midnight compare (23:30 is 690, 00:30 is 750). */
+    private fun bedMinutes(at: Instant?): Int? = at?.atZone(zone.value)?.toLocalTime()?.let { (it.toSecondOfDay() / 60 + 720) % 1440 }
+
+    /**
+     * What explains the night that ended on [wake] (its row is [day]), worked out here because a small model can't find it in rows:
+     * the day before against its usual strain, a workout that ended close to bed, the bedtime against the usual one, and a run of
+     * short nights before it. A line is written only when it clears its threshold. [history] holds the days before [wake].
+     * When one of those strains showed up, a last line says whether the night's HRV dropped as they usually make it, or held up:
+     * Nano otherwise credited a hard day for a good night.
+     */
+    private suspend fun nightLinks(wake: LocalDate, day: DayEntity?, history: List<DayEntity>, fmt: Formatters): List<String> = buildList {
+        var strains = 0
+        dayBefore(wake, fmt)?.let {
+            add(it)
+            if (" harder " in it) strains++
+        }
+        val bed = day?.sleepStart
+        for (a in db.activityDao().byDay(wake.minusDays(1))) {
+            val gap = beforeBed(a, bed) ?: continue
+            val strain = db.activityScoreDao().get(a.id)?.strain?.let { ", strain ${one(it)}" }.orEmpty()
+            add("${sportLabel(a)}$strain, ended ${hm(gap.toDouble())} before bed.")
+            strains++
+        }
+        val mine = bedMinutes(bed)
+        val recent = history.filter { it.date >= wake.minusDays(14) }.mapNotNull { bedMinutes(it.sleepStart) }.sorted()
+        val usual = recent.takeIf { it.size >= 5 }?.let { it[it.size / 2] }
+        if (mine != null && usual != null && abs(mine - usual) >= BEDTIME_SHIFT_MINUTES) {
+            val usualClock = java.time.LocalTime.ofSecondOfDay(((usual + 720) % 1440) * 60L).format(CLOCK)
+            val shift = "${hm(abs(mine - usual) * 60.0)} ${if (mine > usual) "later" else "earlier"}"
+            add("Bed ${clock(bed)}, $shift than usual ($usualClock, the median of the last 14 nights).")
+            if (mine > usual) strains++
+        }
+        val short = (1L..3L).mapNotNull { i ->
+            history.firstOrNull { it.date == wake.minusDays(i) }?.let { d ->
+                d.sleepSeconds?.let { s -> d.sleepNeedMinutes?.takeIf { it > 0 }?.let { it * 60.0 - s } }
+            }
+        }
+        if (short.size == 3 && short.sum() >= SLEEP_DEBT_SECONDS) {
+            add("The 3 nights before were short: ${hm(short.sum())} under need in total.")
+            strains++
+        }
+        val hrv = day?.let(HRV)
+        val base = Window(wake, history).hrv
+        if (strains > 0 && hrv != null && base != null && base > 0) {
+            val change = pctText(((hrv / base - 1) * 100).roundToInt())
+            add(
+                if (hrv < base * (1 - HRV_BAND)) {
+                    "Overnight HRV came in $change vs baseline, as these usually make it."
+                } else {
+                    "Despite these, overnight HRV held up ($change vs baseline): they don't show a toll."
+                },
+            )
+        }
+    }
+
+    /** "HRV below baseline 4 days running" when [date] and the days before it sit more than [HRV_BAND] on the same side of [base]. */
+    private fun hrvRun(date: LocalDate, day: DayEntity?, history: List<DayEntity>, base: Double?): String? {
+        if (base == null) return null
+        val byDate = history.associateBy { it.date } + listOfNotNull(day).associateBy { it.date }
+        fun side(d: LocalDate): Int = byDate[d]?.let(HRV)?.let { v ->
+            when {
+                v < base * (1 - HRV_BAND) -> -1
+                v > base * (1 + HRV_BAND) -> 1
+                else -> 0
+            }
+        } ?: 0
+        val s = side(date).takeIf { it != 0 } ?: return null
+        val n = generateSequence(date) { it.minusDays(1) }.takeWhile { side(it) == s }.count()
+        return if (n >= HRV_RUN_DAYS) "HRV ${if (s < 0) "below" else "above"} baseline $n days running." else null
+    }
+
+    /**
+     * What surrounds an activity: what the user came in with (that morning's recovery and the night before), how hard the day before
+     * and the whole day were, and how the night after and the next morning responded, once they are recorded.
+     */
+    private suspend fun activityLinks(a: ActivityEntity, fmt: Formatters): List<String> = buildList {
+        val date = a.day
+        val next = date.plusDays(1)
+        val days = repository.days(date.minusDays(30), next).first()
+        val rows = days.associateBy { it.date }
+        val goingIn = listOfNotNull(
+            db.scoreDao().get(date)?.recovery?.let { "recovery that morning $it% (${RecoveryZone.of(it).name.lowercase()})" },
+            rows[date]?.let { d -> SLEEP(d)?.let { "sleep the night before ${hm(it)}" + needShare(d) } },
+        )
+        if (goingIn.isNotEmpty()) add("Going in: " + goingIn.joinToString("; ") + ".")
+        dayBefore(date, fmt)?.let(::add)
+        dayStrain(date)?.let { add("Day strain that day ${one(it.strain)} vs 30-day average ${one(it.usual)}.") }
+        val after = rows[next]?.takeIf { SLEEP(it) != null }
+        when {
+            next.isAfter(today.value) -> add("The night after: not recorded yet.")
+
+            after == null -> add("The night after: no sleep recorded.")
+
+            else -> {
+                val w = Window(next, days.filter { it.date < next })
+                val parts = listOfNotNull(
+                    "${hm(SLEEP(after)!!)} asleep" + needShare(after),
+                    beforeBed(a, after.sleepStart)?.let { "bed ${hm(it.toDouble())} after it ended" },
+                    metric("HRV", " ms", HRV(after), w.hrv, ::whole, ::pct),
+                    metric("resting HR", " bpm", RHR(after), w.rhr, ::whole, absolute(" bpm", 0)),
+                    db.scoreDao().get(next)?.recovery?.let { "recovery next morning $it% (${RecoveryZone.of(it).name.lowercase()})" },
+                )
+                add("The night after: " + parts.joinToString("; ") + ".")
+            }
+        }
+    }
+
+    /** ", 82% of need", or nothing without a need. */
+    private fun needShare(d: DayEntity): String =
+        SleepPerformance.of(d.sleepSeconds, d.sleepNeedMinutes)?.takeIf { it.isFinite() }?.let { ", ${(it * 100).roundToInt()}% of need" }.orEmpty()
 
     // ---- Activity ----
 
@@ -415,10 +612,12 @@ class ContextPacks(
             }
             val all = db.activityDao().list()
             addAll(standing(a, all, fmt))
+            addAll(links(activityLinks(a, fmt)))
+            // Compact leaves the rows out: "Against your usual" sums them up, and a small model compares against a single row.
             val previous = all
                 .filter { it.sportFamily == family && it.id != a.id && it.startGmt < a.startGmt }
                 .sortedByDescending { it.startGmt }
-                .take(if (size == PackSize.FULL) 10 else 3)
+                .take(if (size == PackSize.FULL) 10 else 0)
             if (previous.isNotEmpty()) {
                 add("Previous ${sportLabel(a).lowercase()} sessions:")
                 previous.forEach { p ->
@@ -474,7 +673,7 @@ class ContextPacks(
         ) {
             val mine = value(a)?.takeIf { it.isFinite() && it > 0 } ?: return
             val others = pool.mapNotNull { p -> value(p)?.takeIf { it.isFinite() && it > 0 }?.let { p to it } }
-            if (others.size < 2) return
+            if (others.size < MIN_RANK_PEERS) return
             val rank = others.count { if (higher) it.second > mine else it.second < mine } + 1
             if (rank > 3) return
             val nth = when (rank) {
@@ -757,7 +956,7 @@ class ContextPacks(
 private val NO_FACTS = PackFacts(null, null, null, null)
 
 /** The 30 days before [date], for the plain-mean baselines, and the Recovery baseline (HRV and RHR) where it exists. */
-private class Window(date: LocalDate, history: List<DayEntity>) {
+private class Window(date: LocalDate, val history: List<DayEntity>) {
     val recovery: Baseline? = Baselines.at(date, history)
     private val days = history.filter { it.date in date.minusDays(30)..date.minusDays(1) }
 

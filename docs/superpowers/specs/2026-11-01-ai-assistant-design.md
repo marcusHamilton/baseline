@@ -411,21 +411,44 @@ The body by scope:
   - Sleep performance, duration, need, bed and wake times, and Garmin's score.
   - Stage minutes against their 30-day averages.
   - Overnight HRV average, lowest HR, Body Battery charged, SpO₂ and respiration.
-  - The last 7 nights as one line each (date, duration, performance).
-  - The full pack adds the last 30 nights.
+  - That morning's recovery ("Recovery the morning after").
+  - Links (below), plus "Training load is overreaching." in an Overreaching week.
+  - Compact: the last 7 nights as one line of averages (duration, performance). Full: the last 30 nights, one line each.
 - **`Activity(id)`:**
   - Sport, local start time, duration, distance, average pace or speed, average and maximum HR, time in each HR zone,
     Baseline strain and Garmin's training load.
   - Splits or laps (at most 20 rows; longer lists are merged into even groups), and average cadence, power and stride
     where present.
   - For swims: a summary of the lengths (count, pace per 100 m, stroke rate, spread). For strength: sets per exercise.
-  - The 3 previous activities of the same sport as one line each.
-  - The full pack adds the 10 previous same-sport activities.
+  - Links (below): going in (that morning's recovery, the night before against need), the day before when it was far from
+    usual, the day's strain against its 30-day average, and the night after (sleep against need, bed time after the activity
+    when within 3 h, HRV and resting HR against baseline, next morning's recovery), or "not recorded yet".
+  - Rankings (longest, fastest of similar distance) only among at least 5 sessions of the sport; fewer say nothing.
+  - Full only: the 10 previous same-sport activities, one line each. Compact leaves them out: the "Against your usual" line
+    sums them up, and Nano compared this session with a single row (a 3.3-strain jog "slightly lower" than a 13.6 run).
 - **`Trends(range)`:**
   - Compact: summary statistics per metric (mean, minimum, maximum and the slope over the range) plus the last 14 days
     as rows.
   - Full: one row per day for the range (recovery, HRV, RHR, sleep performance, strain, fitness, fatigue, form).
 - **`General`:** the `Today(today)` pack.
+
+**Links** (Today, Sleep and Activity). The insights are only worth reading when they tie a page to the others ("a hard
+day and a late run, then a short night, then amber recovery"). Nano can't find that in rows, so `ContextPacks` works the
+links out and writes them as sentences under "Links (from other pages; possible causes, not proof):". A line is written
+only when it clears its threshold, so an empty block ("Links: nothing unusual on the days around it.") tells the model
+there is nothing to connect. For a night (Sleep, and Today for last night):
+
+- the day before, when its strain is 3 or more from its 30-day average, with that day's activities;
+- an activity that ended within 3 h of bed ("Run, strain 9.1, ended 1h 8m before bed.");
+- the bedtime, when 45 min or more from the median of the last 14 nights (local clock, minutes after noon so either side
+  of midnight compares);
+- the 3 nights before, when together they were 90 min or more under need.
+
+When the day before was harder, a workout ended close to bed, the bedtime was later or the nights before were short, a
+last line gives the verdict: "Overnight HRV came in −14% vs baseline, as these usually make it." or "Despite these,
+overnight HRV held up (+9% vs baseline): they don't show a toll." The prompt alone didn't stop Nano crediting a hard day
+for a good night, so the direction is worked out here. Today adds a run of HRV more than 5% from baseline on the same
+side, 3 or more days running.
 
 **Never included, in a pack or a tool result:** latitude, longitude, routes or polylines, place or activity names
 typed by the user, device names, device IDs or serials, and Garmin user or profile IDs. Activities are referred to
@@ -464,12 +487,21 @@ No tool writes, triggers a sync, or reaches the network.
     seeing a doctor.
 - **Chat, Nano:** a trimmed version of the cloud prompt, plus: "If answering needs data that isn't shown above, reply
   with exactly NEEDS_HISTORY."
-- **Insight:**
-  - "In 2 short sentences, name the one or two signals that moved furthest from their baseline for this {day / night /
-    activity}, with their numbers and the baselines. Don't restate the headline score and don't give advice. Start with the
-    finding: no greeting and no opener such as "The most useful insight". Don't say "significant" or "substantial" without a
-    figure. If nothing stands out, say it is a typical day. Mention a doctor only if something is clearly abnormal."
-    (`PROMPT_VERSION` 2; version 1 asked for "the most useful thing" in 2–3 sentences and got meta openers and no numbers.)
+- **Insight** (`PROMPT_VERSION` 7), one prompt per page, each "in 2 or 3 short sentences":
+  - Today: explain the day's recovery, what drove it and, from the Links, what is behind that. Don't restate the score.
+  - Sleep: what was different about the night and, if a Links line accounts for it, tie the two together. Don't restate
+    the sleep time, performance or Garmin score.
+  - Activity: any all-time record ("personal best" only for those), how hard it was against the usual session, then the
+    Links (what they came in with, how the night after and the next morning responded). Don't repeat the stat tiles.
+  - All: a hard day, a late workout, a late bedtime and short nights usually lower HRV, sleep and recovery, so a result
+    that went the other way held up "despite" them, not "because of" them; a change under 10% from baseline is normal and
+    isn't the lead; quote the numbers behind each point; a link is "likely" or "may", never certain, and comes only from the Links
+    lines; no greeting, opener or advice; no "significant" without a figure; a doctor only for something clearly abnormal.
+  - History: version 1 asked for "the most useful thing" and got meta openers. Versions 2–4 asked for "the signals that
+    moved furthest from their baseline", and on the phone that only restated the card ("HRV 97 ms vs a baseline of 91 ms");
+    version 5 added the Links. On the phone, Nano then credited a harder day before for a good night ("may be linked to the
+    preceding day being much harder") and led with a +6% HRV, so version 6 added the direction and the 10% rule (and the
+    verdict line in §5.1). Version 7 stops it saying "as indicated by the link" and repeating itself.
   - Insights never use tools.
 
 ### 5.4 Disclaimer
@@ -526,8 +558,10 @@ The sheet carries no banner. "Not medical advice" is in the Settings privacy lin
    - When it's cancelled (the page left), nothing is written.
 5. A failed generation retries when the user taps Retry, reopens the page, or the basis changes (step 6).
 6. **Live refresh.** While the card is collected the flow stays open. `ContextPacks.basisChanges(scope)` re-computes the
-   basis whenever the Room rows the scope reads change (for Today, the day, its score, its activities and their scores; for
-   Sleep, the day and its score; for an activity, the activity and its score) and ticks when the basis differs from the last
+   basis whenever the Room rows the scope reads change (for Today, the day, its score, its activities and their scores, plus
+   the night's Links rows; for Sleep, the last 14 nights, the day before's score, activities and their scores; for an
+   activity, the activity, its score, and the days and scores from the day before it to the day after it, so the card
+   updates when the night after syncs) and ticks when the basis differs from the last
    one. Each tick cancels the run in progress and repeats steps 2 to 4 (`flatMapLatest`), so a new activity or its strain
    regenerates the card in place. The first tick is immediate (opening a page never waits); later changes settle for 3 s
    before the basis is rebuilt, so a sync that writes an activity and then its score regenerates once. A change that touches

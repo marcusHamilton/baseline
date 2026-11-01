@@ -51,14 +51,28 @@ class PromptsTest {
         val p = Prompts.insight(AskScope.Today(date))
         assertTrue("numbers" in p)
         assertTrue("The most useful insight" in p)
-        assertTrue("2 short sentences" in p)
+        assertTrue("2 or 3 short sentences" in p)
     }
 
     @Test
     fun activityInsightIsReadAgainstRecordsNotABaseline() {
         val p = Prompts.insight(AskScope.Activity(1, SportFamily.RUN))
         assertTrue("record" in p)
-        assertTrue("previous sessions" in p)
-        assertFalse("baseline" in p)
+        assertTrue("\"personal best\" only for a line under \"All-time records\"" in p)
+        assertTrue("Against your usual" in p)
+        assertFalse("furthest from their baseline" in p)
+    }
+
+    @Test
+    fun everyInsightTiesInTheLinksAsPossibilities() {
+        for (scope in listOf(AskScope.Today(date), AskScope.Sleep(date), AskScope.Activity(1, SportFamily.RUN))) {
+            val p = Prompts.insight(scope)
+            assertTrue(p, "Links" in p)
+            assertTrue(p, "\"likely\" or \"may\", never as certain" in p)
+            assertTrue(p, "despite them, not because of them" in p)
+            assertTrue(p, "less than 10% from baseline is normal" in p)
+        }
+        assertTrue("Don't restate the sleep time" in Prompts.insight(AskScope.Sleep(date)))
+        assertTrue("Don't restate the recovery score" in Prompts.insight(AskScope.Today(date)))
     }
 }
