@@ -17,8 +17,8 @@ class AskScopeTest {
 
     @Test
     fun sleepTitles() {
-        assertEquals("Ask about last night", AskScope.Sleep(LocalDate.of(2026, 10, 31)).title(today))
-        assertEquals("Ask about the night of 27 Oct", AskScope.Sleep(LocalDate.of(2026, 10, 27)).title(today))
+        assertEquals("Ask about last night", AskScope.Sleep(today).title(today))
+        assertEquals("Ask about the night of 27 Oct", AskScope.Sleep(LocalDate.of(2026, 10, 28)).title(today))
     }
 
     @Test
@@ -49,13 +49,13 @@ class AskScopeTest {
     @Test
     fun subjectsReadAfterAbout() {
         assertEquals("today", AskScope.Today(today).subject(today))
-        assertEquals("last night", AskScope.Sleep(today.minusDays(1)).subject(today))
+        assertEquals("last night", AskScope.Sleep(today).subject(today))
     }
 
     @Test
     fun insightKeys() {
         assertEquals("today" to "2026-11-01", AskScope.Today(today).insightKey())
-        assertEquals("sleep" to "2026-10-31", AskScope.Sleep(LocalDate.of(2026, 10, 31)).insightKey())
+        assertEquals("sleep" to "2026-11-01", AskScope.Sleep(today).insightKey())
         assertEquals("activity" to "42", AskScope.Activity(42, SportFamily.RUN).insightKey())
         assertNull(AskScope.Trends(30).insightKey())
         assertNull(AskScope.General.insightKey())

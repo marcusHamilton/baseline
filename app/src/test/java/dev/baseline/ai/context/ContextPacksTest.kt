@@ -222,8 +222,8 @@ class ContextPacksTest {
     @Test
     fun sleepPack() {
         runBlocking { seed() }
-        val full = text(AskScope.Sleep(today.minusDays(1)), PackSize.FULL)
-        val compact = text(AskScope.Sleep(today.minusDays(1)), PackSize.COMPACT)
+        val full = text(AskScope.Sleep(today), PackSize.FULL)
+        val compact = text(AskScope.Sleep(today), PackSize.COMPACT)
         assertTrue(full, full.contains("Scope: sleep, night of Sat 31 Oct.\n"))
         assertTrue(full, "Sleep performance 93%" in full)
         assertTrue(full, "7h 0m asleep vs need 7h 30m" in full)
@@ -231,6 +231,20 @@ class ContextPacksTest {
         assertTrue(full, "Garmin score 80" in full)
         assertEquals(7, compact.lines().count { it.startsWith("- night of ") })
         assertEquals(30, full.lines().count { it.startsWith("- night of ") })
+    }
+
+    @Test
+    fun sleepScopeReadsTheDayEntityAtItsDate() {
+        runBlocking {
+            seed()
+            // 8h 20m on 28 Oct (the night of 27 Oct) and nothing special on the days either side.
+            db.dayDao().upsert(db.dayDao().get(today.minusDays(4))!!.copy(sleepSeconds = 30000))
+        }
+        val t = text(AskScope.Sleep(today.minusDays(4)), PackSize.COMPACT)
+        assertTrue(t, "Scope: sleep, night of Tue 27 Oct.\n" in t)
+        assertTrue(t, "8h 20m asleep" in t)
+        assertTrue(t, "Night of Tue 27 Oct, ending Wed 28 Oct." in t)
+        assertFalse(t, "8h 20m asleep" in text(AskScope.Sleep(today.minusDays(3)), PackSize.COMPACT))
     }
 
     @Test
@@ -244,7 +258,7 @@ class ContextPacksTest {
             listOf(
                 AskScope.Today(today),
                 AskScope.General,
-                AskScope.Sleep(today.minusDays(1)),
+                AskScope.Sleep(today),
                 AskScope.Activity(900, SportFamily.RUN),
                 AskScope.Trends(7),
                 AskScope.Trends(30),
@@ -271,15 +285,15 @@ class ContextPacksTest {
     @Test
     fun hasDataFalseWithoutMainRow() {
         runBlocking { seed(days = 10) }
-        assertFalse(runBlocking { packs.build(AskScope.Sleep(today.minusDays(60)), PackSize.COMPACT) }.hasData)
+        assertFalse(runBlocking { packs.build(AskScope.Sleep(today.minusDays(59)), PackSize.COMPACT) }.hasData)
         assertFalse(runBlocking { packs.build(AskScope.Today(today.minusDays(60)), PackSize.COMPACT) }.hasData)
         assertFalse(runBlocking { packs.build(AskScope.Activity(12345, SportFamily.RUN), PackSize.COMPACT) }.hasData)
         assertTrue(runBlocking { packs.build(AskScope.Today(today), PackSize.COMPACT) }.hasData)
-        assertTrue(runBlocking { packs.build(AskScope.Sleep(today.minusDays(1)), PackSize.COMPACT) }.hasData)
-        assertNull(runBlocking { packs.sleepBody(today.minusDays(60), PackSize.FULL) })
+        assertTrue(runBlocking { packs.build(AskScope.Sleep(today), PackSize.COMPACT) }.hasData)
+        assertNull(runBlocking { packs.sleepBody(today.minusDays(59), PackSize.FULL) })
         assertNull(runBlocking { packs.activityBody(12345, PackSize.FULL) })
         runBlocking { db.dayDao().upsert(DayEntity(today.minusDays(60))) } // a row without sleep is not a night either
-        assertFalse(runBlocking { packs.build(AskScope.Sleep(today.minusDays(61)), PackSize.COMPACT) }.hasData)
+        assertFalse(runBlocking { packs.build(AskScope.Sleep(today.minusDays(60)), PackSize.COMPACT) }.hasData)
     }
 
     @Test
@@ -288,7 +302,7 @@ class ContextPacksTest {
         val facts = runBlocking { packs.build(AskScope.Today(today), PackSize.COMPACT) }.facts
         assertEquals(71, facts.recovery)
         assertEquals(80, facts.sleepScore)
-        val sleep = runBlocking { packs.build(AskScope.Sleep(today.minusDays(1)), PackSize.COMPACT) }.facts
+        val sleep = runBlocking { packs.build(AskScope.Sleep(today), PackSize.COMPACT) }.facts
         assertEquals("deep" to true, sleep.stageFurthest)
         assertEquals(80, sleep.sleepScore)
         assertEquals("week", runBlocking { packs.build(AskScope.Trends(7), PackSize.COMPACT) }.facts.rangeLabel)
@@ -308,7 +322,7 @@ class ContextPacksTest {
             seed()
             run(900, 0)
         }
-        val scopes = listOf(AskScope.Today(today), AskScope.Sleep(today.minusDays(1)), AskScope.Activity(900, SportFamily.RUN), AskScope.Trends(30))
+        val scopes = listOf(AskScope.Today(today), AskScope.Sleep(today), AskScope.Activity(900, SportFamily.RUN), AskScope.Trends(30))
         val original = TimeZone.getDefault()
         try {
             TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))

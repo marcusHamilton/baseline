@@ -87,7 +87,7 @@ class ContextPacks(
             is AskScope.Sleep -> {
                 val sleep = sleep(scope.date, size)
                 val facts = PackFacts(sleep?.recovery, sleep?.day?.sleepScore, sleep?.furthest, null)
-                pack("sleep, night of ${scope.date.format(DAY)}.", sleep?.body, "No sleep recorded for this night.", facts, fmt)
+                pack("sleep, night of ${scope.date.minusDays(1).format(DAY)}.", sleep?.body, "No sleep recorded for this night.", facts, fmt)
             }
 
             is AskScope.Activity -> {
@@ -102,7 +102,7 @@ class ContextPacks(
     /** The Activity pack without its header, or null when there is no such activity. Used by the `activity_detail` tool. */
     suspend fun activityBody(id: Long, size: PackSize): String? = db.activityDao().get(id)?.let { activity(it, size, Formatters(repository.imperial.first())) }
 
-    /** The Sleep pack without its header for the night that began on [date], or null when it has no sleep. Used by `sleep_night`. */
+    /** The Sleep pack without its header for the night that ended on [date] (the wake date), or null when it has no sleep. Used by `sleep_night`. */
     suspend fun sleepBody(date: LocalDate, size: PackSize): String? = sleep(date, size)?.body
 
     private fun pack(scope: String, body: String?, missing: String, facts: PackFacts, fmt: Formatters): Pack {
@@ -212,9 +212,9 @@ class ContextPacks(
 
     private class SleepView(val body: String, val day: DayEntity, val recovery: Int?, val furthest: Pair<String, Boolean>?)
 
-    /** [night] is the date the night began on; Garmin files the sleep under the morning it ended. */
-    private suspend fun sleep(night: LocalDate, size: PackSize): SleepView? {
-        val wake = night.plusDays(1)
+    /** [wake] is the date the night ended on, which is also its `DayEntity` row and the date the Sleep screen shows. */
+    private suspend fun sleep(wake: LocalDate, size: PackSize): SleepView? {
+        val night = wake.minusDays(1)
         val day = db.dayDao().get(wake)?.takeIf { SLEEP(it) != null } ?: return null
         val score = db.scoreDao().get(wake)
         val history = repository.days(wake.minusDays(30), wake.minusDays(1)).first()

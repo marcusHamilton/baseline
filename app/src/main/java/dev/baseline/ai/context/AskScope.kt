@@ -6,8 +6,9 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * What an Ask sheet is about (spec §3.5). [Sleep] holds the date the night began on ("the night of Fri 31 Oct" is
- * the night Garmin files under Sun 1 Nov), unlike the Sleep screen, whose date is the morning it ends on.
+ * What an Ask sheet is about (spec §3.5). [Sleep] holds the WAKE date, the morning the night ended: the same date the
+ * Sleep screen shows and the `DayEntity` row it reads ("last night" is `Sleep(today)`, and `Sleep(Sun 1 Nov)` is
+ * titled "the night of 31 Oct" once it is no longer today).
  * [Trends] holds the range in days (7, 30 or 90), so this package stays free of UI types.
  */
 sealed interface AskScope {
@@ -32,7 +33,7 @@ fun AskScope.title(today: LocalDate): String = "Ask about ${subject(today)}"
 fun AskScope.subject(today: LocalDate): String = when (this) {
     is AskScope.Today -> if (date == today) "today" else date.format(WEEKDAY_DAY_MONTH)
 
-    is AskScope.Sleep -> if (date == today.minusDays(1)) "last night" else "the night of ${date.format(DAY_MONTH)}"
+    is AskScope.Sleep -> if (date == today) "last night" else "the night of ${date.minusDays(1).format(DAY_MONTH)}"
 
     is AskScope.Activity ->
         when (sport) {

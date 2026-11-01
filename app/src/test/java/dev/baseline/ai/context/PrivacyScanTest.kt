@@ -182,7 +182,7 @@ class PrivacyScanTest {
             buildList {
                 add(AskScope.General)
                 for (back in 0L..60L) add(AskScope.Today(today.minusDays(back)))
-                for (back in 0L..60L) add(AskScope.Sleep(today.minusDays(back + 1)))
+                for (back in 0L..60L) add(AskScope.Sleep(today.minusDays(back)))
                 for (days in listOf(7, 30, 90)) add(AskScope.Trends(days))
                 activities.forEach { add(AskScope.Activity(it.id, it.sportFamily)) }
             }
@@ -193,7 +193,7 @@ class PrivacyScanTest {
             for (size in PackSize.entries) packs.activityBody(a.id, size)?.let { scanned += "body ${a.id} $size" to it }
         }
         for (back in 0L..60L) {
-            for (size in PackSize.entries) packs.sleepBody(today.minusDays(back + 1), size)?.let { scanned += "sleep body $back $size" to it }
+            for (size in PackSize.entries) packs.sleepBody(today.minusDays(back), size)?.let { scanned += "sleep body $back $size" to it }
         }
 
         val leaks = scanned.mapNotNull { (label, text) -> leak(text, forbidden)?.let { "$label: $it" } }
