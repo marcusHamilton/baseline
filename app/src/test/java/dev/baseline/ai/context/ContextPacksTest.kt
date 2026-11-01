@@ -9,6 +9,7 @@ import dev.baseline.data.SportFamily
 import dev.baseline.data.db.ActivityEntity
 import dev.baseline.data.db.ActivityScoreEntity
 import dev.baseline.data.db.AppDatabase
+import dev.baseline.data.db.BestEffortEntity
 import dev.baseline.data.db.DayEntity
 import dev.baseline.data.db.LapEntity
 import dev.baseline.data.db.LoadSource
@@ -217,6 +218,42 @@ class ContextPacksTest {
         }
         assertEquals(3, compact.lines().count { it.startsWith("- prev ") })
         assertEquals(10, full.lines().count { it.startsWith("- prev ") })
+    }
+
+    @Test
+    fun activityPackSaysWhatRecordsAndRanksItHas() {
+        runBlocking {
+            seed()
+            run(900, 0, distance = 20000.0)
+            for (i in 1L..4L) run(900 + i, i * 2, distance = 4000.0 + i * 1000)
+            db.bestEffortDao().insertAll(
+                listOf(BestEffortEntity(SportFamily.RUN, "1000m", 270.0, 900, today), BestEffortEntity(SportFamily.RUN, "5000m", 1450.0, 900, today)),
+            )
+        }
+        for (size in PackSize.entries) {
+            val t = text(AskScope.Activity(900, SportFamily.RUN), size)
+            assertTrue(t, "All-time records set in this activity: fastest 5.00 km in" in t)
+            assertTrue(t, "longest distance of your 5 runs, previous longest" in t)
+            // The similar-distance rule: 20 km has no peer within a quarter, so no pace comparison.
+            assertFalse(t, "Against your usual" in t)
+            val other = text(AskScope.Activity(901, SportFamily.RUN), size)
+            assertFalse(other, "All-time records" in other)
+            assertFalse(other, "longest distance" in other)
+        }
+    }
+
+    @Test
+    fun activityPackComparesWithTheUsualSimilarSession() {
+        runBlocking {
+            seed()
+            run(900, 0, distance = 5000.0)
+            for (i in 1L..3L) run(900 + i, i * 2, distance = 5100.0 + i * 100)
+        }
+        val t = text(AskScope.Activity(900, SportFamily.RUN), PackSize.COMPACT)
+        assertTrue(t, "Against your usual of your last 3 similar-distance sessions:" in t)
+        assertTrue(t, "35 s/km slower than usual" in t)
+        assertTrue(t, "average HR 151 bpm, +0 bpm vs usual (151)" in t)
+        assertTrue(t, "strain 9.1, +0.0 vs usual (9.1)" in t)
     }
 
     @Test

@@ -11,6 +11,7 @@ import dev.baseline.data.db.LapEntity
 import dev.baseline.data.db.ScoreEntity
 import dev.baseline.fit.ActivityStreams
 import dev.baseline.prefs.UserPrefs
+import dev.baseline.records.BestEfforts
 import dev.baseline.scores.Baseline
 import dev.baseline.scores.Baselines
 import dev.baseline.scores.FormState
@@ -412,7 +413,9 @@ class ContextPacks(
                 val laps = db.lapDao().forActivity(a.id)
                 if (laps.isNotEmpty()) addAll(listOf("Laps (${laps.size}):") + lapRows(laps, family, fmt))
             }
-            val previous = db.activityDao().list()
+            val all = db.activityDao().list()
+            addAll(standing(a, all, fmt))
+            val previous = all
                 .filter { it.sportFamily == family && it.id != a.id && it.startGmt < a.startGmt }
                 .sortedByDescending { it.startGmt }
                 .take(if (size == PackSize.FULL) 10 else 3)
@@ -427,6 +430,127 @@ class ContextPacks(
                 }
             }
         }.joinToString("\n")
+    }
+
+    /**
+     * What makes this activity stand out in the user's history: the all-time records it set (best_effort) and where its distance,
+     * duration and pace or speed rank among their other sessions of the sport, when it is in the top 3. Without these the model
+     * can't know a run was a personal best. Pace is compared only against sessions of a similar distance (within a quarter).
+     */
+    private suspend fun standing(a: ActivityEntity, all: List<ActivityEntity>, fmt: Formatters): List<String> {
+        val family = a.sportFamily
+        if (family != SportFamily.RUN && family != SportFamily.RIDE && family != SportFamily.SWIM) return emptyList()
+        val lines = mutableListOf<String>()
+        // Longest distance (or power window) first: the biggest record is the headline, and a small model leads with the first item.
+        val records = db.bestEffortDao().forSport(family).filter { it.activityId == a.id }.mapNotNull { e ->
+            if (BestEfforts.isPower(e.effort)) {
+                val sec = e.effort.removePrefix("power_").removeSuffix("s").toIntOrNull() ?: return@mapNotNull null
+                sec to "best ${if (sec % 60 == 0) "${sec / 60} min" else "$sec s"} power ${e.valueSec.roundToInt()} W"
+            } else {
+                val m = e.effort.removeSuffix("m").toIntOrNull() ?: return@mapNotNull null
+                m to "fastest ${fmt.distance(m.toDouble()) ?: return@mapNotNull null} in ${fmt.duration(e.valueSec) ?: return@mapNotNull null}"
+            }
+        }.sortedByDescending { it.first }.map { it.second }
+        if (records.isNotEmpty()) lines.add("All-time records set in this activity: ${records.joinToString("; ")}.")
+
+        val peers = all.filter { it.sportFamily == family && it.id != a.id }
+        val noun = sportLabel(a).lowercase() + "s"
+        fun distText(x: ActivityEntity) = x.distanceM?.let {
+            if (family ==
+                SportFamily.SWIM
+            ) {
+                "${fmt.swimDistance(it)} ${fmt.swimDistanceUnit}"
+            } else {
+                fmt.distance(it)
+            }
+        }
+        fun rank(
+            what: String,
+            best: String,
+            higher: Boolean,
+            pool: List<ActivityEntity>,
+            value: (ActivityEntity) -> Double?,
+            show: (ActivityEntity) -> String?,
+        ) {
+            val mine = value(a)?.takeIf { it.isFinite() && it > 0 } ?: return
+            val others = pool.mapNotNull { p -> value(p)?.takeIf { it.isFinite() && it > 0 }?.let { p to it } }
+            if (others.size < 2) return
+            val rank = others.count { if (higher) it.second > mine else it.second < mine } + 1
+            if (rank > 3) return
+            val nth = when (rank) {
+                1 -> ""
+                2 -> "2nd "
+                else -> "3rd "
+            }
+            val previous = if (rank == 1) {
+                val p = if (higher) others.maxBy { it.second }.first else others.minBy { it.second }.first
+                show(p)?.let { ", previous $best $it on ${p.startTimeLocal.format(FULL_DATE)}" }.orEmpty()
+            } else {
+                ""
+            }
+            lines.add("$nth$best $what of your ${others.size + 1} $noun$previous.")
+        }
+        rank("distance", "longest", true, peers, { it.distanceM }, ::distText)
+        rank("duration", "longest", true, peers, { it.durationSec }) { fmt.duration(it.durationSec) }
+        val dist = a.distanceM?.takeIf { it > 0 }
+        if (dist != null && family != SportFamily.SWIM) {
+            val similar = peers.filter { p -> p.distanceM?.let { abs(it - dist) / dist <= 0.25 } == true }
+            val speed = { x: ActivityEntity -> if (x.distanceM != null && x.durationSec != null && x.durationSec > 0) x.distanceM / x.durationSec else null }
+            val show = { x: ActivityEntity -> rate(family, x.distanceM, x.durationSec, fmt) }
+            rank("${if (family == SportFamily.RIDE) "speed" else "pace"} over similar distances", "fastest", true, similar, speed, show)
+            versusTypical(a, similar, fmt)?.let(lines::add)
+        }
+        return lines
+    }
+
+    /**
+     * "This one against your typical one", worked out here because a small model can't subtract: the median pace or speed, average
+     * heart rate and strain of the last 10 sessions of a similar distance, and by how much this one differs.
+     */
+    private suspend fun versusTypical(a: ActivityEntity, similar: List<ActivityEntity>, fmt: Formatters): String? {
+        val family = a.sportFamily
+        val recent = similar.sortedByDescending { it.startGmt }.take(10)
+        if (recent.size < 2) return null
+        fun median(v: List<Double>) = v.sorted().let { if (it.isEmpty()) null else (it[(it.size - 1) / 2] + it[it.size / 2]) / 2 }
+        val parts = mutableListOf<String>()
+        if (family == SportFamily.RIDE) {
+            val mine = a.distanceM?.let { d -> a.durationSec?.takeIf { it > 0 }?.let { d / it } }
+            val typical = median(recent.mapNotNull { p -> p.distanceM?.let { d -> p.durationSec?.takeIf { it > 0 }?.let { d / it } } })
+            if (mine != null && typical != null) {
+                val diff = mine - typical
+                parts.add(
+                    "speed ${fmt.speedValue(
+                        mine,
+                    )} ${fmt.speedUnit}, ${fmt.speedValue(
+                        abs(diff),
+                    )} ${fmt.speedUnit} ${if (diff >= 0) "faster" else "slower"} than usual (${fmt.speedValue(typical)})",
+                )
+            }
+        } else {
+            val mine = fmt.secondsPerUnit(a.distanceM, a.durationSec)
+            val typical = median(recent.mapNotNull { fmt.secondsPerUnit(it.distanceM, it.durationSec) })
+            if (mine != null && typical != null) {
+                val diff = (typical - mine).roundToInt()
+                parts.add(
+                    "pace ${fmt.pace(
+                        mine,
+                    )} ${fmt.paceUnit}, ${abs(diff)} s${fmt.paceUnit} ${if (diff >= 0) "faster" else "slower"} than usual (${fmt.pace(typical)})",
+                )
+            }
+        }
+        val hr = a.avgHr
+        val typicalHr = median(recent.mapNotNull { it.avgHr })
+        if (hr != null && typicalHr != null) {
+            val diff = (hr - typicalHr).roundToInt()
+            parts.add("average HR ${hr.roundToInt()} bpm, ${if (diff >= 0) "+" else "-"}${abs(diff)} bpm vs usual (${typicalHr.roundToInt()})")
+        }
+        val strain = db.activityScoreDao().get(a.id)?.strain
+        val typicalStrain = median(recent.mapNotNull { db.activityScoreDao().get(it.id)?.strain })
+        if (strain != null && typicalStrain != null) {
+            val diff = strain - typicalStrain
+            parts.add("strain ${one(strain)}, ${if (diff >= 0) "+" else "-"}${one(abs(diff))} vs usual (${one(typicalStrain)})")
+        }
+        return if (parts.isEmpty()) null else "Against your usual of your last ${recent.size} similar-distance sessions: ${parts.joinToString("; ")}."
     }
 
     private fun rate(family: SportFamily, distM: Double?, durSec: Double?, fmt: Formatters): String? {

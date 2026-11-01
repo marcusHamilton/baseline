@@ -53,4 +53,12 @@ class PromptsTest {
         assertTrue("The most useful insight" in p)
         assertTrue("2 short sentences" in p)
     }
+
+    @Test
+    fun activityInsightIsReadAgainstRecordsNotABaseline() {
+        val p = Prompts.insight(AskScope.Activity(1, SportFamily.RUN))
+        assertTrue("record" in p)
+        assertTrue("previous sessions" in p)
+        assertFalse("baseline" in p)
+    }
 }
