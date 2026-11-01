@@ -18,6 +18,7 @@ import dev.baseline.ai.engine.MlKitNanoBackend
 import dev.baseline.ai.engine.NanoBackend
 import dev.baseline.ai.engine.NanoEngine
 import dev.baseline.ai.engine.NanoStatus
+import dev.baseline.ai.insight.InsightService
 import dev.baseline.data.Repository
 import dev.baseline.data.db.AppDatabase
 import dev.baseline.fit.FitIngest
@@ -175,6 +176,8 @@ open class AppContainer(context: Context, val clock: Clock = SystemZoneClock) {
 
     // open: tests swap in a fake.
     open val cloudEngine by lazy { CloudEngine(aiHttp, aiKeyVault, healthTools, aiOnline::value) }
+
+    val insightService by lazy { InsightService(contextPacks, nanoEngine, cloudEngine, db.aiInsightDao(), aiPrefs.mode, aiKeyVault.status, online, clock) }
 
     /** A synchronous "online" for callers that can't collect [online]; true until the first reading. */
     val aiOnline: StateFlow<Boolean> by lazy { online.stateIn(appScope, SharingStarted.Eagerly, true) }
