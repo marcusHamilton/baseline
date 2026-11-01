@@ -23,6 +23,13 @@
     public <init>(android.content.Context, androidx.work.WorkerParameters);
 }
 
+# ML Kit (Gemini Nano) builds its component registrars by reflection with a no-arg constructor. firebase-components'
+# consumer rule keeps the classes but R8 full mode still strips the constructor, so MlKitInitProvider logs "Could not
+# instantiate CommonComponentRegistrar" and every Nano check reads "Not supported on this phone".
+-keep class * implements com.google.firebase.components.ComponentRegistrar {
+    <init>();
+}
+
 # Nothing else is needed:
 # - Room 3 (KSP): AppDatabase_Impl is passed as a factory, not looked up by name; room3-runtime keeps RoomDatabase subclasses.
 # - Garmin FIT SDK: plain Java with no reflection on the paths FitReader uses (MesgBroadcaster dispatches with instanceof).
