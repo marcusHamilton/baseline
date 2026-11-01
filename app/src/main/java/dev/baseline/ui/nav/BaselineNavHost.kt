@@ -25,7 +25,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -64,6 +63,7 @@ import dev.baseline.ui.activity.ActivityScreen
 import dev.baseline.ui.activity.ActivityViewModel
 import dev.baseline.ui.activity.sections.RouteMap
 import dev.baseline.ui.ai.AskButton
+import dev.baseline.ui.ai.AskHostViewModel
 import dev.baseline.ui.ai.AskScopeHolder
 import dev.baseline.ui.ai.AskSheet
 import dev.baseline.ui.ai.AskViewModel
@@ -142,9 +142,6 @@ private val Tabs = listOf(
 /** The Ask button sits between the first two tabs and the last two: Today, Activities, [Ask], Trends, Settings. */
 private const val TABS_BEFORE_ASK = 2
 
-/** One Ask sheet being open. A new instance per open, so [key] gives each its own ViewModel store and chat. */
-private class AskRequest(val scope: AskScope)
-
 private fun isTab(route: String?) = Tabs.any { it.route == route }
 
 // Navigation's default is a 700 ms crossfade, which makes every page change feel slow. Tabs swap with a quick fade;
@@ -196,7 +193,9 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
     val status by container.apiKeyVault.status.collectAsStateWithLifecycle(initialValue = null)
     val aiMode by container.aiMode.collectAsStateWithLifecycle()
     val scopeHolder = remember { AskScopeHolder() }
-    var askFor by remember { mutableStateOf<AskRequest?>(null) }
+    // The Activity's ViewModel, so an open sheet and its chat survive configuration changes.
+    val askHost: AskHostViewModel = viewModel()
+    val askFor by askHost.askFor.collectAsStateWithLifecycle()
     val currentEntryId = nav.currentBackStackEntryAsState().value?.id
     // Decided once, when the vault first answers; later key changes must not rebuild the graph.
     val start = remember(status != null) {
@@ -214,7 +213,7 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                         Tabs.take(TABS_BEFORE_ASK).forEach { TabItem(it, currentTab, nav, container) }
                         // An action, not a tab: it never navigates or takes the selection, and it is not there in mode Off.
                         if (aiMode != null && aiMode != AiMode.OFF) {
-                            AskButton { askFor = AskRequest(scopeHolder.current(currentEntryId)) }
+                            AskButton { askHost.open(scopeHolder.current(currentEntryId)) }
                         }
                         Tabs.drop(TABS_BEFORE_ASK).forEach { TabItem(it, currentTab, nav, container) }
                     }
@@ -289,7 +288,7 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                                 val date = vm.state.collectAsStateWithLifecycle().value.date
                                 val scope = AskScope.Today(date)
                                 InsightSlot(insightVm, scope, container.today, onAsk = {
-                                    askFor = AskRequest(scope)
+                                    askHost.open(scope)
                                 }, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp))
                             },
                         )
@@ -323,7 +322,7 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                             onBack = { nav.popBackStack() },
                             insight = {
                                 val scope = AskScope.Sleep(date)
-                                InsightSlot(insightVm, scope, container.today, onAsk = { askFor = AskRequest(scope) })
+                                InsightSlot(insightVm, scope, container.today, onAsk = { askHost.open(scope) })
                             },
                         )
                     }
@@ -353,7 +352,7 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                             insight = {
                                 // The screen only draws this once the activity has loaded, so the sport is known.
                                 val scope = AskScope.Activity(id, sport)
-                                InsightSlot(insightVm, scope, container.today, onAsk = { askFor = AskRequest(scope) })
+                                InsightSlot(insightVm, scope, container.today, onAsk = { askHost.open(scope) })
                             },
                         )
                     }
@@ -494,21 +493,21 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                 }
             }
         }
-        askFor?.let { request ->
-            // A request is new for every open, so closing and reopening never meets the old chat.
-            key(request) { AskSheetHost(container, request.scope, onDismiss = { askFor = null }) }
+        val store = askHost.store
+        val openScope = askFor
+        if (openScope != null && store != null) {
+            // The store is new for every open, so closing and reopening never meets the old chat.
+            key(store) { AskSheetHost(container, openScope, store, onDismiss = askHost::close) }
         }
     }
 }
 
 /**
- * The Ask sheet with a ViewModel store of its own, cleared when the sheet leaves the composition. Closing therefore cancels any
- * request in flight and drops the chat (spec §3.6): nothing is kept, not even across a reopen.
+ * The Ask sheet, with its ViewModels in [store], which [AskHostViewModel] owns: it survives a configuration change and is cleared on
+ * close, which cancels any request in flight and drops the chat (spec §3.6).
  */
 @Composable
-private fun AskSheetHost(container: AppContainer, scope: AskScope, onDismiss: () -> Unit) {
-    val store = remember { ViewModelStore() }
-    DisposableEffect(store) { onDispose { store.clear() } }
+private fun AskSheetHost(container: AppContainer, scope: AskScope, store: ViewModelStore, onDismiss: () -> Unit) {
     val owner = remember(store) {
         object : ViewModelStoreOwner {
             override val viewModelStore: ViewModelStore = store

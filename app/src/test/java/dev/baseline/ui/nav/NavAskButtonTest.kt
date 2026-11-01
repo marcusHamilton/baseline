@@ -250,6 +250,36 @@ class NavAskButtonTest {
     }
 
     @Test
+    fun sheetAndChatSurviveRecreation() {
+        show()
+        openSheet()
+        awaitTag("ask-suggestion")
+        rule.onNodeWithTag("ask-input").performTextInput("How did I do?")
+        rule.onNodeWithContentDescription("Send").performClick()
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("Hello there", substring = true).fetchSemanticsNodes().isNotEmpty() }
+
+        // A configuration change (rotation, dark mode, font size) recreates the Activity; the content is set again, as the app does.
+        rule.activityRule.scenario.recreate()
+        rule.setContent { BaselineTheme { BaselineNavHost(container, deepLink) } }
+        rule.waitUntil(5_000) { rule.onAllNodesWithContentDescription("Close").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Ask about today").assertExists()
+        rule.onNodeWithText("How did I do?").assertExists()
+        rule.onAllNodesWithText("Hello there", substring = true).assertCountEqualsAtLeastOne()
+        rule.onAllNodesWithTag("ask-suggestion").assertCountEqualsZero()
+
+        // Closing still discards it.
+        closeSheet()
+        openSheet()
+        awaitTag("ask-suggestion")
+        rule.onAllNodesWithText("How did I do?").assertCountEqualsZero()
+        closeSheet()
+    }
+
+    private fun androidx.compose.ui.test.SemanticsNodeInteractionCollection.assertCountEqualsAtLeastOne() {
+        assertTrue(fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
     fun buttonIsAnnouncedAsAButtonNotATab() {
         show()
         rule.waitUntil(5_000) { rule.onAllNodesWithContentDescription("Ask about this page").fetchSemanticsNodes().isNotEmpty() }
