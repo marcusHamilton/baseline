@@ -65,6 +65,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -300,7 +301,16 @@ private fun Answer(message: ChatMessage, onMoreDetail: () -> Unit) {
         }
         message.status?.let { Text(it, color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp) }
         if (message.text.isNotEmpty()) {
-            Text(message.text, Modifier.padding(top = 4.dp), color = TextBody, fontSize = 15.sp, lineHeight = 22.sp)
+            val bold = SpanStyle(fontWeight = FontWeight.SemiBold, color = TextPrimary)
+            Text(
+                remember(message.text) {
+                    markdownLite(message.text, bold)
+                },
+                Modifier.padding(top = 4.dp),
+                color = TextBody,
+                fontSize = 15.sp,
+                lineHeight = 22.sp,
+            )
         } else if (message.streaming && message.status == null) {
             CircularProgressIndicator(Modifier.size(16.dp), color = SleepPurple, strokeWidth = 2.dp)
         }

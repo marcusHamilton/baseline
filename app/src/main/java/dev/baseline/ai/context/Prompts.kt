@@ -4,7 +4,7 @@ import dev.baseline.ai.engine.EngineKind
 
 /** The system prompts (spec §5.3). Bump [PROMPT_VERSION] on any wording change: it is part of the insight cache fingerprint. */
 object Prompts {
-    const val PROMPT_VERSION = 2
+    const val PROMPT_VERSION = 3
 
     /** What Nano replies, and nothing else, when the question needs data beyond the page it was shown. */
     const val NEEDS_HISTORY = "NEEDS_HISTORY"
@@ -26,7 +26,7 @@ object Prompts {
         $ROLE
         Answer only from the data below. If data is missing, say so.
         Quote the numbers you use, in the user's units.
-        Be concise, with no tables unless asked. Don't invent data or diagnoses.
+        Be concise: under 120 words, only the few figures that answer the question, not every metric. No tables unless asked. Don't invent data or diagnoses.
         Not medical advice. For chest pain, fainting, a resting heart rate far higher than baseline, or similar, suggest seeing a doctor.
         If answering needs data that isn't shown below, reply with exactly $NEEDS_HISTORY.
         """.trimIndent()
