@@ -5,8 +5,8 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import dev.baseline.ai.AiKeyStatus
 import dev.baseline.ai.AiKeyVault
+import dev.baseline.testutil.ScopeCleanup
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
@@ -39,6 +39,7 @@ class CloudEngineTest {
     private lateinit var store: DataStore<Preferences>
     private lateinit var vault: AiKeyVault
     private val delays = mutableListOf<Long>()
+    private val cleanup = ScopeCleanup()
     private val http = OkHttpClient()
     private val model = "deepseek/deepseek-v4.1-flash"
     private val request = AiRequest(RequestKind.CHAT, "SYS", "PACK", listOf(ChatTurn(Role.USER, "hi")))
@@ -48,13 +49,16 @@ class CloudEngineTest {
         server = MockWebServer()
         server.start()
         file = File.createTempFile("cloudengine", ".preferences_pb").also { it.delete() }
-        store = PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO)) { file }
+        store = PreferenceDataStoreFactory.create(scope = cleanup.storeScope) { file }
         vault = AiKeyVault(store, { it }, { it })
         runBlocking { vault.save(server.url("/v1/"), "test-key", model, toolsSupported = true) }
     }
 
     @After
     fun tearDown() {
+        runBlocking { cleanup.close() }
+        http.dispatcher.executorService.shutdown()
+        http.connectionPool.evictAll()
         server.shutdown()
         file.delete()
     }

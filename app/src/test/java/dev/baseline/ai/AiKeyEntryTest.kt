@@ -3,8 +3,7 @@ package dev.baseline.ai
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import dev.baseline.testutil.ScopeCleanup
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -28,6 +27,8 @@ import org.junit.Test
 import java.io.File
 
 class AiKeyEntryTest {
+    private val cleanup = ScopeCleanup()
+    private val clients = mutableListOf<OkHttpClient>()
     private lateinit var server: MockWebServer
     private lateinit var file: File
     private lateinit var store: DataStore<Preferences>
@@ -42,20 +43,26 @@ class AiKeyEntryTest {
         server = MockWebServer()
         server.start()
         file = File.createTempFile("aikeyentry", ".preferences_pb").also { it.delete() }
-        store = PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO)) { file }
+        store = PreferenceDataStoreFactory.create(scope = cleanup.storeScope) { file }
         vault = AiKeyVault(store, { it }, { it })
         prefs = AiPrefs(store)
     }
 
     @After
     fun tearDown() {
+        runBlocking { cleanup.close() }
+        clients.forEach {
+            it.dispatcher.executorService.shutdown()
+            it.connectionPool.evictAll()
+        }
         server.shutdown()
         file.delete()
     }
 
     // No silent resend of a request that died on the wire: each disconnect should cost exactly one queued response.
+    // A fresh client per entry, so a connection one case broke is never reused by the next; tearDown shuts them all down.
     private fun entry(): AiKeyEntry {
-        val http = OkHttpClient.Builder().retryOnConnectionFailure(false).build()
+        val http = OkHttpClient.Builder().retryOnConnectionFailure(false).build().also { clients += it }
         return AiKeyEntry(http, vault, prefs, { nano }, allowLoopbackHttp = true)
     }
 

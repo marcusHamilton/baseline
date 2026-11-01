@@ -10,8 +10,7 @@ import dev.baseline.ai.engine.CloudEngine
 import dev.baseline.ai.engine.NoTools
 import dev.baseline.ai.engine.RequestKind
 import dev.baseline.ai.engine.Role
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import dev.baseline.testutil.ScopeCleanup
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import okhttp3.Authenticator
@@ -49,9 +48,10 @@ class AiSecretsTest {
     @Test
     fun errorBodyNeverSurfaces() = runBlocking {
         val server = MockWebServer().also { it.start() }
+        val cleanup = ScopeCleanup()
         val file = File.createTempFile("aisecrets", ".preferences_pb").also { it.delete() }
         try {
-            val vault = AiKeyVault(PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO)) { file }, { it }, { it })
+            val vault = AiKeyVault(PreferenceDataStoreFactory.create(scope = cleanup.storeScope) { file }, { it }, { it })
             vault.save(server.url("/v1/"), "test-key", "m/odel", toolsSupported = false)
             server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":{"message":"bad key test-key"}}"""))
             val engine = CloudEngine(OkHttpClient(), vault, NoTools, { true })
@@ -64,6 +64,7 @@ class AiSecretsTest {
                 assertFalse(e.toString().contains("test-key"))
             }
         } finally {
+            cleanup.close()
             server.shutdown()
             file.delete()
         }

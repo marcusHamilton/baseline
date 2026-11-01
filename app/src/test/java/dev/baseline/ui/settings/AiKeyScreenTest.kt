@@ -1,6 +1,8 @@
 package dev.baseline.ui.settings
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -30,9 +32,8 @@ import dev.baseline.ai.AiKeyStatus
 import dev.baseline.ai.AiKeyVault
 import dev.baseline.ai.AiPrefs
 import dev.baseline.ai.parseBaseUrl
+import dev.baseline.testutil.ScopeCleanup
 import dev.baseline.ui.theme.BaselineTheme
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
@@ -56,6 +57,8 @@ class AiKeyScreenTest {
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
 
+    private val cleanup = ScopeCleanup()
+    private val http = OkHttpClient.Builder().retryOnConnectionFailure(false).build()
     private lateinit var server: MockWebServer
     private lateinit var file: File
     private lateinit var store: DataStore<Preferences>
@@ -94,30 +97,42 @@ class AiKeyScreenTest {
             }
         server.start()
         file = File.createTempFile("aikeyscreen", ".preferences_pb").also { it.delete() }
-        store = PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO)) { file }
+        store = PreferenceDataStoreFactory.create(scope = cleanup.storeScope) { file }
         vault = AiKeyVault(store, { it }, { it })
         prefs = AiPrefs(store)
     }
 
     @After
     fun tearDown() {
+        rule.runOnIdle { focus?.clearFocus(true) }
+        rule.waitForIdle()
+        runBlocking { cleanup.close() }
+        http.dispatcher.executorService.shutdown()
+        http.connectionPool.evictAll()
         server.shutdown()
         file.delete()
     }
 
     private fun json(body: String, code: Int = 200) = MockResponse().setResponseCode(code).setHeader("Content-Type", "application/json").setBody(body)
 
-    private fun entry(allowLoopbackHttp: Boolean = true) =
-        AiKeyEntry(OkHttpClient.Builder().retryOnConnectionFailure(false).build(), vault, prefs, { true }, allowLoopbackHttp)
+    private fun entry(allowLoopbackHttp: Boolean = true) = AiKeyEntry(http, vault, prefs, { true }, allowLoopbackHttp)
 
     private fun serverUrl() = server.url("/v1").toString()
 
-    private fun viewModel(startAtModel: Boolean = false, entry: AiKeyEntry = entry()) = AiKeyViewModel(entry, vault, startAtModel)
+    private fun viewModel(startAtModel: Boolean = false, entry: AiKeyEntry = entry()) = cleanup.track(AiKeyViewModel(entry, vault, startAtModel))
 
     private var backs = 0
     private val empty = SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(""))
 
-    private fun show(vm: AiKeyViewModel) = rule.setContent { BaselineTheme { AiKeyScreen(vm, onBack = { backs++ }) } }
+    // Kept so tearDown can drop the focus a text field took. A focused field's cursor keeps blinking until the activity is
+    // destroyed, and where the test ends in that cycle decides whether the next test in this JVM still recomposes
+    // (TodayScreenTest's edge-scroll drag never did after a short typing test; advancing the clock by 1 s, 2 s or 3 s cured it, 0.5 s or 1.5 s did not).
+    private var focus: FocusManager? = null
+
+    private fun show(vm: AiKeyViewModel) = rule.setContent {
+        focus = LocalFocusManager.current
+        BaselineTheme { AiKeyScreen(vm, onBack = { backs++ }) }
+    }
 
     private fun typeConnection(url: String = serverUrl(), apiKey: String = key) {
         rule.onNodeWithTag("ai-base-url").performTextReplacement(url)

@@ -4,8 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import dev.baseline.ai.AiKeyVault
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import dev.baseline.testutil.ScopeCleanup
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -28,6 +27,8 @@ import org.junit.Test
 import java.io.File
 
 class CloudEngineToolsTest {
+    private val cleanup = ScopeCleanup()
+    private val http = OkHttpClient()
     private lateinit var server: MockWebServer
     private lateinit var file: File
     private lateinit var store: DataStore<Preferences>
@@ -53,18 +54,21 @@ class CloudEngineToolsTest {
         server = MockWebServer()
         server.start()
         file = File.createTempFile("cloudenginetools", ".preferences_pb").also { it.delete() }
-        store = PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO)) { file }
+        store = PreferenceDataStoreFactory.create(scope = cleanup.storeScope) { file }
         vault = AiKeyVault(store, { it }, { it })
         runBlocking { vault.save(server.url("/v1/"), "test-key", model, toolsSupported = true) }
     }
 
     @After
     fun tearDown() {
+        runBlocking { cleanup.close() }
+        http.dispatcher.executorService.shutdown()
+        http.connectionPool.evictAll()
         server.shutdown()
         file.delete()
     }
 
-    private fun engine(tools: ToolRunner) = CloudEngine(OkHttpClient(), vault, tools, { true }) { }
+    private fun engine(tools: ToolRunner) = CloudEngine(http, vault, tools, { true }) { }
 
     private fun sse(vararg lines: String) = lines.joinToString("") { "$it\n\n" }
 
@@ -238,7 +242,7 @@ class CloudEngineToolsTest {
         server.enqueue(MockResponse().setResponseCode(429).setHeader("Retry-After", "1"))
         server.enqueue(text("ok"))
         val delays = mutableListOf<Long>()
-        val events = CloudEngine(OkHttpClient(), vault, FakeTools(), { true }) { delays += it }.run(request).toList()
+        val events = CloudEngine(http, vault, FakeTools(), { true }) { delays += it }.run(request).toList()
         assertEquals(listOf(1000L), delays)
         assertEquals(done, events.last())
         assertEquals(3, server.requestCount)

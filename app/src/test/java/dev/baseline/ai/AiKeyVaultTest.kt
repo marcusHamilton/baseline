@@ -5,8 +5,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import dev.baseline.testutil.ScopeCleanup
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -22,7 +21,7 @@ import java.security.GeneralSecurityException
 class AiKeyVaultTest {
     private lateinit var file: File
     private lateinit var store: DataStore<Preferences>
-    private lateinit var scope: CoroutineScope
+    private val cleanup = ScopeCleanup()
 
     private val xor: (ByteArray) -> ByteArray = { b -> ByteArray(b.size) { (b[it].toInt() xor 0x5A).toByte() } }
     private val baseUrl = "https://openrouter.ai/api/v1".toHttpUrl()
@@ -31,12 +30,12 @@ class AiKeyVaultTest {
     @Before
     fun setUp() {
         file = File.createTempFile("aivault", ".preferences_pb").also { it.delete() }
-        scope = CoroutineScope(Dispatchers.IO)
-        store = PreferenceDataStoreFactory.create(scope = scope) { file }
+        store = PreferenceDataStoreFactory.create(scope = cleanup.storeScope) { file }
     }
 
     @After
     fun tearDown() {
+        runBlocking { cleanup.close() }
         file.delete()
     }
 

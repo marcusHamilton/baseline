@@ -24,10 +24,13 @@ import dev.baseline.ai.insight.InsightService
 import dev.baseline.ai.parseBaseUrl
 import dev.baseline.data.db.AiInsightEntity
 import dev.baseline.data.db.AppDatabase
+import dev.baseline.testutil.ScopeCleanup
 import dev.baseline.testutil.inMemoryDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
@@ -47,6 +50,8 @@ import java.io.File
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 
 private class FakeNano : NanoBackend {
     var availability = NanoAvailability.AVAILABLE
@@ -79,6 +84,9 @@ private object NoCloud : AiEngine {
 
 @RunWith(AndroidJUnit4::class)
 class AiSettingsViewModelTest {
+    private val cleanup = ScopeCleanup()
+    private val http = OkHttpClient()
+    private val collectors = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var db: AppDatabase
     private lateinit var file: File
     private lateinit var store: DataStore<Preferences>
@@ -91,19 +99,31 @@ class AiSettingsViewModelTest {
     fun setUp() {
         db = inMemoryDatabase()
         file = File.createTempFile("aisettingsvm", ".preferences_pb").also { it.delete() }
-        store = PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO)) { file }
+        store = PreferenceDataStoreFactory.create(scope = cleanup.storeScope) { file }
         vault = AiKeyVault(store, { it }, { it })
         prefs = AiPrefs(store)
     }
 
     @After
     fun tearDown() {
+        // Joining a viewModelScope needs the main looper, which only turns while it is idled, so close from a helper thread.
+        val closed = AtomicBoolean(false)
+        thread {
+            runBlocking {
+                collectors.coroutineContext[Job]!!.cancelAndJoin()
+                cleanup.close()
+            }
+            closed.set(true)
+        }
+        waitFor("the scopes to close") { closed.get() }
+        http.dispatcher.executorService.shutdown()
+        http.connectionPool.evictAll()
         db.close()
         file.delete()
     }
 
     private fun viewModel(): AiSettingsViewModel {
-        val entry = AiKeyEntry(OkHttpClient(), vault, prefs, { nano.status.value !is NanoStatus.Unavailable }, allowLoopbackHttp = false)
+        val entry = AiKeyEntry(http, vault, prefs, { nano.status.value !is NanoStatus.Unavailable }, allowLoopbackHttp = false)
         val insights = InsightService(
             pack = { _, _ -> Pack("", PackFacts(null, null, null, null), false) },
             nano = nano,
@@ -114,7 +134,7 @@ class AiSettingsViewModelTest {
             online = MutableStateFlow(true),
             clock = Clock.fixed(Instant.parse("2026-11-01T08:00:00Z"), ZoneOffset.UTC),
         )
-        return AiSettingsViewModel(prefs, vault, nano, entry, insights)
+        return cleanup.track(AiSettingsViewModel(prefs, vault, nano, entry, insights))
     }
 
     // Main-thread work (viewModelScope) only runs while the Robolectric looper is idled, so the tests poll instead of blocking.
@@ -128,7 +148,7 @@ class AiSettingsViewModelTest {
     }
 
     // state is WhileSubscribed, so something has to collect it.
-    private fun AiSettingsViewModel.collecting(): Job = CoroutineScope(Dispatchers.Default).launch { state.collect { } }
+    private fun AiSettingsViewModel.collecting(): Job = collectors.launch { state.collect { } }
 
     @Test
     fun stateCombinesModeNanoAndKey() {
