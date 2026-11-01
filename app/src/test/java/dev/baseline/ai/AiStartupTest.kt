@@ -75,6 +75,32 @@ class AiStartupTest {
         c.aiPrefs.mode.first()
     }
 
+    /** The first-run prompt's done flag after one start. */
+    private fun promptDoneAfter(availability: NanoAvailability?, before: AiMode? = null): Boolean = runBlocking {
+        val c = StartupContainer(ApplicationProvider.getApplicationContext(), store, StubNano(availability)).also { containers += it }
+        before?.let { c.aiPrefs.setMode(it) }
+        c.startAi().join()
+        c.aiPrefs.promptDone.first()
+    }
+
+    @Test
+    fun thePromptIsPendingWhenOnDeviceNeedsTheDownload() = assertEquals(false, promptDoneAfter(NanoAvailability.DOWNLOADABLE))
+
+    @Test
+    fun thePromptIsRetiredWhenNanoIsAlreadyThere() = assertEquals(true, promptDoneAfter(NanoAvailability.AVAILABLE))
+
+    @Test
+    fun thePromptIsRetiredWhenNanoIsDownloading() = assertEquals(true, promptDoneAfter(NanoAvailability.DOWNLOADING))
+
+    @Test
+    fun aPhoneWithoutNanoNeverGetsThePrompt() = assertEquals(true, promptDoneAfter(NanoAvailability.UNAVAILABLE))
+
+    @Test
+    fun thePromptIsRetiredWhenTheModeDoesNotNeedNano() = assertEquals(true, promptDoneAfter(NanoAvailability.DOWNLOADABLE, before = AiMode.CLOUD))
+
+    @Test
+    fun aFailedCheckLeavesThePromptPending() = assertEquals(false, promptDoneAfter(null))
+
     @Test
     fun undecidedModeBecomesOnDeviceWhenNanoIsAvailable() = assertEquals(AiMode.ON_DEVICE, start(NanoAvailability.AVAILABLE))
 

@@ -95,7 +95,7 @@ class NanoEngine(
         .download()
         .onStart { _status.value = NanoStatus.Downloading(null) }
         .onEach { _status.value = NanoStatus.Downloading(it) }
-        .onCompletion { cause -> if (cause == null || cause is NanoBackendException) refresh() }
+        .onCompletion { cause -> if (cause !is CancellationException) refresh() }
 
     /** True when the request plus room for the answer fits the model's combined input and output limit. */
     suspend fun fits(req: AiRequest): Boolean {

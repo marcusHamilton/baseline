@@ -75,6 +75,7 @@ import dev.baseline.ui.ai.LocalAskScopeHolder
 import dev.baseline.ui.ai.ReportAskScope
 import dev.baseline.ui.calendar.CalendarScreen
 import dev.baseline.ui.calendar.CalendarViewModel
+import dev.baseline.ui.components.AiFirstRunDialog
 import dev.baseline.ui.components.OfflineBar
 import dev.baseline.ui.onboarding.OnboardingScreen
 import dev.baseline.ui.onboarding.OnboardingState
@@ -282,6 +283,8 @@ fun BaselineNavHost(container: AppContainer, deepLink: StateFlow<WidgetTarget?> 
                         val insight = remember(insightState, scope, todayNow) {
                             TodayInsightUi(insightState, scope.subject(todayNow), onAsk = { askHost.open(scope) }, onRetry = insightVm::retry)
                         }
+                        val showAiPrompt by container.aiFirstRun.show.collectAsStateWithLifecycle(false)
+                        if (showAiPrompt) AiFirstRunDialog(onDownload = container.aiFirstRun::download, onTurnOff = container.aiFirstRun::turnOff)
                         TodayScreen(
                             vm,
                             onOpenCalendar = { nav.navigate(Routes.CALENDAR) },

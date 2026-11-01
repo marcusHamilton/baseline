@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import dev.baseline.ai.AiFirstRun
 import dev.baseline.ai.AiKeyEntry
 import dev.baseline.ai.AiKeyStatus
 import dev.baseline.ai.AiKeyVault
@@ -173,6 +174,8 @@ open class AppContainer(context: Context, val clock: Clock = SystemZoneClock) {
 
     /** Checks Nano and settles the AI mode defaults (spec: AI assistant §3.1). Call once on app start; join the [Job] to wait for it. */
     fun startAi(): Job = appScope.launch { applyAiDefaults(nanoEngine, aiPrefs) }
+
+    val aiFirstRun by lazy { AiFirstRun(nanoEngine, aiPrefs, appScope) }
 
     val healthTools by lazy { HealthTools(db, contextPacks, userPrefs, today) }
 
