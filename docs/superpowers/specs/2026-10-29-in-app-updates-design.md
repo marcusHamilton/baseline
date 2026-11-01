@@ -56,7 +56,8 @@ Decisions made with the owner:
 | Check failed | Same as the current state, plus "Couldn't check for updates (rate-limited / offline)". The app works normally and never shows a red error for this. |
 
 It also gets a **"Check for updates daily"** switch, on by default. Turning it off stops the daily check,
-while `Check now` still works.
+while `Check now` still works. Pulling down to refresh on Today also looks for a release, but only while the switch is on
+(`Updater.checkOnRefresh()`; it is the same one-off check as `Check now`).
 
 **Today banner:** when an update is available and the owner hasn't dismissed *that version*, a quiet banner sits
 under the key banner (same slot and style as `KeyBanner`, with neutral colours rather than red): "Baseline 0.05 is
@@ -200,7 +201,7 @@ New package `dev.baseline.update/`, wired in `AppContainer` like everything else
 | `Release.kt` | `Release`, `parseRelease` (the `JsonElement` tree, like the Garmin parsers: no serialization plugin), `isNewer(tag, installed)` and `plainNotes`. |
 | `ReleaseSource.kt` | A thin GET with an ETag that returns `NotModified` / `Found(release, etag)` / `Failed(message)`. It takes an `OkHttpClient` and a URL, so tests use MockWebServer. |
 | `UpdatePrefs.kt` | The DataStore state in §4. |
-| `Updater.kt` | The state machine: puts `UpdatePrefs` and the download's `WorkInfo` together into `StateFlow<UpdateUi>`, and exposes `primary()` (Update / Allow / Cancel / Install / Retry), `checkNow()`, `dismiss(tag)`, `setAutoCheck()`, `check()` and `download()` for the workers, and `onInstallResult()` for the receiver. Android sits behind `UpdatePlatform`, so the flow is unit-tested with a fake. |
+| `Updater.kt` | The state machine: puts `UpdatePrefs` and the download's `WorkInfo` together into `StateFlow<UpdateUi>`, and exposes `primary()` (Update / Allow / Cancel / Install / Retry), `checkNow()`, `checkOnRefresh()`, `dismiss(tag)`, `setAutoCheck()`, `check()` and `download()` for the workers, and `onInstallResult()` for the receiver. Android sits behind `UpdatePlatform`, so the flow is unit-tested with a fake. |
 | `AndroidUpdatePlatform.kt` | `UpdatePlatform` on a device: WorkManager, `PackageManager`, the `PackageInstaller` session and the *Install unknown apps* screen. |
 | `UpdateWorkers.kt` | `UpdateCheckWorker` and `UpdateDownloadWorker` (§4 and §5). |
 | `ApkVerifier.kt` | Size, hash, package, versionCode, `-fake` and certificate checks, as a pure function over `ApkFacts`. |

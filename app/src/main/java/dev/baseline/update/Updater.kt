@@ -242,6 +242,11 @@ class Updater(
 
     fun checkNow() = platform.checkNow()
 
+    /** Today's pull-to-refresh looks for a release too; "Check automatically" off (or a disabled build) means no GitHub traffic. */
+    fun checkOnRefresh() {
+        scope.launch { guarded("refresh") { if (enabled && prefs.current().autoCheck) platform.checkNow() } }
+    }
+
     fun setAutoCheck(on: Boolean) {
         scope.launch { guarded("auto") { prefs.setAutoCheck(on) } }
     }

@@ -148,7 +148,14 @@ fun TodayScreen(
     val keyStatus by vm.keyStatus.collectAsStateWithLifecycle()
     val zoneNow by zone.collectAsStateWithLifecycle()
     val update = updater?.ui?.collectAsStateWithLifecycle()?.value
-    PullToRefreshBox(refreshing, vm::refresh, Modifier.fillMaxSize()) {
+    PullToRefreshBox(
+        refreshing,
+        {
+            vm.refresh()
+            updater?.checkOnRefresh()
+        },
+        Modifier.fillMaxSize(),
+    ) {
         TodayContent(
             state, sync, vm::prevDay, vm::nextDay, onOpenCalendar, { onOpenSleep(state.date) }, onOpenActivity, vm::toggleBodyBattery,
             keyStatus, vm::toggleEdit, vm::moveRow, vm::toggleHidden, zoneNow,

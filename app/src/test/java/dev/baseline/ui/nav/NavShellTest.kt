@@ -224,6 +224,8 @@ class NavShellTest {
         rule.onNodeWithText("TODAY").performClick() // the date header opens the calendar
         rule.waitUntil(5_000) { rule.onAllNodesWithTag("screen-calendar").fetchSemanticsNodes().isNotEmpty() }
         if (date.month != today.month) rule.onNodeWithContentDescription("Previous month").performClick()
+        // After "Previous month" the old month's cells are still on screen for a moment.
+        rule.waitUntil(5_000) { rule.onAllNodes(cellFor(date)).fetchSemanticsNodes().isNotEmpty() }
         rule.onNode(cellFor(date)).performScrollTo().performClick()
         rule.onNodeWithText("Open day →").performScrollTo().performClick()
         rule.waitUntil(5_000) { rule.onAllNodesWithTag("screen-today").fetchSemanticsNodes().isNotEmpty() }
