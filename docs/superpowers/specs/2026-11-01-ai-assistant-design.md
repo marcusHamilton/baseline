@@ -141,9 +141,9 @@ We write the client ourselves on the existing OkHttp 5 and kotlinx.serialization
   - **Nano becomes Unavailable** (for example after a system update): On-device only becomes Off, and Hybrid becomes
     Cloud only. The status is re-checked on every app start.
 
-### 3.2 Settings → AI card
+### 3.2 Settings → AI assistant page
 
-From top to bottom:
+A sub-page of Settings (`settings/ai`), opened from the "AI assistant" row on the Settings list (its summary shows the mode, "Nano ready" and the short model id, or "Key rejected"). From top to bottom:
 
 1. **Mode** (§3.1).
 2. **On-device:**
@@ -795,7 +795,7 @@ These can't be tested in the emulator or the cloud container:
 - **Main spec:**
   - §3: the `ai/` package.
   - §6: the `ai_insight` table and schema version 3.
-  - §9: the insight card on Today, Sleep and Activity, the Ask sheet and the AI card in Settings.
+  - §9: the insight card on Today, Sleep and Activity, the Ask sheet and the AI assistant page in Settings.
   - Navigation: the centre Ask button rule from §3.4.
   - §1: the app now has two users, each on their own install.
 - **CLAUDE.md:**

@@ -43,7 +43,7 @@ Decisions made with the owner:
 
 ## 3. User experience
 
-**Settings → new "App" card** (at the bottom):
+**Settings → "Updates" page** (a sub-page opened from the Updates row; it was the App card):
 
 | State | Row |
 |---|---|
@@ -264,7 +264,7 @@ whole flow on an emulator without GitHub:
 - `ApkVerifier` cases: wrong hash, wrong size, wrong package, a lower or equal versionCode, `-fake`, a different
   signer.
 - `Updater` state transitions against a fake `UpdatePlatform` and MockWebServer (`UpdaterTest`).
-- The Settings card and the Today banner (Compose tests: states, 48dp targets, dismiss per tag).
+- The Settings Updates page and the Today banner (Compose tests: states, 48dp targets, dismiss per tag).
 - The post-update cleanup.
 
 **Guards:**

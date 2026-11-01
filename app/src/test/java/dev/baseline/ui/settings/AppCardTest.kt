@@ -1,6 +1,10 @@
 package dev.baseline.ui.settings
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -13,9 +17,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import dev.baseline.garmin.KeyStatus
-import dev.baseline.prefs.BanisterSet
-import dev.baseline.prefs.SyncInterval
 import dev.baseline.ui.theme.BaselineTheme
 import dev.baseline.update.Release
 import dev.baseline.update.UpdateState
@@ -27,7 +28,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.time.Clock
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneOffset
 
 @RunWith(RobolectricTestRunner::class)
@@ -36,31 +36,24 @@ class AppCardTest {
     val rule = createAndroidComposeRule<ComponentActivity>()
 
     private val clock = Clock.fixed(Instant.parse("2026-10-29T12:00:00Z"), ZoneOffset.UTC)
-    private val settings =
-        SettingsUiState(
-            KeyStatus.Ok(LocalDate.of(2027, 10, 21), 357),
-            SyncInterval.HOURLY,
-            BanisterSet.MALE_FITTED,
-            null,
-            HistoryCoverage(null, null),
-            false,
-            false,
-        )
     private val offer = Release("v0.05", "Adds in-app updates.\nSecond line", "https://x", "https://x/a.apk", 54_815_418, null)
 
     private fun show(update: UpdateUi, onPrimary: () -> Unit = {}, onCheck: () -> Unit = {}, onAuto: (Boolean) -> Unit = {}) = rule.setContent {
         BaselineTheme {
-            SettingsContent(
-                settings, KeyEntryState.Idle, clock, clock.zone, { _, _ -> }, {}, {}, {}, {}, {},
-                update = update, onUpdatePrimary = onPrimary, onCheckUpdates = onCheck, onAutoCheck = onAuto,
-            )
+            Column(Modifier.verticalScroll(rememberScrollState())) { AppCard(update, clock, onPrimary, onCheck, onAuto) }
         }
     }
 
     @Test
-    fun theAppCardTitleIsAHeadingLikeTheOtherCards() {
+    fun theUpdatesPageTitleIsAHeading() {
+        rule.setContent { BaselineTheme { SettingsPageContent(SettingsPage.UPDATES.title, {}) { AppCard(UpdateUi("0.04", true), clock, {}, {}, {}) } } }
+        rule.onNode(isHeading() and hasText("UPDATES")).assertExists()
+    }
+
+    @Test
+    fun theGithubLineStaysOnThePage() {
         show(UpdateUi("0.04", true))
-        rule.onNode(isHeading() and hasText("APP")).performScrollTo().assertExists()
+        rule.onNodeWithText(GITHUB_LINE).performScrollTo().assertIsDisplayed()
     }
 
     @Test

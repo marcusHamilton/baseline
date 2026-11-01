@@ -84,6 +84,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+internal const val KEYSTORE_LINE = "Stored encrypted on this phone (Android Keystore). Never leaves the device except to Garmin."
+internal const val GITHUB_LINE = "Asks GitHub for the latest Baseline release. GitHub sees your IP address, as any website would; none of your data is sent."
 private const val KEY_URL = "https://connect.garmin.com/app/settings/personalApiToken"
 private val Lifetimes = listOf(30, 90, 180, 365)
 private val ExpiryFormat = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US)
@@ -130,94 +132,83 @@ internal fun coverageText(c: HistoryCoverage): String {
     return "$activities · $health"
 }
 
-private fun intervalLabel(i: SyncInterval) = when (i) {
+internal fun intervalLabel(i: SyncInterval) = when (i) {
     SyncInterval.HOURLY -> "Every hour"
     SyncInterval.THREE_HOURS -> "Every 3 hours"
     SyncInterval.MANUAL -> "Manual only"
 }
 
-private fun banisterLabel(b: BanisterSet) = when (b) {
+internal fun banisterLabel(b: BanisterSet) = when (b) {
     BanisterSet.MALE_FITTED -> "Male-fitted"
     BanisterSet.FEMALE_FITTED -> "Female-fitted"
 }
 
+/** The Settings tab: a summary list; each row opens one of the [SettingsPage]s (spec §Settings). */
 @Composable
-fun SettingsScreen(vm: SettingsViewModel, zone: StateFlow<ZoneId>, updater: Updater, clock: Clock = SystemZoneClock, aiCard: @Composable () -> Unit = {}) {
+fun SettingsScreen(
+    vm: SettingsViewModel,
+    ai: AiSettingsViewModel,
+    zone: StateFlow<ZoneId>,
+    updater: Updater,
+    clock: Clock = SystemZoneClock,
+    onOpen: (SettingsPage) -> Unit,
+) {
+    val state by vm.state.collectAsStateWithLifecycle()
+    val zoneNow by zone.collectAsStateWithLifecycle()
+    val update by updater.ui.collectAsStateWithLifecycle()
+    val aiState by ai.state.collectAsStateWithLifecycle()
+    SettingsHome(state, clock, zoneNow, update, aiState, onOpen, vm::syncNow)
+}
+
+/** One [SettingsPage]: the shell with the page's cards, wired to the same ViewModels as the home list. */
+@Composable
+fun SettingsPageScreen(
+    page: SettingsPage,
+    vm: SettingsViewModel,
+    ai: AiSettingsViewModel,
+    zone: StateFlow<ZoneId>,
+    updater: Updater,
+    clock: Clock = SystemZoneClock,
+    onBack: () -> Unit,
+    onAddKey: () -> Unit,
+    onChangeModel: () -> Unit,
+) {
     val state by vm.state.collectAsStateWithLifecycle()
     val entry by vm.entry.collectAsStateWithLifecycle()
     val zoneNow by zone.collectAsStateWithLifecycle()
     val update by updater.ui.collectAsStateWithLifecycle()
-    SettingsContent(
-        state, entry, clock, zoneNow, vm::replaceKey, vm::clearEntry, vm::setInterval, vm::syncNow, vm::setBanister, vm::recalculateHistory, vm::retryFailed,
-        update, updater::primary, updater::checkNow, updater::setAutoCheck, aiCard,
-    )
-}
-
-@Composable
-fun SettingsContent(
-    state: SettingsUiState,
-    entry: KeyEntryState,
-    clock: Clock,
-    zone: ZoneId,
-    onReplaceKey: (String, Int) -> Unit,
-    onEditKey: () -> Unit,
-    onInterval: (SyncInterval) -> Unit,
-    onSyncNow: () -> Unit,
-    onBanister: (BanisterSet) -> Unit,
-    onRecalculate: () -> Unit,
-    onRetryFailed: () -> Unit = {},
-    update: UpdateUi? = null,
-    onUpdatePrimary: () -> Unit = {},
-    onCheckUpdates: () -> Unit = {},
-    onAutoCheck: (Boolean) -> Unit = {},
-    aiCard: @Composable () -> Unit = {},
-) {
-    Column(
-        // imePadding sits above the scroll so the viewport shrinks and the key field and Save button scroll clear of the keyboard.
-        Modifier.fillMaxSize().testTag("screen-settings").imePadding().verticalScroll(rememberScrollState()).padding(bottom = 24.dp),
-        Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            "SETTINGS",
-            Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 0.dp).semantics { heading() },
-            fontFamily = BarlowCondensed,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 28.sp,
-            letterSpacing = 1.12.sp,
-        )
-        KeyBanner(state.keyStatus, Modifier.padding(horizontal = 20.dp))
-        KeyCard(state.keyStatus, entry, onReplaceKey, onEditKey)
-        SyncCard(state, clock, zone, onInterval, onSyncNow, onRetryFailed)
-        ScoresCard(state, onBanister, onRecalculate)
-        aiCard()
-        update?.let { AppCard(it, clock, onUpdatePrimary, onCheckUpdates, onAutoCheck) }
-        Text(
-            "Data from Garmin Connect Personal API. Not affiliated with Garmin.",
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
-            fontSize = 12.sp,
-            color = TextMuted,
-            textAlign = TextAlign.Center,
-        )
+    val aiState by ai.state.collectAsStateWithLifecycle()
+    SettingsPageContent(page.title, onBack) {
+        when (page) {
+            SettingsPage.GARMIN -> GarminPage(state.keyStatus, entry, vm::replaceKey, vm::clearEntry)
+            SettingsPage.SYNC -> SyncCard(state, clock, zoneNow, vm::setInterval, vm::syncNow, vm::retryFailed)
+            SettingsPage.SCORES -> ScoresCard(state, vm::setBanister, vm::recalculateHistory)
+            SettingsPage.AI -> AiCard(aiState, ai::setMode, ai::downloadNano, onAddKey, onChangeModel, onAddKey, ai::removeKey, ai::clearInsights)
+            SettingsPage.UPDATES -> AppCard(update, clock, updater::primary, updater::checkNow, updater::setAutoCheck)
+            SettingsPage.PRIVACY -> PrivacyCard(aiState)
+        }
     }
 }
 
 @Composable
-internal fun SettingsCard(title: String, content: @Composable () -> Unit) {
+internal fun SettingsCard(title: String? = null, content: @Composable () -> Unit) {
     Column(
         Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Card).padding(16.dp),
         Arrangement.spacedBy(12.dp),
     ) {
-        Text(
-            title,
-            Modifier.semantics {
-                heading()
-            },
-            fontFamily = BarlowCondensed,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 16.sp,
-            letterSpacing = 1.28.sp,
-            color = TextMuted,
-        )
+        if (title != null) {
+            Text(
+                title,
+                Modifier.semantics {
+                    heading()
+                },
+                fontFamily = BarlowCondensed,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp,
+                letterSpacing = 1.28.sp,
+                color = TextMuted,
+            )
+        }
         content()
     }
 }
@@ -230,16 +221,18 @@ internal fun InfoRow(label: String, value: String, modifier: Modifier = Modifier
     }
 }
 
+/** The Garmin page: what the key is doing, then the form to replace it, then where it's kept. */
 @Composable
-private fun KeyCard(status: KeyStatus?, entry: KeyEntryState, onReplace: (String, Int) -> Unit, onEdit: () -> Unit) {
+internal fun GarminPage(status: KeyStatus?, entry: KeyEntryState, onReplace: (String, Int) -> Unit, onEdit: () -> Unit) {
+    KeyStatusCard(status)
+    ReplaceKeyCard(entry, onReplace, onEdit)
+    Text(KEYSTORE_LINE, Modifier.padding(horizontal = 20.dp), fontSize = 12.sp, lineHeight = 18.sp, color = TextMuted)
+}
+
+@Composable
+private fun KeyStatusCard(status: KeyStatus?) {
     val ui = keyCard(status)
-    var key by rememberSaveable { mutableStateOf("") }
-    var lifetime by rememberSaveable { mutableIntStateOf(365) }
-    val testing = entry == KeyEntryState.Testing
-    val uri = LocalUriHandler.current
-    // The saved key is no longer needed on screen once it works.
-    LaunchedEffect(entry) { if (entry == KeyEntryState.Saved) key = "" }
-    SettingsCard("GARMIN PERSONAL API") {
+    SettingsCard {
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Text("Key status", fontSize = 14.sp, color = TextBody)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -257,6 +250,18 @@ private fun KeyCard(status: KeyStatus?, entry: KeyEntryState, onReplace: (String
             }
             Text(ui.detail, fontSize = 12.sp, color = TextMuted)
         }
+    }
+}
+
+@Composable
+private fun ReplaceKeyCard(entry: KeyEntryState, onReplace: (String, Int) -> Unit, onEdit: () -> Unit) {
+    var key by rememberSaveable { mutableStateOf("") }
+    var lifetime by rememberSaveable { mutableIntStateOf(365) }
+    val testing = entry == KeyEntryState.Testing
+    val uri = LocalUriHandler.current
+    // The saved key is no longer needed on screen once it works.
+    LaunchedEffect(entry) { if (entry == KeyEntryState.Saved) key = "" }
+    SettingsCard("REPLACE KEY") {
         OutlinedTextField(
             value = key,
             onValueChange = {
@@ -317,18 +322,19 @@ private fun KeyCard(status: KeyStatus?, entry: KeyEntryState, onReplace: (String
         TextButton(onClick = { uri.openUri(KEY_URL) }, Modifier.heightIn(min = 48.dp)) {
             Text("Create a key in Garmin Connect ↗", color = LinkColor)
         }
-        Text(
-            "Stored encrypted on this phone (Android Keystore). Never leaves the device except to Garmin.",
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
-            color = TextMuted,
-        )
     }
 }
 
 @Composable
-private fun SyncCard(state: SettingsUiState, clock: Clock, zone: ZoneId, onInterval: (SyncInterval) -> Unit, onSyncNow: () -> Unit, onRetryFailed: () -> Unit) {
-    SettingsCard("SYNC") {
+internal fun SyncCard(
+    state: SettingsUiState,
+    clock: Clock,
+    zone: ZoneId,
+    onInterval: (SyncInterval) -> Unit,
+    onSyncNow: () -> Unit,
+    onRetryFailed: () -> Unit,
+) {
+    SettingsCard {
         InfoRow("Last sync", state.lastSynced?.let { Formatters.lastSync(it, LocalDate.now(clock.withZone(zone)), zone) } ?: "Not yet")
         Text("Background sync", fontSize = 14.sp, color = TextBody)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -362,8 +368,8 @@ private fun SyncCard(state: SettingsUiState, clock: Clock, zone: ZoneId, onInter
 }
 
 @Composable
-private fun ScoresCard(state: SettingsUiState, onBanister: (BanisterSet) -> Unit, onRecalculate: () -> Unit) {
-    SettingsCard("SCORES & UNITS") {
+internal fun ScoresCard(state: SettingsUiState, onBanister: (BanisterSet) -> Unit, onRecalculate: () -> Unit) {
+    SettingsCard {
         InfoRow("Recovery baseline window", "30 days")
         InfoRow("Heart rate zones", "From Garmin")
         Text("Strain coefficients", fontSize = 14.sp, color = TextBody)
@@ -410,9 +416,9 @@ private const val NOTES_LINES = 6
 
 /** Version, the update on offer (spec: in-app updates §3), "Check now" and the daily-check switch. */
 @Composable
-private fun AppCard(ui: UpdateUi, clock: Clock, onPrimary: () -> Unit, onCheckNow: () -> Unit, onAutoCheck: (Boolean) -> Unit) {
+internal fun AppCard(ui: UpdateUi, clock: Clock, onPrimary: () -> Unit, onCheckNow: () -> Unit, onAutoCheck: (Boolean) -> Unit) {
     val uri = LocalUriHandler.current
-    SettingsCard("APP") {
+    SettingsCard {
         InfoRow("Version", ui.installed)
         if (!ui.enabled) {
             Text("Debug and test builds don't check for updates.", fontSize = 12.sp, color = TextMuted)
@@ -464,7 +470,7 @@ private fun AppCard(ui: UpdateUi, clock: Clock, onPrimary: () -> Unit, onCheckNo
             Switch(checked = ui.autoCheck, onCheckedChange = null)
         }
         Text(
-            "Asks GitHub for the latest Baseline release. GitHub sees your IP address, as any website would; none of your data is sent.",
+            GITHUB_LINE,
             fontSize = 12.sp,
             lineHeight = 18.sp,
             color = TextMuted,
